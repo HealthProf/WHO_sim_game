@@ -67,13 +67,13 @@ export const teams = pgTable("teams", {
     .notNull()
     .unique()
     .references(() => regions.id),
-  loginEmail: text("login_email").notNull().unique(),
+  username: text("username").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
+  username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull(),

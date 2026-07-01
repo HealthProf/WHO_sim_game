@@ -46,9 +46,8 @@ Every region shares **one login for the whole team** (see the design
 discussion on shared-per-region logins vs. individual student accounts —
 this prototype uses shared logins for a fast-paced compressed test session).
 
-- **Emails are fixed**: `afro@sim.local`, `amro@sim.local`, `emro@sim.local`,
-  `euro@sim.local`, `searo@sim.local`, `wpro@sim.local`, and
-  `instructor@sim.local`.
+- **Usernames are fixed**: `afro`, `amro`, `emro`, `euro`, `searo`, `wpro`, and
+  `instructor`. No email addresses are used anywhere in this prototype.
 - **Passwords are generated and printed once** when you run `npm run db:seed`.
   They are bcrypt-hashed in the database and cannot be recovered later —
   save the console output from that run.
@@ -62,7 +61,7 @@ this prototype uses shared logins for a fast-paced compressed test session).
   team/instructor passwords each time it creates those rows fresh.)
 - **To set one specific account's password** without touching anything else:
   ```bash
-  npm run db:set-password -- afro@sim.local your-chosen-password
+  npm run db:set-password -- afro your-chosen-password
   ```
 
 ## Running a Compressed (~60 Minute) Test Session

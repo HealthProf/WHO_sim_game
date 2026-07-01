@@ -10,7 +10,7 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      email: string;
+      username: string;
       name: string;
       role: "student" | "instructor";
       teamId: number | null;
@@ -24,15 +24,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
+        username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       authorize: async (credentials) => {
-        const email = (credentials?.email as string)?.toLowerCase().trim();
+        const username = (credentials?.username as string)?.toLowerCase().trim();
         const password = credentials?.password as string;
-        if (!email || !password) return null;
+        if (!username || !password) return null;
 
-        const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+        const user = await db.query.users.findFirst({ where: eq(users.username, username) });
         if (!user) return null;
 
         const valid = await bcrypt.compare(password, user.passwordHash);
@@ -46,7 +46,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         return {
           id: String(user.id),
-          email: user.email,
+          username: user.username,
           name: user.name,
           role: user.role,
           teamId: user.teamId,
@@ -59,6 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.username = (user as never as { username: string }).username;
         token.role = (user as never as { role: string }).role;
         token.teamId = (user as never as { teamId: number | null }).teamId;
         token.regionId = (user as never as { regionId: string | null }).regionId;
@@ -67,6 +68,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     session({ session, token }) {
       session.user.id = String(token.id);
+      session.user.username = token.username as string;
       session.user.role = token.role as "student" | "instructor";
       session.user.teamId = token.teamId as number | null;
       session.user.regionId = token.regionId as string | null;

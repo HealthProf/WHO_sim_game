@@ -10,6 +10,7 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     session({ session, token }) {
       session.user.id = String(token.id);
+      session.user.username = token.username as string;
       session.user.role = token.role as "student" | "instructor";
       session.user.teamId = token.teamId as number | null;
       session.user.regionId = token.regionId as string | null;

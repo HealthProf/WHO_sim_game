@@ -44,13 +44,13 @@ async function main() {
     .onConflictDoNothing();
 
   console.log("Seeding teams + shared logins + model_state...");
-  const credentials: { region: string; email: string; password: string }[] = [];
+  const credentials: { region: string; username: string; password: string }[] = [];
 
   for (const r of regionSeed) {
-    const email = `${r.id.toLowerCase()}@sim.local`;
+    const username = r.id.toLowerCase();
     const [team] = await db
       .insert(teams)
-      .values({ regionId: r.id, loginEmail: email })
+      .values({ regionId: r.id, username })
       .onConflictDoNothing()
       .returning();
 
@@ -61,14 +61,14 @@ async function main() {
     await db
       .insert(users)
       .values({
-        email,
+        username,
         passwordHash,
         name: `${r.id} Team`,
         role: "student",
         teamId,
       })
-      .onConflictDoUpdate({ target: users.email, set: { passwordHash } });
-    credentials.push({ region: r.id, email, password });
+      .onConflictDoUpdate({ target: users.username, set: { passwordHash } });
+    credentials.push({ region: r.id, username, password });
 
     await db
       .insert(modelState)
@@ -99,21 +99,21 @@ async function main() {
   await db
     .insert(users)
     .values({
-      email: "instructor@sim.local",
+      username: "instructor",
       passwordHash: instructorHash,
       name: "Instructor",
       role: "instructor",
       teamId: null,
     })
-    .onConflictDoUpdate({ target: users.email, set: { passwordHash: instructorHash } });
+    .onConflictDoUpdate({ target: users.username, set: { passwordHash: instructorHash } });
 
   console.log("\n================ LOGIN CREDENTIALS ================");
   console.log("Instructor:");
-  console.log(`  email: instructor@sim.local`);
+  console.log(`  username: instructor`);
   console.log(`  password: ${instructorPassword}`);
   console.log("\nTeams (shared login per region — hand the password to the whole team):");
   for (const c of credentials) {
-    console.log(`  ${c.region.padEnd(6)} email: ${c.email.padEnd(20)} password: ${c.password}`);
+    console.log(`  ${c.region.padEnd(6)} username: ${c.username.padEnd(8)} password: ${c.password}`);
   }
   console.log("=====================================================\n");
   console.log("Save this output now — passwords are hashed in the database and cannot be recovered later.");

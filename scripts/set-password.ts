@@ -5,9 +5,9 @@ import { users } from "../lib/db/schema";
 import { eq } from "drizzle-orm";
 
 async function main() {
-  const [email, password] = process.argv.slice(2);
-  if (!email || !password) {
-    console.error("Usage: npm run db:set-password -- <email> <new-password>");
+  const [username, password] = process.argv.slice(2);
+  if (!username || !password) {
+    console.error("Usage: npm run db:set-password -- <username> <new-password>");
     process.exit(1);
   }
 
@@ -15,15 +15,15 @@ async function main() {
   const result = await db
     .update(users)
     .set({ passwordHash })
-    .where(eq(users.email, email.toLowerCase().trim()))
+    .where(eq(users.username, username.toLowerCase().trim()))
     .returning();
 
   if (result.length === 0) {
-    console.error(`No user found with email ${email}`);
+    console.error(`No user found with username ${username}`);
     process.exit(1);
   }
 
-  console.log(`Password updated for ${email}.`);
+  console.log(`Password updated for ${username}.`);
   process.exit(0);
 }
 
