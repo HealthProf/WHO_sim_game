@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { QueryError } from "@/components/query-error";
 
 interface InboxItem {
   decision: { id: number; teamId: number; rationaleText: string; structuredChoice: string | null; resourceAllocationJson: Record<string, number> | null; coordinatedWithTeamsJson: string[] | null };
@@ -17,7 +18,7 @@ export default function ScoreDecisionPage() {
   const router = useRouter();
   const decisionId = Number(params.decisionId);
 
-  const { data } = useQuery({
+  const { data, error: queryError, refetch } = useQuery({
     queryKey: ["scoring-inbox"],
     queryFn: () => apiFetch<{ inbox: InboxItem[] }>("/api/scores"),
   });
@@ -39,6 +40,7 @@ export default function ScoreDecisionPage() {
   });
 
   const item = data?.inbox.find((i) => i.decision.id === decisionId);
+  if (queryError) return <QueryError error={queryError} onRetry={() => refetch()} label="submission" />;
   if (!item) return <p className="text-slate-400">Loading submission...</p>;
 
   const compositePct = ((evidenceScore * 0.4 + politicalScore * 0.3 + equityScore * 0.3) / 4) * 100;

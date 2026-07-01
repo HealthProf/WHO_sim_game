@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
+import { QueryError } from "@/components/query-error";
 import Link from "next/link";
 
 interface EventFull {
@@ -42,8 +43,8 @@ interface InboxItem {
 
 export default function ControlPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["events"], queryFn: () => apiFetch<EventsData>("/api/events"), refetchInterval: 10000 });
-  const { data: dash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard"), refetchInterval: 10000 });
+  const { data, error, refetch } = useQuery({ queryKey: ["events"], queryFn: () => apiFetch<EventsData>("/api/events"), refetchInterval: 10000 });
+  const { data: dash, error: dashError, refetch: refetchDash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard"), refetchInterval: 10000 });
   const { data: inbox } = useQuery({ queryKey: ["scoring-inbox"], queryFn: () => apiFetch<{ inbox: InboxItem[] }>("/api/scores"), refetchInterval: 10000 });
 
   const setStatus = useMutation({
@@ -62,6 +63,8 @@ export default function ControlPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["events"] }),
   });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="events" />;
+  if (dashError) return <QueryError error={dashError} onRetry={() => refetchDash()} label="dashboard state" />;
   if (!data || !dash) return <p className="text-slate-400">Loading command center...</p>;
 
   const status = dash.globalState.simulationStatus;

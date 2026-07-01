@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
+import { QueryError } from "@/components/query-error";
 import Link from "next/link";
 
 interface EventsData {
@@ -23,7 +24,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default function EventsPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["events"],
     queryFn: () => apiFetch<EventsData>("/api/events"),
     refetchInterval: 15000,
@@ -34,6 +35,7 @@ export default function EventsPage() {
     refetchInterval: 15000,
   });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="events" />;
   if (isLoading || !data) return <p className="text-slate-400">Loading events...</p>;
 
   const totalGameDays = dash?.globalState.totalGameDays ?? 90;
