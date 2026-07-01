@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { QueryError } from "@/components/query-error";
 import Link from "next/link";
 
 interface InboxItem {
@@ -17,7 +18,7 @@ interface InboxItem {
 export default function ScoringInboxPage() {
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["scoring-inbox"],
     queryFn: () => apiFetch<{ inbox: InboxItem[] }>("/api/scores"),
     refetchInterval: 8000,
@@ -34,6 +35,7 @@ export default function ScoringInboxPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["scoring-inbox"] }),
   });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="scoring inbox" />;
   if (isLoading || !data) return <p className="text-slate-400">Loading inbox...</p>;
 
   const oldest = data.inbox.length ? Math.max(...data.inbox.map((i) => i.ageMs)) : 0;

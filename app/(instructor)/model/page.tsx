@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { QueryError } from "@/components/query-error";
 
 interface ModelStateRow {
   regionId: string;
@@ -33,7 +34,7 @@ const EDITABLE_FIELDS: (keyof ModelStateRow)[] = [
 
 export default function ModelOverridePage() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard"), refetchInterval: 10000 });
+  const { data, error, refetch } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard"), refetchInterval: 10000 });
   const [region, setRegion] = useState<string | null>(null);
   const [field, setField] = useState<keyof ModelStateRow>("rt");
   const [value, setValue] = useState("");
@@ -52,6 +53,7 @@ export default function ModelOverridePage() {
     },
   });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="model state" />;
   if (!data?.allRegionsFull) return <p className="text-slate-400">Loading model state...</p>;
 
   return (

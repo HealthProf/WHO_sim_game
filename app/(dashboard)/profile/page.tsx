@@ -2,13 +2,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { QueryError } from "@/components/query-error";
 
 export default function ProfilePage() {
-  const { data } = useQuery({
+  const { data, error, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiFetch<{ ownRegion: { profileMarkdown: string; roleTitle: string; hqLocation: string } | null }>("/api/dashboard"),
   });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="profile" />;
   if (!data?.ownRegion) return <p className="text-slate-400">Loading profile...</p>;
 
   return (

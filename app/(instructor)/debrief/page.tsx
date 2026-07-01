@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
+import { QueryError } from "@/components/query-error";
 import type { SummaryRound } from "@/lib/summary-report";
 
 interface DebriefData {
@@ -13,9 +14,10 @@ interface DebriefData {
 }
 
 export default function DebriefPage() {
-  const { data } = useQuery({ queryKey: ["debrief"], queryFn: () => apiFetch<DebriefData>("/api/instructor/debrief") });
+  const { data, error, refetch } = useQuery({ queryKey: ["debrief"], queryFn: () => apiFetch<DebriefData>("/api/instructor/debrief") });
   const { data: summary } = useQuery({ queryKey: ["summary-report"], queryFn: () => apiFetch<{ rounds: SummaryRound[] }>("/api/summary-report") });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="debrief data" />;
   if (!data) return <p className="text-slate-400">Loading debrief data...</p>;
 
   return (

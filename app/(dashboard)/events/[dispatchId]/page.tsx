@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
+import { QueryError } from "@/components/query-error";
 
 interface EventFull {
   id: string;
@@ -30,7 +31,7 @@ export default function EventDetailPage() {
   const dispatchId = Number(params.dispatchId);
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ["events"],
     queryFn: () => apiFetch<EventsData>("/api/events"),
   });
@@ -67,6 +68,7 @@ export default function EventDetailPage() {
     onError: (e: Error) => setError(e.message),
   });
 
+  if (queryError) return <QueryError error={queryError} onRetry={() => refetch()} label="event" />;
   if (isLoading || !data) return <p className="text-slate-400">Loading...</p>;
 
   const dispatch = data.dispatches.find((d) => d.id === dispatchId);

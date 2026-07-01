@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { QueryError } from "@/components/query-error";
 
 interface DashboardData {
   globalState: { currentDay: number; escalationState: "GREEN" | "AMBER" | "RED"; mediaPressureIndex: number; simulationStatus: string };
@@ -41,12 +42,13 @@ const escalationColor: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => apiFetch<DashboardData>("/api/dashboard"),
     refetchInterval: 15000,
   });
 
+  if (error) return <QueryError error={error} onRetry={() => refetch()} label="situation room" />;
   if (isLoading || !data) return <p className="text-slate-400">Loading situation room...</p>;
 
   return (
