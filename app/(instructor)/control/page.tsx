@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import Link from "next/link";
 
 interface EventFull {
@@ -30,7 +31,7 @@ interface EventsData {
 }
 
 interface DashboardData {
-  globalState: { simulationStatus: string; currentDay: number; escalationState: string };
+  globalState: { simulationStatus: string; currentDay: number; escalationState: string; totalGameDays: number };
 }
 
 interface InboxItem {
@@ -68,10 +69,12 @@ export default function ControlPage() {
   const mandatoryCount = inbox?.inbox.filter((i) => i.mandatoryReview).length ?? 0;
   const oldestMs = inbox?.inbox.length ? Math.max(...inbox.inbox.map((i) => i.ageMs)) : 0;
 
-  const eventsByDay = new Map<number, EventFull[]>();
+  const totalGameDays = dash.globalState.totalGameDays;
+  const eventsByGameDay = new Map<number, { narrativeDay: number; events: EventFull[] }>();
   for (const e of data.events.slice().sort((a, b) => a.day - b.day)) {
-    if (!eventsByDay.has(e.day)) eventsByDay.set(e.day, []);
-    eventsByDay.get(e.day)!.push(e);
+    const gameDay = mapNarrativeDayToGameDay(e.day, totalGameDays);
+    if (!eventsByGameDay.has(gameDay)) eventsByGameDay.set(gameDay, { narrativeDay: e.day, events: [] });
+    eventsByGameDay.get(gameDay)!.events.push(e);
   }
 
   return (
@@ -142,11 +145,13 @@ export default function ControlPage() {
       <section>
         <h2 className="text-lg font-semibold mb-3">Event Queue</h2>
         <div className="space-y-6">
-          {[...eventsByDay.entries()].map(([day, dayEvents]) => (
-            <div key={day}>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">Day {day}</h3>
+          {[...eventsByGameDay.entries()].map(([gameDay, group]) => (
+            <div key={gameDay}>
+              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Game Day {gameDay} <span className="text-slate-600 normal-case">(narrative Day {group.narrativeDay})</span>
+              </h3>
               <div className="space-y-3">
-                {dayEvents.map((e) => {
+                {group.events.map((e) => {
                   const dispatches = data.dispatches.filter((d) => d.eventId === e.id);
                   const chain = data.chainStatus[e.id];
                   const allScored = dispatches.length > 0 && dispatches.every((d) => d.status === "scored" || d.status === "closed");

@@ -1,31 +1,33 @@
-// Computes the in-game simulated day/time alongside real elapsed time. Pure
-// math (no DB access) so it can run identically on the server (for API
+// Computes the in-game narrative day alongside real elapsed time. Pure math
+// (no DB access) so it can run identically on the server (for API
 // responses) and on the client (ticking every second between polls without
 // waiting on the network).
 //
-// The narrative arc (simulation-docs/01-scenario.md) is a 5-day week
-// starting Day 1, 08:00. fastModeMultiplier compresses that into a real
-// session: real_minutes = sim_hours * 60 * fastModeMultiplier, so
-// sim_hours = real_minutes / (60 * fastModeMultiplier). At the seeded
-// default of 1/60, that's 1 simulated hour per 1 real minute (60x).
+// The narrative arc spans totalGameDays (default 90, ~3 months) compressed
+// into a real session, advancing at gameDaysPerRealMinute (default 1.5, so
+// 90 days / 60 real minutes). This is intentionally a *different* scale
+// than fastModeMultiplier, which only governs individual event deadline
+// windows — see lib/deadline.ts. At this compression, showing hour-of-day
+// would be meaningless (each real second is ~36 in-game minutes), so the
+// clock is day-level only, with a fractional progress-through-the-day value
+// for a subtle progress indicator.
 
 export interface GlobalClockFields {
   simulationStatus: string;
   simulationStartedAt: string | Date | null;
   pausedAccumulatedMs: number;
   pausedAt: string | Date | null;
-  fastModeMultiplier: number;
+  gameDaysPerRealMinute: number;
+  totalGameDays: number;
 }
 
 export interface SimClock {
   running: boolean;
   realElapsedMs: number;
-  simDay: number;
-  simHour: number;
-  simMinute: number;
+  gameDay: number;
+  gameDayFraction: number; // 0-1 progress through the current game day
+  totalGameDays: number;
 }
-
-const ORIGIN_HOUR = 8; // Day 1 begins at 08:00 per the scenario doc
 
 export function computeRealElapsedMs(gs: GlobalClockFields, now: number = Date.now()): number {
   if (!gs.simulationStartedAt) return 0;
@@ -38,22 +40,27 @@ export function computeRealElapsedMs(gs: GlobalClockFields, now: number = Date.n
 export function computeSimClock(gs: GlobalClockFields, now: number = Date.now()): SimClock {
   const realElapsedMs = computeRealElapsedMs(gs, now);
   const realElapsedMinutes = realElapsedMs / 60000;
-  const multiplier = gs.fastModeMultiplier > 0 ? gs.fastModeMultiplier : 1 / 60;
-  const simHoursElapsed = realElapsedMinutes / (60 * multiplier);
+  const rate = gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
+  const totalGameDays = gs.totalGameDays > 0 ? gs.totalGameDays : 90;
 
-  const totalHours = ORIGIN_HOUR + simHoursElapsed;
-  const simDay = 1 + Math.floor(totalHours / 24);
-  const hourOfDay = ((totalHours % 24) + 24) % 24;
-  const simHour = Math.floor(hourOfDay);
-  const simMinute = Math.floor((hourOfDay - simHour) * 60);
+  const gameDaysElapsed = Math.min(realElapsedMinutes * rate, totalGameDays - 1 + 0.999999);
+  const gameDay = 1 + Math.floor(gameDaysElapsed);
+  const gameDayFraction = gameDaysElapsed - Math.floor(gameDaysElapsed);
 
   return {
     running: gs.simulationStatus === "running",
     realElapsedMs,
-    simDay,
-    simHour,
-    simMinute,
+    gameDay,
+    gameDayFraction,
+    totalGameDays,
   };
+}
+
+// Converts a real-time duration (e.g. milliseconds remaining until a
+// deadline) into the equivalent number of in-game days, using the same
+// rate as the main clock — lets a countdown show both units together.
+export function realMsToGameDays(ms: number, gameDaysPerRealMinute: number): number {
+  return (ms / 60000) * gameDaysPerRealMinute;
 }
 
 export function formatRealElapsed(ms: number): string {
@@ -66,6 +73,10 @@ export function formatRealElapsed(ms: number): string {
 }
 
 export function formatSimClock(clock: SimClock): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `Day ${clock.simDay}, ${pad(clock.simHour)}:${pad(clock.simMinute)}`;
+  return `Day ${clock.gameDay} of ~${clock.totalGameDays}`;
+}
+
+export function formatGameDays(days: number): string {
+  if (days < 1) return `${Math.max(0, Math.round(days * 24))}h in-game`;
+  return `${days.toFixed(1)}d in-game`;
 }

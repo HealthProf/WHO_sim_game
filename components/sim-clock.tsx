@@ -20,12 +20,16 @@ export function SimClock({ state, size = "md" }: { state: GlobalClockFields; siz
 
   const labelClass = size === "lg" ? "text-lg" : "text-xs";
   const valueClass = size === "lg" ? "text-4xl" : "text-base";
+  const barWidth = size === "lg" ? "w-40" : "w-24";
 
   return (
     <div className="flex items-center gap-6">
       <div>
-        <p className={`${labelClass} text-slate-400 uppercase tracking-wide`}>In-Game Time</p>
+        <p className={`${labelClass} text-slate-400 uppercase tracking-wide`}>In-Game Day</p>
         <p className={`${valueClass} font-semibold tabular-nums`}>{formatSimClock(clock)}</p>
+        <div className={`${barWidth} h-1 bg-slate-700 rounded-full mt-1 overflow-hidden`}>
+          <div className="h-full bg-blue-500" style={{ width: `${clock.gameDayFraction * 100}%` }} />
+        </div>
       </div>
       <div>
         <p className={`${labelClass} text-slate-400 uppercase tracking-wide`}>Real Elapsed</p>

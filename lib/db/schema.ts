@@ -87,7 +87,7 @@ export const globalState = pgTable("global_state", {
   escalationState: escalationStateEnum("escalation_state").notNull().default("GREEN"),
   mediaPressureIndex: integer("media_pressure_index").notNull().default(0),
   simulationStatus: simStatusEnum("simulation_status").notNull().default("not_started"),
-  fastModeMultiplier: real("fast_mode_multiplier").notNull().default(1 / 60), // real minutes per stated hour
+  fastModeMultiplier: real("fast_mode_multiplier").notNull().default(1 / 60), // real minutes per stated event-deadline hour — deadline windows only, unrelated to the narrative-day clock below
   respectBlackoutWindow: boolean("respect_blackout_window").notNull().default(false),
   // Simulation clock — see lib/sim-clock.ts. simulationStartedAt is set the
   // first time the simulation is started; pausedAccumulatedMs is the running
@@ -97,6 +97,15 @@ export const globalState = pgTable("global_state", {
   simulationStartedAt: timestamp("simulation_started_at"),
   pausedAccumulatedMs: integer("paused_accumulated_ms").notNull().default(0),
   pausedAt: timestamp("paused_at"),
+  // Narrative-day progress clock: the story spans totalGameDays (default 90,
+  // i.e. ~3 months) and advances at gameDaysPerRealMinute (default 1.5, so
+  // 90 days / 60 real minutes) — deliberately independent of
+  // fastModeMultiplier, which only governs individual event deadline
+  // windows. At this compression, hour-of-day granularity isn't meaningful
+  // (each real second is ~36 in-game minutes), so the displayed clock is
+  // day-level only.
+  gameDaysPerRealMinute: real("game_days_per_real_minute").notNull().default(1.5),
+  totalGameDays: integer("total_game_days").notNull().default(90),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

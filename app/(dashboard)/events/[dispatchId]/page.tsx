@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 
 interface EventFull {
   id: string;
@@ -32,6 +33,11 @@ export default function EventDetailPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["events"],
     queryFn: () => apiFetch<EventsData>("/api/events"),
+  });
+  const { data: dash } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: () => apiFetch<{ globalState: { gameDaysPerRealMinute: number } }>("/api/dashboard"),
+    refetchInterval: 15000,
   });
 
   const [structuredChoice, setStructuredChoice] = useState("");
@@ -75,6 +81,9 @@ export default function EventDetailPage() {
       <div>
         <h2 className="text-xl font-semibold">{event.title}</h2>
         <p className="text-xs text-slate-500 uppercase mt-1">{event.id} - {event.deadlineType} deadline</p>
+        {dispatch.deadlineAt && (
+          <DeadlineCountdown deadlineAt={dispatch.deadlineAt} gameDaysPerRealMinute={dash?.globalState.gameDaysPerRealMinute ?? 1.5} />
+        )}
       </div>
 
       <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-sm text-slate-300">
@@ -184,5 +193,25 @@ export default function EventDetailPage() {
         </form>
       )}
     </div>
+  );
+}
+
+function DeadlineCountdown({ deadlineAt, gameDaysPerRealMinute }: { deadlineAt: string; gameDaysPerRealMinute: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const remaining = new Date(deadlineAt).getTime() - now;
+  const expired = remaining <= 0;
+  const minutes = Math.max(0, Math.floor(remaining / 60000));
+  const seconds = Math.max(0, Math.floor((remaining % 60000) / 1000));
+  const gameDaysRemaining = realMsToGameDays(Math.max(0, remaining), gameDaysPerRealMinute);
+
+  return (
+    <p className={`text-sm mt-2 font-medium ${expired ? "text-red-400" : "text-amber-400"}`}>
+      {expired ? "Deadline passed" : `Deadline in ${minutes}m ${seconds}s (≈ ${formatGameDays(gameDaysRemaining)})`}
+    </p>
   );
 }
