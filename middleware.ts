@@ -33,7 +33,7 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  const teamOnly = ["/dashboard", "/events", "/coordination", "/profile", "/orientation"];
+  const teamOnly = ["/dashboard", "/events", "/coordination", "/profile", "/orientation", "/summary"];
   if (teamOnly.some((p) => pathname.startsWith(p)) && role === "instructor") {
     return NextResponse.redirect(new URL("/control", req.url));
   }

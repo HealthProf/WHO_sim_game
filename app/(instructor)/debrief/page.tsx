@@ -2,6 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { SummaryReportViewer } from "@/components/summary-report-viewer";
+import type { SummaryRound } from "@/lib/summary-report";
 
 interface DebriefData {
   modelStateHistory: { id: number; regionId: string; day: number; reason: string; createdAt: string; snapshotJson: { rt: number; cfrMultiplier: number } }[];
@@ -12,12 +14,18 @@ interface DebriefData {
 
 export default function DebriefPage() {
   const { data } = useQuery({ queryKey: ["debrief"], queryFn: () => apiFetch<DebriefData>("/api/instructor/debrief") });
+  const { data: summary } = useQuery({ queryKey: ["summary-report"], queryFn: () => apiFetch<{ rounds: SummaryRound[] }>("/api/summary-report") });
 
   if (!data) return <p className="text-slate-400">Loading debrief data...</p>;
 
   return (
     <div className="space-y-8">
       <h2 className="text-lg font-semibold">After-Action Debrief</h2>
+
+      <section>
+        <h3 className="font-medium mb-3">Round-by-Round Summary</h3>
+        {summary ? <SummaryReportViewer rounds={summary.rounds} /> : <p className="text-slate-400">Loading...</p>}
+      </section>
 
       <section>
         <h3 className="font-medium mb-2">Model State Trajectory (full history)</h3>

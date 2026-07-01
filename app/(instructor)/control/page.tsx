@@ -94,8 +94,15 @@ export default function ControlPage() {
             </button>
           )}
           {status !== "completed" && (
-            <button onClick={() => setStatus.mutate("completed")} className="rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2">
-              Mark Complete
+            <button
+              onClick={() => {
+                if (window.confirm("End the game now? This is reversible with Reopen, but every screen will switch to the summary report.")) {
+                  setStatus.mutate("completed");
+                }
+              }}
+              className="rounded-md bg-red-700 hover:bg-red-600 text-white text-sm font-medium px-4 py-2"
+            >
+              End Game
             </button>
           )}
           {status === "completed" && (

@@ -4,13 +4,17 @@ import { globalState } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
+import { buildSummaryReport } from "@/lib/summary-report";
 
 // Public-safe read-only endpoint for the projector display. No auth (route is
-// protected only by an unguessable URL token — see /display/[token]). This
-// MUST NEVER expose: decisions, resource_allocation_json, team-private
-// model_state fields (fund/PPE/antivirals/HCW surge/political tension/public
-// trust), or any event not explicitly revealed via the "Push to Global
-// Display" facilitator action.
+// protected only by an unguessable URL token — see /display/[token]). While
+// the game is active this MUST NEVER expose: decisions, resource_allocation
+// _json, team-private model_state fields (fund/PPE/antivirals/HCW surge/
+// political tension/public trust), or any event not explicitly revealed via
+// the "Push to Global Display" facilitator action. Once the simulation is
+// marked completed, the round-by-round summary report (which is
+// deliberately cross-team) is included so the projector can show the
+// after-action debrief to the whole room.
 //
 // Also opportunistically runs deadline enforcement — see the note in
 // app/api/dashboard/route.ts. The projector is typically left open for the
@@ -40,6 +44,8 @@ export async function GET() {
     };
   });
 
+  const rounds = gs?.simulationStatus === "completed" ? await buildSummaryReport() : null;
+
   return NextResponse.json({
     currentDay: gs?.currentDay,
     escalationState: gs?.escalationState,
@@ -52,5 +58,6 @@ export async function GET() {
     globalRt,
     regions: publicRegionData,
     feedItems: feedItems.map((f) => ({ id: f.id, text: f.headlineText, createdAt: f.createdAt })),
+    rounds,
   });
 }

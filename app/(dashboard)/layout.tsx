@@ -20,6 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Link href="/events" className="text-slate-300 hover:text-white">Events</Link>
           <Link href="/coordination" className="text-slate-300 hover:text-white">Coordination</Link>
           <Link href="/profile" className="text-slate-300 hover:text-white">Profile</Link>
+          <Link href="/summary" className="text-slate-300 hover:text-white">Summary Report</Link>
           <SignOutButton />
         </nav>
       </header>

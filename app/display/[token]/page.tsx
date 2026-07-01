@@ -5,6 +5,8 @@ import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps
 import { countryToRegion, regionColors, regionCentroids } from "@/lib/who-region-map";
 import { SimClock } from "@/components/sim-clock";
 import type { GlobalClockFields } from "@/lib/sim-clock";
+import { SummaryReportViewer } from "@/components/summary-report-viewer";
+import type { SummaryRound } from "@/lib/summary-report";
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -12,9 +14,11 @@ interface DisplayData extends GlobalClockFields {
   currentDay: number;
   escalationState: "GREEN" | "AMBER" | "RED";
   mediaPressureIndex: number;
+  simulationStatus: string;
   globalRt: number;
   regions: { regionId: string; fullName: string; confirmedCases: number; deaths: number; rt: number }[];
   feedItems: { id: number; text: string; createdAt: string }[];
+  rounds: SummaryRound[] | null;
 }
 
 const escalationBg: Record<string, string> = {
@@ -44,6 +48,19 @@ export default function PublicDisplayPage() {
     return (
       <div className="h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-3xl">
         Loading situation room...
+      </div>
+    );
+  }
+
+  if (data.simulationStatus === "completed" && data.rounds) {
+    return (
+      <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+        <header className="shrink-0 px-8 py-6 bg-slate-800 text-center">
+          <h1 className="text-4xl xl:text-5xl font-bold tracking-wide">SIMULATION COMPLETE — SUMMARY REPORT</h1>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto p-8">
+          <SummaryReportViewer rounds={data.rounds} large />
+        </div>
       </div>
     );
   }
