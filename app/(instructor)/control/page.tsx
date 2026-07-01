@@ -62,6 +62,26 @@ export default function ControlPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["events"] }),
   });
 
+  const resetSimulation = useMutation({
+    mutationFn: () => apiFetch("/api/instructor/reset", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+      qc.invalidateQueries({ queryKey: ["scoring-inbox"] });
+      qc.invalidateQueries({ queryKey: ["summary-report"] });
+      qc.invalidateQueries({ queryKey: ["instructor-log"] });
+    },
+  });
+
+  function handleReset() {
+    const typed = window.prompt(
+      'This permanently deletes every decision, score, and dispatched event, and resets all regions to their starting values. Team logins are not affected. Type RESET to confirm.'
+    );
+    if (typed === "RESET") {
+      resetSimulation.mutate();
+    }
+  }
+
   if (!data || !dash) return <p className="text-slate-400">Loading command center...</p>;
 
   const status = dash.globalState.simulationStatus;
@@ -114,6 +134,24 @@ export default function ControlPage() {
             </button>
           )}
         </div>
+      </section>
+
+      {/* Danger zone */}
+      <section className="border border-red-900 rounded-xl p-5 flex flex-wrap items-center gap-4 bg-red-950/20">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-red-400">Danger Zone</p>
+          <p className="text-sm text-slate-300 mt-1">
+            Wipes every decision, score, and dispatched event and resets all regions to their starting values.
+            Team logins are not affected. Use this to start a completely fresh run (e.g. a new class section).
+          </p>
+        </div>
+        <button
+          onClick={handleReset}
+          disabled={resetSimulation.isPending}
+          className="ml-auto rounded-md bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 shrink-0"
+        >
+          {resetSimulation.isPending ? "Resetting..." : "Reset Simulation"}
+        </button>
       </section>
 
       {/* Needs your attention */}
