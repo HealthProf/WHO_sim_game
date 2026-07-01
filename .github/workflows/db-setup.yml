@@ -1,0 +1,25 @@
+name: Database setup / reset
+
+# Manually triggered from the Actions tab in the GitHub UI — no terminal or
+# local install required. Creates all tables (safe to re-run) and applies
+# the fixed seed content + login credentials from
+# lib/db/seed-data/credentials.ts. Requires a repository secret named
+# DATABASE_URL pointing at your Neon/Postgres instance.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  db-setup:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - name: Create/update tables
+        run: npx drizzle-kit push --force
+      - name: Seed regions, events, and login accounts
+        run: npm run db:seed
