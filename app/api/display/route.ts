@@ -55,6 +55,8 @@ export async function GET() {
     pausedAccumulatedMs: gs?.pausedAccumulatedMs,
     pausedAt: gs?.pausedAt,
     fastModeMultiplier: gs?.fastModeMultiplier,
+    gameDaysPerRealMinute: gs?.gameDaysPerRealMinute,
+    totalGameDays: gs?.totalGameDays,
     globalRt,
     regions: publicRegionData,
     feedItems: feedItems.map((f) => ({ id: f.id, text: f.headlineText, createdAt: f.createdAt })),
