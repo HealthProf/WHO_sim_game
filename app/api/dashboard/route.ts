@@ -4,14 +4,24 @@ import { globalState } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
 import { computeGlobalRt } from "@/lib/model-engine";
+import { processDeadlines } from "@/lib/deadline";
 
 // Polled every ~15s by team dashboards (see 07-open-questions.md Q4). Returns
 // the shared Global Situation Summary for every region, plus the requesting
 // team's own private resource/tension/trust ledger layered on top — never the
 // other teams' private fields (04-regions.md's data-access-layer note).
+//
+// Also opportunistically runs deadline enforcement on every poll (see
+// lib/deadline.ts) instead of relying solely on Vercel Cron — Hobby-tier
+// Vercel projects only allow daily cron schedules, which is too coarse for a
+// compressed ~60 minute session, so piggybacking on the polling traffic that
+// dashboards/the projector display already generate every ~10-15s covers the
+// same need without requiring a paid plan.
 export async function GET() {
   const { session, error } = await requireSession();
   if (error) return error;
+
+  await processDeadlines().catch(() => {});
 
   const allRegions = await db.query.regions.findMany();
   const allModelState = await db.query.modelState.findMany();
