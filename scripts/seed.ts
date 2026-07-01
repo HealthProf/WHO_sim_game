@@ -12,13 +12,7 @@ import {
 } from "../lib/db/schema";
 import { regionSeed } from "../lib/db/seed-data/regions";
 import { eventSeed } from "../lib/db/seed-data/events";
-
-function randomPassword(): string {
-  const words = ["horizon", "vector", "compass", "delta", "tundra", "harbor", "sierra", "cobalt"];
-  const w = words[Math.floor(Math.random() * words.length)];
-  const n = Math.floor(100 + Math.random() * 900);
-  return `${w}${n}`;
-}
+import { fixedPasswords } from "../lib/db/seed-data/credentials";
 
 async function main() {
   console.log("Seeding regions...");
@@ -56,7 +50,7 @@ async function main() {
 
     const teamId = team ? team.id : (await db.query.teams.findFirst({ where: (t, { eq }) => eq(t.regionId, r.id) }))!.id;
 
-    const password = randomPassword();
+    const password = fixedPasswords[r.id];
     const passwordHash = await bcrypt.hash(password, 10);
     await db
       .insert(users)
@@ -94,7 +88,7 @@ async function main() {
   }
 
   console.log("Seeding instructor account...");
-  const instructorPassword = randomPassword();
+  const instructorPassword = fixedPasswords.instructor;
   const instructorHash = await bcrypt.hash(instructorPassword, 10);
   await db
     .insert(users)
@@ -116,8 +110,9 @@ async function main() {
     console.log(`  ${c.region.padEnd(6)} username: ${c.username.padEnd(8)} password: ${c.password}`);
   }
   console.log("=====================================================\n");
-  console.log("Save this output now — passwords are hashed in the database and cannot be recovered later.");
-  console.log("Re-run `npm run db:seed` any time to reset all data and generate new passwords.\n");
+  console.log("These are fixed passwords defined in lib/db/seed-data/credentials.ts — edit that file");
+  console.log("and re-run `npm run db:seed` if you want to change them. Re-running this command is");
+  console.log("safe any time; it always applies the same credentials from that file.\n");
 
   process.exit(0);
 }
