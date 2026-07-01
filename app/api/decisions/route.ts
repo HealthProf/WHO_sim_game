@@ -29,13 +29,6 @@ export async function POST(req: NextRequest) {
 
   const event = await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) });
   const rationaleText = (body.rationaleText as string) ?? "";
-  const wordCount = rationaleText.trim().split(/\s+/).filter(Boolean).length;
-  if (event && wordCount < event.minRationaleWords) {
-    return NextResponse.json(
-      { error: `Rationale must be at least ${event.minRationaleWords} words (currently ${wordCount}).` },
-      { status: 400 }
-    );
-  }
 
   if (event?.isAllocationEvent) {
     const allocation = body.resourceAllocationJson as Record<string, number> | undefined;

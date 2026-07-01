@@ -89,6 +89,14 @@ export const globalState = pgTable("global_state", {
   simulationStatus: simStatusEnum("simulation_status").notNull().default("not_started"),
   fastModeMultiplier: real("fast_mode_multiplier").notNull().default(1 / 60), // real minutes per stated hour
   respectBlackoutWindow: boolean("respect_blackout_window").notNull().default(false),
+  // Simulation clock — see lib/sim-clock.ts. simulationStartedAt is set the
+  // first time the simulation is started; pausedAccumulatedMs is the running
+  // total of time spent paused (excluded from elapsed-time math so the clock
+  // freezes correctly across a pause); pausedAt marks the moment the most
+  // recent pause/completion began (null while running).
+  simulationStartedAt: timestamp("simulation_started_at"),
+  pausedAccumulatedMs: integer("paused_accumulated_ms").notNull().default(0),
+  pausedAt: timestamp("paused_at"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

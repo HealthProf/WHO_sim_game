@@ -67,7 +67,6 @@ export default function EventDetailPage() {
   const event = data.events.find((e) => e.id === dispatch?.eventId);
   if (!dispatch || !event) return <p className="text-slate-400">Event not found.</p>;
 
-  const wordCount = rationale.trim().split(/\s+/).filter(Boolean).length;
   const allocationTotal = Object.values(allocation).reduce((a, b) => a + b, 0);
   const alreadyResolved = dispatch.status === "scored" || dispatch.status === "closed";
 
@@ -164,9 +163,7 @@ export default function EventDetailPage() {
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">
-              Rationale (min {event.minRationaleWords} words - currently {wordCount})
-            </p>
+            <p className="text-sm font-medium mb-2">Rationale (optional, but strongly encouraged — this is what the instructor scores)</p>
             <textarea
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
