@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { globalState } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { computeGlobalRt } from "@/lib/model-engine";
+import { processDeadlines } from "@/lib/deadline";
 
 // Public-safe read-only endpoint for the projector display. No auth (route is
 // protected only by an unguessable URL token — see /display/[token]). This
@@ -10,7 +11,13 @@ import { computeGlobalRt } from "@/lib/model-engine";
 // model_state fields (fund/PPE/antivirals/HCW surge/political tension/public
 // trust), or any event not explicitly revealed via the "Push to Global
 // Display" facilitator action.
+//
+// Also opportunistically runs deadline enforcement — see the note in
+// app/api/dashboard/route.ts. The projector is typically left open for the
+// entire session, so this is actually the most reliable polling source.
 export async function GET() {
+  await processDeadlines().catch(() => {});
+
   const allRegions = await db.query.regions.findMany();
   const allModelState = await db.query.modelState.findMany();
   const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });

@@ -11,7 +11,8 @@ software: setup, deployment, and login administration.
 ## Stack
 
 Next.js (App Router) + Drizzle ORM + Postgres + NextAuth (credentials) +
-TanStack Query, deployed on Vercel with Vercel Cron for deadline enforcement.
+TanStack Query, deployed on Vercel. Deadline enforcement piggybacks on the
+polling traffic dashboards already generate (see the Cron note below).
 
 ## Local Setup
 
@@ -36,9 +37,19 @@ npm run dev
 6. After the first deploy, run `npm run db:push && npm run db:seed` against
    the production `DATABASE_URL` (locally, pointed at the prod connection
    string, or via Vercel's CLI) to create tables and seed content.
-7. The cron schedule in `vercel.json` (`/api/cron/deadlines`, every minute)
-   activates automatically on deploy — this is what enforces HARD/SOFT
-   deadlines even when nobody has a browser open.
+
+### Note on deadline enforcement (Hobby vs. Pro plans)
+
+Vercel's free Hobby plan only allows cron jobs that run once a day, which is
+too coarse for a compressed ~60 minute session. Rather than require a paid
+plan, HARD/SOFT deadline enforcement (see `lib/deadline.ts`) runs
+opportunistically on every dashboard/display poll — which happens every
+10-15 seconds as long as at least one team dashboard or the projector display
+is open, which is true for essentially the entire session. The
+`vercel.json` cron entry is a once-daily fallback safety net, not the primary
+mechanism. If you're on a Pro plan and want tighter enforcement even when no
+one has a page open, you can change its schedule to `* * * * *` (every
+minute) yourself.
 
 ## Login Administration
 
