@@ -59,17 +59,16 @@ this prototype uses shared logins for a fast-paced compressed test session).
 
 - **Usernames are fixed**: `afro`, `amro`, `emro`, `euro`, `searo`, `wpro`, and
   `instructor`. No email addresses are used anywhere in this prototype.
-- **Passwords are generated and printed once** when you run `npm run db:seed`.
-  They are bcrypt-hashed in the database and cannot be recovered later —
-  save the console output from that run.
-- **To reset all passwords** (e.g. before a new class session), truncate the
-  database and re-seed:
-  ```bash
-  npm run db:seed
-  ```
-  (Re-seeding is safe for regions/events/global state — it uses
-  `onConflictDoNothing` for content, but will regenerate and reprint new
-  team/instructor passwords each time it creates those rows fresh.)
+- **Passwords are fixed**, defined in `lib/db/seed-data/credentials.ts`, and
+  print every time you run `npm run db:seed` (or the "Database setup /
+  reset" GitHub Actions workflow) — they're the same every time, not
+  regenerated, so you only need to look them up once and can reuse them
+  across game sessions. Edit that file directly if you want different
+  passwords, then re-seed to apply the change.
+- Re-running `npm run db:seed` any time is safe — it resets regions/events
+  to their seed content and re-applies the fixed credentials; it does not
+  touch decisions, scores, or model state from an in-progress game (those
+  live in separate tables this script never truncates).
 - **To set one specific account's password** without touching anything else:
   ```bash
   npm run db:set-password -- afro your-chosen-password
@@ -101,7 +100,9 @@ submission, priority-sorted scoring inbox with one-click fast-path and
 mandatory-review pinning, the 40/30/30 scoring formula and four-tier
 consequence mapping, live model state + append-only history, coordination
 log, instructor model override + action log, public projector display with
-world map and ticker, and Vercel Cron-driven deadline enforcement.
+world map and ticker, deadline enforcement, a paired in-game/real-time clock
+shown on every screen (see `lib/sim-clock.ts`), and a first-login
+orientation page for teams and a step-by-step guide for the instructor.
 
 Not implemented (see `simulation-docs/07-open-questions.md` for the original
 scoping discussion): full automated adaptive-trigger evaluation (dispatch is

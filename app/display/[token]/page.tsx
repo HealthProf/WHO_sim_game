@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { countryToRegion, regionColors, regionCentroids } from "@/lib/who-region-map";
+import { SimClock } from "@/components/sim-clock";
+import type { GlobalClockFields } from "@/lib/sim-clock";
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
-interface DisplayData {
+interface DisplayData extends GlobalClockFields {
   currentDay: number;
   escalationState: "GREEN" | "AMBER" | "RED";
   mediaPressureIndex: number;
-  simulationStatus: string;
   globalRt: number;
   regions: { regionId: string; fullName: string; confirmedCases: number; deaths: number; rt: number }[];
   feedItems: { id: number; text: string; createdAt: string }[];
@@ -39,24 +40,30 @@ export default function PublicDisplayPage() {
     };
   }, []);
 
-  if (!data) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">Loading situation room...</div>;
+  if (!data) {
+    return (
+      <div className="h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-3xl">
+        Loading situation room...
+      </div>
+    );
+  }
 
   const maxCases = Math.max(...data.regions.map((r) => r.confirmedCases), 1);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      <header className={`px-8 py-4 flex items-center justify-between ${escalationBg[data.escalationState]}`}>
-        <h1 className="text-2xl font-bold tracking-wide">OPERATION VEILED HORIZON — GLOBAL SITUATION ROOM</h1>
-        <div className="flex items-center gap-6 text-lg font-semibold">
-          <span>DAY {data.currentDay}</span>
+    <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+      <header className={`shrink-0 px-8 py-5 flex flex-wrap items-center justify-between gap-4 ${escalationBg[data.escalationState]}`}>
+        <h1 className="text-3xl xl:text-4xl font-bold tracking-wide">OPERATION VEILED HORIZON</h1>
+        <SimClock state={data} size="lg" />
+        <div className="flex items-center gap-8 text-xl xl:text-2xl font-semibold">
           <span>{data.escalationState}</span>
           <span>Global Rt {data.globalRt.toFixed(2)}</span>
           <span>Media Pressure {data.mediaPressureIndex}</span>
         </div>
       </header>
 
-      <div className="flex-1 relative">
-        <ComposableMap projectionConfig={{ scale: 155 }} className="w-full h-full">
+      <div className="flex-1 min-h-0 relative">
+        <ComposableMap projectionConfig={{ scale: 155 }} width={980} height={520} className="w-full h-full">
           <Geographies geography={GEO_URL}>
             {({ geographies }: { geographies: Array<{ rsmKey: string; id: string; properties: { iso_a3?: string } }> }) =>
               geographies.map((geo) => {
@@ -78,11 +85,11 @@ export default function PublicDisplayPage() {
           {data.regions.map((r) => {
             const centroid = regionCentroids[r.regionId];
             if (!centroid) return null;
-            const radius = 6 + 24 * Math.sqrt(r.confirmedCases / maxCases);
+            const radius = 8 + 30 * Math.sqrt(r.confirmedCases / maxCases);
             return (
               <Marker key={r.regionId} coordinates={centroid}>
-                <circle r={radius} fill={regionColors[r.regionId]} fillOpacity={0.55} stroke="#fff" strokeWidth={1} />
-                <text textAnchor="middle" y={-radius - 6} className="fill-white text-[10px] font-semibold">
+                <circle r={radius} fill={regionColors[r.regionId]} fillOpacity={0.55} stroke="#fff" strokeWidth={1.5} />
+                <text textAnchor="middle" y={-radius - 8} className="fill-white text-[15px] font-bold">
                   {r.regionId}: {r.confirmedCases}
                 </text>
               </Marker>
@@ -90,18 +97,18 @@ export default function PublicDisplayPage() {
           })}
         </ComposableMap>
 
-        <div className="absolute top-4 right-4 bg-slate-900/80 rounded-lg p-3 text-xs space-y-1">
+        <div className="absolute top-4 right-4 bg-slate-900/80 rounded-lg p-4 text-base space-y-2">
           {Object.entries(regionColors).map(([region, color]) => (
             <div key={region} className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full inline-block" style={{ background: color }} />
+              <span className="w-4 h-4 rounded-full inline-block" style={{ background: color }} />
               {region}
             </div>
           ))}
         </div>
       </div>
 
-      <footer className="bg-slate-900 border-t border-slate-800 py-3 overflow-hidden whitespace-nowrap">
-        <div className="animate-marquee inline-block text-sm text-amber-300">
+      <footer className="shrink-0 bg-slate-900 border-t border-slate-800 py-4 overflow-hidden whitespace-nowrap">
+        <div className="animate-marquee inline-block text-2xl xl:text-3xl font-semibold text-amber-300">
           {data.feedItems.length > 0
             ? data.feedItems.map((f) => `● ${f.text}`).join("     ")
             : "● Awaiting the first dispatched update from the facilitator..."}

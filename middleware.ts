@@ -11,7 +11,7 @@ export default auth((req) => {
 
   if (pathname.startsWith("/login")) {
     if (isLoggedIn) {
-      return NextResponse.redirect(new URL(role === "instructor" ? "/control" : "/dashboard", req.url));
+      return NextResponse.redirect(new URL(role === "instructor" ? "/guide" : "/orientation", req.url));
     }
     return NextResponse.next();
   }
@@ -28,12 +28,12 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  const instructorOnly = ["/control", "/scoring", "/model", "/debrief", "/log"];
+  const instructorOnly = ["/control", "/scoring", "/model", "/debrief", "/log", "/guide"];
   if (instructorOnly.some((p) => pathname.startsWith(p)) && role !== "instructor") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  const teamOnly = ["/dashboard", "/events", "/coordination", "/profile"];
+  const teamOnly = ["/dashboard", "/events", "/coordination", "/profile", "/orientation"];
   if (teamOnly.some((p) => pathname.startsWith(p)) && role === "instructor") {
     return NextResponse.redirect(new URL("/control", req.url));
   }
