@@ -29,12 +29,24 @@ const escalationBg: Record<string, string> = {
 
 export default function PublicDisplayPage() {
   const [data, setData] = useState<DisplayData | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
     async function poll() {
-      const res = await fetch("/api/display");
-      if (res.ok && active) setData(await res.json());
+      try {
+        const res = await fetch("/api/display", { cache: "no-store" });
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const json = await res.json();
+        if (!active) return;
+        setData(json);
+        setLastError(null);
+        setLastSuccessAt(Date.now());
+      } catch (err) {
+        if (!active) return;
+        setLastError(err instanceof Error ? err.message : "Failed to reach the server");
+      }
     }
     poll();
     const interval = setInterval(poll, 10000);
@@ -44,17 +56,33 @@ export default function PublicDisplayPage() {
     };
   }, []);
 
+  // Never gets permanently stuck: if we have no data yet and the last
+  // attempt failed, show a visible error with an automatic retry countdown
+  // instead of an indefinite "Loading..." screen.
   if (!data) {
     return (
-      <div className="h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-3xl">
-        Loading situation room...
+      <div className="h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-400 text-3xl text-center px-8">
+        <p>{lastError ? "Couldn't reach the server" : "Loading situation room..."}</p>
+        {lastError && <p className="text-lg text-red-400">{lastError} — retrying every 10s</p>}
       </div>
     );
   }
 
+  // Data is stale if the last successful poll was more than ~40s ago
+  // (four missed cycles) — surface it rather than silently showing old
+  // numbers forever if the connection has actually dropped.
+  const isStale = lastSuccessAt !== null && Date.now() - lastSuccessAt > 40000;
+
+  const staleBanner = isStale && (
+    <div className="shrink-0 bg-red-900 text-white text-center py-1.5 text-sm font-medium">
+      Connection to the server may be lost — last updated {Math.round((Date.now() - lastSuccessAt!) / 1000)}s ago, still retrying
+    </div>
+  );
+
   if (data.simulationStatus === "completed" && data.rounds) {
     return (
       <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+        {staleBanner}
         <header className="shrink-0 px-8 py-6 bg-slate-800 text-center">
           <h1 className="text-4xl xl:text-5xl font-bold tracking-wide">SIMULATION COMPLETE — SUMMARY REPORT</h1>
         </header>
@@ -69,6 +97,7 @@ export default function PublicDisplayPage() {
 
   return (
     <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+      {staleBanner}
       <header className={`shrink-0 px-8 py-5 flex flex-wrap items-center justify-between gap-4 ${escalationBg[data.escalationState]}`}>
         <h1 className="text-3xl xl:text-4xl font-bold tracking-wide">OPERATION VEILED HORIZON</h1>
         <SimClock state={data} size="lg" />

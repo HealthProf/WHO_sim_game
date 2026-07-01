@@ -1,5 +1,6 @@
 import { SignOutButton } from "@/components/signout-button";
 import { HeaderClock } from "@/components/header-clock";
+import { ResetSimulationButton } from "@/components/reset-simulation-button";
 import Link from "next/link";
 
 export default function InstructorLayout({ children }: { children: React.ReactNode }) {
@@ -19,6 +20,7 @@ export default function InstructorLayout({ children }: { children: React.ReactNo
           <Link href="/log" className="text-slate-300 hover:text-white">Action Log</Link>
           <Link href="/guide" className="text-slate-300 hover:text-white">Guide</Link>
           <SignOutButton />
+          <ResetSimulationButton />
         </nav>
       </header>
       <main className="p-6 max-w-7xl mx-auto">{children}</main>
