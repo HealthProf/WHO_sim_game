@@ -17,13 +17,13 @@ import { fixedPasswords } from "../lib/db/seed-data/credentials";
 async function main() {
   console.log("Seeding regions...");
   for (const r of regionSeed) {
-    await db.insert(regions).values(r).onConflictDoNothing();
+    await db.insert(regions).values(r).onConflictDoUpdate({ target: regions.id, set: r });
   }
 
   console.log("Seeding events...");
   for (const e of eventSeed) {
     const { chainPrev, ...eventRow } = e;
-    await db.insert(events).values(eventRow).onConflictDoNothing();
+    await db.insert(events).values(eventRow).onConflictDoUpdate({ target: events.id, set: eventRow });
   }
   for (const e of eventSeed) {
     for (const prev of e.chainPrev) {
