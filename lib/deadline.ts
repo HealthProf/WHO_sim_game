@@ -8,10 +8,11 @@ import { db } from "./db";
 import { eventDispatches, events, decisions, scores, users, globalState } from "./db/schema";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import { computeCompositePct, defaultScoresForTier } from "./scoring";
-import { applyModelDelta, applyPassiveDrift } from "./model-engine";
+import { applyModelDelta, applyOptimalShadowDelta, applyPassiveDrift } from "./model-engine";
 import { pushConsequence } from "./consequences";
 import { closeExpiredSnapVotes } from "./snap-vote";
 import { maybeAnnounceResolution } from "./announcements";
+import { processBudgetCycleTimers } from "./budget-cycle";
 
 export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
@@ -44,6 +45,7 @@ export async function processDeadlines() {
 
   await applyPassiveDrift(gs).catch(() => {});
   await closeExpiredSnapVotes().catch(() => {});
+  await processBudgetCycleTimers().catch(() => {});
 
   const now = new Date();
   let remindersSent = 0;
@@ -107,7 +109,8 @@ export async function processDeadlines() {
       scoredByUserId: systemUser.id,
     });
 
-    const deltas = (event.modelDeltaJson as Record<string, unknown[]>)?.[tier] ?? [];
+    const deltaJson = (event.modelDeltaJson as Record<string, unknown[]>) ?? {};
+    const deltas = deltaJson[tier] ?? [];
     const region = await regionForTeam(dispatch.targetTeamId);
     if (region) {
       await applyModelDelta({
@@ -115,6 +118,7 @@ export async function processDeadlines() {
         submittingRegionId: region,
         reason: `${event.id} deadline expired, no response: ${tier} auto-applied`,
       });
+      await applyOptimalShadowDelta((deltaJson.OPTIMAL as never) ?? [], region);
       await pushConsequence({
         event,
         dispatchId: dispatch.id,

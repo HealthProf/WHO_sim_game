@@ -71,9 +71,17 @@ export async function GET() {
   // Instructor sees every region's full private state.
   const allRegionsFull = session!.user.role === "instructor" ? allModelState : null;
 
+  // Global average social metrics (item 8) — an aggregate, not a per-region
+  // breakdown, so it's safe to surface on shared/public views the same way
+  // globalRt already is, without exposing any one region's private ledger.
+  const avgPublicTrust = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.publicTrustIndex, 0) / allModelState.length) : 0;
+  const avgHappiness = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.populationHappinessIndex, 0) / allModelState.length) : 0;
+
   return NextResponse.json({
     globalState: gs,
     globalRt,
+    globalAvgPublicTrust: avgPublicTrust,
+    globalAvgHappiness: avgHappiness,
     sharedSummary,
     ownRegion,
     allRegionsFull,

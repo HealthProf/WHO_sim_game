@@ -1,8 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { decisions, eventDispatches, events } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { decisions, eventDispatches, events, modelState, teams, modelStateHistory } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
+import type { OptionCost, StructuredOption } from "@/lib/db/seed-data/events";
+
+// Applies an option's resource cost to the submitting team's own region
+// immediately at submission time (see StructuredOption in
+// lib/db/seed-data/events.ts — "how much this path costs" is a property of
+// the choice itself, independent of how it's later scored). Returns an
+// error string if the team can't currently afford it (item 4) instead of
+// throwing, so the caller can turn it into a clean 400 response.
+async function applyOptionCost(regionId: string, cost: OptionCost, reason: string): Promise<string | null> {
+  const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+  if (!state) return "Region state not found";
+
+  const fundCost = cost.fund ?? 0;
+  const ppeCost = cost.ppeDays ?? 0;
+  const antiviralsCost = cost.antivirals ?? 0;
+  if (state.fundRemaining < fundCost) return `This option costs $${fundCost.toLocaleString()} — you only have $${state.fundRemaining.toLocaleString()} available.`;
+  if (state.ppeDaysRemaining < ppeCost) return `This option costs ${ppeCost} PPE-days — you only have ${state.ppeDaysRemaining} available.`;
+  if (state.antiviralsRemaining < antiviralsCost) return `This option costs ${antiviralsCost} antiviral doses — you only have ${state.antiviralsRemaining} available.`;
+
+  await db
+    .update(modelState)
+    .set({
+      fundRemaining: state.fundRemaining - fundCost,
+      ppeDaysRemaining: state.ppeDaysRemaining - ppeCost,
+      antiviralsRemaining: state.antiviralsRemaining - antiviralsCost,
+      updatedAt: new Date(),
+    })
+    .where(eq(modelState.regionId, regionId));
+
+  const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+  if (updated) await db.insert(modelStateHistory).values({ regionId, day: updated.day, snapshotJson: updated, reason });
+  return null;
+}
+
+// Refunds a previously-charged option's cost — used when a team resubmits a
+// decision before it's scored (each resubmission is a new row, see below),
+// so switching options doesn't double-charge the earlier choice.
+async function refundOptionCost(regionId: string, cost: OptionCost, reason: string) {
+  const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+  if (!state) return;
+  await db
+    .update(modelState)
+    .set({
+      fundRemaining: state.fundRemaining + (cost.fund ?? 0),
+      ppeDaysRemaining: state.ppeDaysRemaining + (cost.ppeDays ?? 0),
+      antiviralsRemaining: state.antiviralsRemaining + (cost.antivirals ?? 0),
+      updatedAt: new Date(),
+    })
+    .where(eq(modelState.regionId, regionId));
+  const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+  if (updated) await db.insert(modelStateHistory).values({ regionId, day: updated.day, snapshotJson: updated, reason });
+}
 
 // POST: a team submits a decision for a dispatch targeted at them. Allows
 // resubmission before the deadline (per 05-product-requirements.md §3) —
@@ -39,6 +91,33 @@ export async function POST(req: NextRequest) {
   }
 
   const confidenceLevel = ["LOW", "MEDIUM", "HIGH"].includes(body.confidenceLevel) ? body.confidenceLevel : null;
+  const structuredChoice = (body.structuredChoice as string) ?? null;
+
+  const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
+  if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
+
+  const options = (event?.structuredOptionsJson as StructuredOption[] | null) ?? null;
+  const chosenOption = options?.find((o) => o.label === structuredChoice) ?? null;
+
+  // Refund whatever the team's most recent (unscored) prior submission for
+  // this dispatch already cost, before charging the newly-chosen option —
+  // resubmission before scoring is allowed (see below) and shouldn't
+  // double-charge if a team changes their mind.
+  const priorDecision = await db.query.decisions.findFirst({
+    where: eq(decisions.eventDispatchId, eventDispatchId),
+    orderBy: [desc(decisions.submittedAt)],
+  });
+  if (priorDecision?.structuredChoice) {
+    const priorOption = options?.find((o) => o.label === priorDecision.structuredChoice);
+    if (priorOption?.cost) {
+      await refundOptionCost(team.regionId, priorOption.cost, `${event!.id}: refunded cost of previous choice (${priorOption.label}) on resubmission`);
+    }
+  }
+
+  if (chosenOption?.cost) {
+    const affordabilityError = await applyOptionCost(team.regionId, chosenOption.cost, `${event!.id}: chose option ${chosenOption.label}`);
+    if (affordabilityError) return NextResponse.json({ error: affordabilityError }, { status: 400 });
+  }
 
   const [decision] = await db
     .insert(decisions)
@@ -46,7 +125,7 @@ export async function POST(req: NextRequest) {
       eventDispatchId,
       teamId: session!.user.teamId,
       submittedByUserId: Number(session!.user.id),
-      structuredChoice: body.structuredChoice ?? null,
+      structuredChoice,
       rationaleText,
       resourceAllocationJson: body.resourceAllocationJson ?? null,
       coordinatedWithTeamsJson: body.coordinatedWithTeamsJson ?? null,

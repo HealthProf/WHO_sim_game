@@ -7,6 +7,7 @@ import { processDeadlines } from "@/lib/deadline";
 import { buildSummaryReport } from "@/lib/summary-report";
 import { getSnapVoteState } from "@/lib/snap-vote";
 import { getActiveGlobalAnnouncement } from "@/lib/announcements";
+import { computeFinalResults } from "@/lib/final-results";
 
 // Public-safe read-only endpoint for the projector display. No auth (route is
 // protected only by an unguessable URL token — see /display/[token]). While
@@ -47,6 +48,11 @@ export async function GET() {
   });
 
   const rounds = gs?.simulationStatus === "completed" ? await buildSummaryReport() : null;
+  const finalResults = gs?.simulationStatus === "completed" ? await computeFinalResults() : null;
+  const globalAvgHappiness = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.populationHappinessIndex, 0) / allModelState.length) : 0;
+  const globalAvgPublicTrust = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.publicTrustIndex, 0) / allModelState.length) : 0;
+  const totalConfirmed = allModelState.reduce((s, m) => s + m.confirmedCases, 0);
+  const totalDeaths = allModelState.reduce((s, m) => s + m.deaths, 0);
   // Public display never reveals live vote breakdowns while a vote is open
   // (same herd-voting concern as the team-facing endpoint) — only the
   // question, countdown, and response count; the full tally appears once
@@ -87,9 +93,14 @@ export async function GET() {
     gameDaysPerRealMinute: gs?.gameDaysPerRealMinute,
     totalGameDays: gs?.totalGameDays,
     globalRt,
+    totalConfirmed,
+    totalDeaths,
+    globalAvgHappiness,
+    globalAvgPublicTrust,
     regions: publicRegionData,
     feedItems: feedItems.map((f) => ({ id: f.id, text: f.headlineText, createdAt: f.createdAt })),
     rounds,
+    finalResults,
     snapVote: snapVote.current,
     activeDeadlines,
     activeAnnouncement,

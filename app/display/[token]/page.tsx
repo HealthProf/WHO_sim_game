@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
-import { countryToRegion, regionColors, regionCentroids } from "@/lib/who-region-map";
+import { useEffect, useRef, useState } from "react";
+import { regionColors } from "@/lib/who-region-map";
 import { SimClock } from "@/components/sim-clock";
 import type { GlobalClockFields } from "@/lib/sim-clock";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import type { SummaryRound } from "@/lib/summary-report";
-
-const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 interface DisplaySnapVote {
   question: string;
@@ -26,6 +23,26 @@ interface DisplayAnnouncement {
   createdAt: string;
 }
 
+interface RegionFinalResult {
+  regionId: string;
+  actualConfirmed: number;
+  actualDeaths: number;
+  optimalConfirmed: number;
+  optimalDeaths: number;
+  infectionsPrevented: number;
+  deathsPrevented: number;
+}
+
+interface FinalResults {
+  regions: RegionFinalResult[];
+  totalActualConfirmed: number;
+  totalActualDeaths: number;
+  totalOptimalConfirmed: number;
+  totalOptimalDeaths: number;
+  totalInfectionsPrevented: number;
+  totalDeathsPrevented: number;
+}
+
 interface DisplayData extends GlobalClockFields {
   currentDay: number;
   escalationState: "GREEN" | "AMBER" | "RED";
@@ -38,13 +55,11 @@ interface DisplayData extends GlobalClockFields {
   snapVote: DisplaySnapVote | null;
   activeDeadlines: { eventTitle: string; deadlineAt: string }[];
   activeAnnouncement: DisplayAnnouncement | null;
-}
-
-// Ticker duration scales with how much text there actually is, instead of a
-// fixed duration that made long feed lists race past unreadably fast —
-// roughly a comfortable reading pace, with sane floor/ceiling.
-function tickerDurationSeconds(text: string): number {
-  return Math.min(180, Math.max(30, text.length * 0.15));
+  totalConfirmed: number;
+  totalDeaths: number;
+  globalAvgHappiness: number;
+  globalAvgPublicTrust: number;
+  finalResults: FinalResults | null;
 }
 
 const escalationBg: Record<string, string> = {
@@ -63,6 +78,30 @@ export default function PublicDisplayPage() {
   // there, so a slow poll cycle can never cause it to be missed or cut
   // short (see lib/announcements.ts getActiveGlobalAnnouncement).
   const [announcementSeen, setAnnouncementSeen] = useState<{ id: number; seenAt: number } | null>(null);
+
+  // Item 6's live feed: newest on top, and a new item stays visibly
+  // highlighted for a while after it first appears rather than blending
+  // straight into the list. Arrival time is tracked client-side (0 = "was
+  // already here at page load, don't flash it") so a slow poll cycle can't
+  // make an old item look new. Kept in state (not a ref) since it's read
+  // during render — refs may only be read from effects/handlers.
+  const [arrivalMap, setArrivalMap] = useState<Record<number, number>>({});
+  const feedInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!data) return;
+    setArrivalMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const item of data.feedItems) {
+        if (!(item.id in next)) {
+          next[item.id] = feedInitializedRef.current ? Date.now() : 0;
+          changed = true;
+        }
+      }
+      feedInitializedRef.current = true;
+      return changed ? next : prev;
+    });
+  }, [data]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -127,7 +166,28 @@ export default function PublicDisplayPage() {
         <header className="shrink-0 px-8 py-6 bg-slate-800 text-center">
           <h1 className="text-4xl xl:text-5xl font-bold tracking-wide">SIMULATION COMPLETE — SUMMARY REPORT</h1>
         </header>
-        <div className="flex-1 min-h-0 overflow-y-auto p-8">
+        <div className="flex-1 min-h-0 overflow-y-auto p-8 space-y-8">
+          {data.finalResults && (
+            <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+              <h2 className="text-2xl font-bold">Final Results: Actual vs. Ideal Playthrough</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <StatTile label="Actual Confirmed" value={data.finalResults.totalActualConfirmed.toLocaleString()} />
+                <StatTile label="Actual Deaths" value={data.finalResults.totalActualDeaths.toLocaleString()} />
+                <StatTile label="Ideal Confirmed" value={data.finalResults.totalOptimalConfirmed.toLocaleString()} />
+                <StatTile label="Ideal Deaths" value={data.finalResults.totalOptimalDeaths.toLocaleString()} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-amber-950/40 border border-amber-700 rounded-lg p-4">
+                  <p className="text-sm uppercase tracking-wide text-amber-300">Infections Preventable</p>
+                  <p className="text-4xl font-bold mt-1">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
+                </div>
+                <div className="bg-red-950/40 border border-red-700 rounded-lg p-4">
+                  <p className="text-sm uppercase tracking-wide text-red-300">Deaths Preventable</p>
+                  <p className="text-4xl font-bold mt-1">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
+                </div>
+              </div>
+            </section>
+          )}
           <SummaryReportViewer rounds={data.rounds} large />
         </div>
       </div>
@@ -135,6 +195,9 @@ export default function PublicDisplayPage() {
   }
 
   const maxCases = Math.max(...data.regions.map((r) => r.confirmedCases), 1);
+  const maxDeaths = Math.max(...data.regions.map((r) => r.deaths), 1);
+  const maxRt = Math.max(...data.regions.map((r) => r.rt), 1);
+  const sortedRegionsByCases = [...data.regions].sort((a, b) => b.confirmedCases - a.confirmedCases);
 
   return (
     <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
@@ -191,67 +254,121 @@ export default function PublicDisplayPage() {
           </div>
         )}
 
-      <div className="flex-1 min-h-0 relative">
-        <ComposableMap projectionConfig={{ scale: 155 }} width={980} height={520} className="w-full h-full">
-          <Geographies geography={GEO_URL}>
-            {({ geographies }: { geographies: Array<{ rsmKey: string; id: string; properties: { iso_a3?: string } }> }) =>
-              geographies.map((geo) => {
-                const iso3 = geo.properties.iso_a3 ?? geo.id;
-                const region = countryToRegion[iso3];
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill={region ? regionColors[region] : "#1e293b"}
-                    stroke="#0f172a"
-                    strokeWidth={0.5}
-                    style={{ default: { outline: "none" }, hover: { outline: "none" }, pressed: { outline: "none" } }}
-                  />
-                );
-              })
-            }
-          </Geographies>
-          {data.regions.map((r) => {
-            const centroid = regionCentroids[r.regionId];
-            if (!centroid) return null;
-            const radius = 8 + 30 * Math.sqrt(r.confirmedCases / maxCases);
-            return (
-              <Marker key={r.regionId} coordinates={centroid}>
-                <circle r={radius} fill={regionColors[r.regionId]} fillOpacity={0.55} stroke="#fff" strokeWidth={1.5} />
-                <text textAnchor="middle" y={-radius - 8} className="fill-white text-[15px] font-bold">
-                  {r.regionId}: {r.confirmedCases}
-                </text>
-              </Marker>
-            );
-          })}
-        </ComposableMap>
+      <div className="flex-1 min-h-0 flex gap-0">
+        {/* Left: real-time key metrics — stat tiles plus a bar per region for
+            each of confirmed cases, deaths, and Rt. Bars carry a direct
+            region-code + value label rather than relying on color alone to
+            tell regions apart (the brand palette fails a strict CVD check at
+            6 hues — see dataviz skill palette validation). */}
+        <div className="flex-1 min-w-0 overflow-y-auto p-6 space-y-6">
+          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+            <StatTile label="Total Confirmed" value={data.totalConfirmed.toLocaleString()} />
+            <StatTile label="Total Deaths" value={data.totalDeaths.toLocaleString()} />
+            <StatTile label="Global Rt" value={data.globalRt.toFixed(2)} />
+            <StatTile label="Avg. Public Trust" value={data.globalAvgPublicTrust} />
+            <StatTile label="Avg. Happiness" value={data.globalAvgHappiness} />
+          </div>
 
-        <div className="absolute top-4 right-4 bg-slate-900/80 rounded-lg p-4 text-base space-y-2">
-          {Object.entries(regionColors).map(([region, color]) => (
-            <div key={region} className="flex items-center gap-2">
-              <span className="w-4 h-4 rounded-full inline-block" style={{ background: color }} />
-              {region}
-            </div>
-          ))}
+          <RegionBarPanel
+            title="Confirmed Cases by Region"
+            regions={sortedRegionsByCases}
+            valueOf={(r) => r.confirmedCases}
+            max={maxCases}
+            format={(v) => v.toLocaleString()}
+          />
+          <RegionBarPanel
+            title="Deaths by Region"
+            regions={[...data.regions].sort((a, b) => b.deaths - a.deaths)}
+            valueOf={(r) => r.deaths}
+            max={maxDeaths}
+            format={(v) => v.toLocaleString()}
+          />
+          <RegionBarPanel
+            title="Rt by Region"
+            regions={[...data.regions].sort((a, b) => b.rt - a.rt)}
+            valueOf={(r) => r.rt}
+            max={maxRt}
+            format={(v) => v.toFixed(2)}
+          />
+        </div>
+
+        {/* Right: live event feed, newest on top. Items never disappear on
+            their own (last 30 stay scrollable) but flash a highlight for a
+            while right after they first arrive, so the room's eyes are
+            drawn to genuinely new developments. */}
+        <div className="w-[420px] xl:w-[480px] shrink-0 border-l border-slate-800 bg-slate-900/60 flex flex-col min-h-0">
+          <p className="shrink-0 px-4 py-3 text-xs uppercase tracking-wide text-slate-400 border-b border-slate-800">
+            Live Feed
+          </p>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+            {data.feedItems.length === 0 && (
+              <p className="text-slate-500 text-sm">Awaiting the first dispatched update from the facilitator...</p>
+            )}
+            {data.feedItems.map((f) => {
+              const arrivedAt = arrivalMap[f.id] ?? 0;
+              const isNew = arrivedAt > 0 && now - arrivedAt < 8000;
+              const ageSeconds = Math.max(0, Math.round((now - new Date(f.createdAt).getTime()) / 1000));
+              return (
+                <div
+                  key={f.id}
+                  className={`rounded-lg px-3 py-2.5 text-sm leading-snug transition-colors duration-1000 ${
+                    isNew ? "bg-amber-500/20 border border-amber-500/60 text-amber-100" : "bg-slate-800/60 border border-transparent text-slate-200"
+                  }`}
+                >
+                  <p>{f.text}</p>
+                  <p className="text-[11px] text-slate-500 mt-1 tabular-nums">
+                    {ageSeconds < 60 ? `${ageSeconds}s ago` : `${Math.floor(ageSeconds / 60)}m ago`}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <footer className="shrink-0 bg-slate-900 border-t border-slate-800 py-4 overflow-hidden whitespace-nowrap">
-        {(() => {
-          const tickerText =
-            data.feedItems.length > 0
-              ? data.feedItems.map((f) => `● ${f.text}`).join("     ")
-              : "● Awaiting the first dispatched update from the facilitator...";
+function StatTile({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-2xl xl:text-3xl font-bold tabular-nums mt-1">{value}</p>
+    </div>
+  );
+}
+
+function RegionBarPanel({
+  title,
+  regions,
+  valueOf,
+  max,
+  format,
+}: {
+  title: string;
+  regions: { regionId: string; fullName: string; confirmedCases: number; deaths: number; rt: number }[];
+  valueOf: (r: { regionId: string; confirmedCases: number; deaths: number; rt: number }) => number;
+  max: number;
+  format: (v: number) => string;
+}) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+      <p className="text-xs uppercase tracking-wide text-slate-500 mb-3">{title}</p>
+      <div className="space-y-2">
+        {regions.map((r) => {
+          const value = valueOf(r);
+          const pct = Math.max(2, Math.round((value / max) * 100));
           return (
-            <div
-              className="animate-marquee inline-block text-2xl xl:text-3xl font-semibold text-amber-300"
-              style={{ animationDuration: `${tickerDurationSeconds(tickerText)}s` }}
-            >
-              {tickerText}
+            <div key={r.regionId} className="flex items-center gap-3">
+              <span className="w-14 shrink-0 text-xs font-semibold text-slate-300">{r.regionId}</span>
+              <div className="flex-1 h-5 bg-slate-800 rounded overflow-hidden">
+                <div className="h-full rounded" style={{ width: `${pct}%`, background: regionColors[r.regionId] }} />
+              </div>
+              <span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums">{format(value)}</span>
             </div>
           );
-        })()}
-      </footer>
+        })}
+      </div>
     </div>
   );
 }

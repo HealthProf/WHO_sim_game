@@ -6,6 +6,9 @@ import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import { QueryError } from "@/components/query-error";
 import { EmergencyCommitteePanel } from "@/components/emergency-committee-panel";
+import { BudgetCyclePanel } from "@/components/budget-cycle-panel";
+import { MarketApprovalPanel } from "@/components/market-approval-panel";
+import { EmergencyFundingPanel } from "@/components/emergency-funding-panel";
 import { DeadlineCountdown } from "@/components/deadline-countdown";
 import Link from "next/link";
 
@@ -214,6 +217,9 @@ export default function ControlPage() {
       </section>
 
       <EmergencyCommitteePanel />
+      <BudgetCyclePanel />
+      <MarketApprovalPanel />
+      <EmergencyFundingPanel />
 
       {/* Event queue, grouped by day */}
       <section>

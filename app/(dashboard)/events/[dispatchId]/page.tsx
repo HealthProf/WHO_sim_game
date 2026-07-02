@@ -9,13 +9,26 @@ import { QueryError } from "@/components/query-error";
 import { KeyTerms } from "@/components/key-terms";
 import { AdvisoryBoard } from "@/components/advisory-board";
 
+interface OptionCost {
+  fund?: number;
+  ppeDays?: number;
+  antivirals?: number;
+}
+
+interface StructuredOption {
+  label: string;
+  text: string;
+  cost?: OptionCost;
+  impactDesc: string;
+}
+
 interface EventFull {
   id: string;
   title: string;
   narrativeMarkdown: string;
   decisionPromptMarkdown: string;
   minRationaleWords: number;
-  structuredOptionsJson: { label: string; text: string }[] | null;
+  structuredOptionsJson: StructuredOption[] | null;
   isAllocationEvent: boolean;
   deadlineType: string;
 }
@@ -23,6 +36,35 @@ interface EventFull {
 interface EventsData {
   events: EventFull[];
   dispatches: { id: number; eventId: string; status: string; deadlineAt: string | null }[];
+}
+
+interface OwnRegionResources {
+  fundRemaining: number;
+  ppeDaysRemaining: number;
+  antiviralsRemaining: number;
+}
+
+function formatCost(cost: OptionCost | undefined): string {
+  if (!cost) return "No direct resource cost.";
+  const parts: string[] = [];
+  if (cost.fund) parts.push(`$${cost.fund.toLocaleString()}`);
+  if (cost.ppeDays) parts.push(`${cost.ppeDays} PPE-days`);
+  if (cost.antivirals) parts.push(`${cost.antivirals.toLocaleString()} antiviral doses`);
+  return parts.length > 0 ? `Costs ${parts.join(" + ")}.` : "No direct resource cost.";
+}
+
+function affordabilityIssue(cost: OptionCost | undefined, resources: OwnRegionResources | undefined): string | null {
+  if (!cost || !resources) return null;
+  if (cost.fund && resources.fundRemaining < cost.fund) {
+    return `Requires $${cost.fund.toLocaleString()} — you have $${resources.fundRemaining.toLocaleString()}.`;
+  }
+  if (cost.ppeDays && resources.ppeDaysRemaining < cost.ppeDays) {
+    return `Requires ${cost.ppeDays} PPE-days — you have ${resources.ppeDaysRemaining}.`;
+  }
+  if (cost.antivirals && resources.antiviralsRemaining < cost.antivirals) {
+    return `Requires ${cost.antivirals.toLocaleString()} antiviral doses — you have ${resources.antiviralsRemaining.toLocaleString()}.`;
+  }
+  return null;
 }
 
 const REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
@@ -39,7 +81,8 @@ export default function EventDetailPage() {
   });
   const { data: dash } = useQuery({
     queryKey: ["dashboard"],
-    queryFn: () => apiFetch<{ globalState: { gameDaysPerRealMinute: number } }>("/api/dashboard"),
+    queryFn: () =>
+      apiFetch<{ globalState: { gameDaysPerRealMinute: number }; ownRegion: OwnRegionResources | null }>("/api/dashboard"),
     refetchInterval: 15000,
   });
 
@@ -118,22 +161,34 @@ export default function EventDetailPage() {
             <div>
               <p className="text-sm font-medium mb-2">Structured Choice</p>
               <div className="space-y-2">
-                {event.structuredOptionsJson.map((opt) => (
-                  <label key={opt.label} className="flex gap-2 items-start bg-slate-900 border border-slate-800 rounded-lg p-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="choice"
-                      value={opt.label}
-                      checked={structuredChoice === opt.label}
-                      onChange={() => setStructuredChoice(opt.label)}
-                      className="mt-1"
-                    />
-                    <span className="text-sm">
-                      <span className="font-semibold">{opt.label}) </span>
-                      {opt.text}
-                    </span>
-                  </label>
-                ))}
+                {event.structuredOptionsJson.map((opt) => {
+                  const blockedReason = affordabilityIssue(opt.cost, dash?.ownRegion ?? undefined);
+                  return (
+                    <label
+                      key={opt.label}
+                      className={`flex gap-2 items-start bg-slate-900 border rounded-lg p-3 ${
+                        blockedReason ? "border-red-900/60 opacity-60 cursor-not-allowed" : "border-slate-800 cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="choice"
+                        value={opt.label}
+                        checked={structuredChoice === opt.label}
+                        disabled={!!blockedReason}
+                        onChange={() => setStructuredChoice(opt.label)}
+                        className="mt-1"
+                      />
+                      <span className="text-sm flex-1">
+                        <span className="font-semibold">{opt.label}) </span>
+                        {opt.text}
+                        <span className="block text-xs text-slate-500 mt-1">{formatCost(opt.cost)}</span>
+                        <span className="block text-xs text-slate-400 mt-1">{opt.impactDesc}</span>
+                        {blockedReason && <span className="block text-xs text-red-400 mt-1 font-medium">Can&apos;t afford this option — {blockedReason}</span>}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           )}

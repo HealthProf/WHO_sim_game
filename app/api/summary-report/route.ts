@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-helpers";
 import { buildSummaryReport, computeTeamHighlights } from "@/lib/summary-report";
+import { computeFinalResults } from "@/lib/final-results";
 
 // Round-by-round after-action summary, available to any authenticated user
 // (team or instructor) — see lib/summary-report.ts for why this is
@@ -15,6 +16,7 @@ export async function GET() {
   const rounds = await buildSummaryReport();
   const allHighlights = await computeTeamHighlights();
   const myHighlights = session!.user.regionId ? allHighlights.find((h) => h.regionId === session!.user.regionId) ?? null : null;
+  const finalResults = await computeFinalResults();
 
-  return NextResponse.json({ rounds, myHighlights });
+  return NextResponse.json({ rounds, myHighlights, finalResults });
 }

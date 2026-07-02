@@ -77,7 +77,14 @@ export async function maybeAnnounceResolution(eventId: string) {
   const outcomeParts: string[] = [];
   for (const d of dispatches) {
     const team = allTeams.find((t) => t.id === d.targetTeamId);
-    const decision = await db.query.decisions.findFirst({ where: eq(decisions.eventDispatchId, d.id) });
+    // A team may have resubmitted before scoring (see the option-cost
+    // refund flow in app/api/decisions/route.ts) — only the latest
+    // submission is ever the one actually scored, so pick that one rather
+    // than whichever row happened to be inserted first.
+    const decision = await db.query.decisions.findFirst({
+      where: eq(decisions.eventDispatchId, d.id),
+      orderBy: (t, { desc }) => [desc(t.submittedAt)],
+    });
     const score = decision ? await db.query.scores.findFirst({ where: eq(scores.decisionId, decision.id) }) : null;
     if (team && score) outcomeParts.push(`${team.regionId}: ${score.tier.replace("_", " ")}`);
   }

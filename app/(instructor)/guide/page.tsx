@@ -127,6 +127,89 @@ export default function GuidePage() {
         </ul>
       </section>
 
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Option Costs &amp; Affordability</h2>
+        <p>
+          Every structured decision option now lists a concrete cost (fund/PPE-days/antivirals, where relevant) and
+          a plain-language description of what it actually does to that region&apos;s dashboard. Cost is deducted the
+          moment a team submits, not when you score it — if they resubmit before you&apos;ve scored, the prior charge
+          is automatically refunded first so switching their answer never double-charges them. A team physically
+          can&apos;t select an option they can&apos;t currently afford; the option is grayed out with a plain-language
+          reason (e.g. &quot;needs $3.0M, you have $1.2M&quot;).
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Budget Cycle (every 14 narrative days)</h2>
+        <p>
+          A new pending cycle appears automatically on the Control page every 14 narrative days on the game clock.
+          You get three options:
+        </p>
+        <ul className="list-disc list-inside space-y-2">
+          <li><b className="text-slate-100">Push Default to All</b> — silently disburses each region&apos;s standard increase (12% of its starting fund).</li>
+          <li><b className="text-slate-100">Adjust Amounts</b> — set a custom amount per region yourself, no team input.</li>
+          <li><b className="text-slate-100">Snap Decision</b> — every region gets a short window to accept the default or request more. If anyone requests more, a second window opens asking every <i>other</i> region whether they want to donate part of their own disbursement to the requester(s); donations are pooled and split proportionally across however many regions asked.</li>
+        </ul>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Marketplace (PPE &amp; Antivirals)</h2>
+        <p>
+          Regions can buy PPE-days or antivirals from WHO HQ&apos;s stockpile at an adaptive price (rises as WHO HQ&apos;s
+          own stock depletes and as the global escalation state worsens), or trade directly with another region
+          (accept/reject only — no counter-offers). WHO HQ purchases land in your approval queue on the Control
+          page — other regions get a heads-up notification for ~30 seconds before you&apos;d typically process a
+          batch, so more than one region can get in on the same round. Approving re-validates that WHO HQ still has
+          the stock and the region still has the funds (either can have moved since the request was submitted).
+          Every approved sale is announced to the whole room, not just the buyer.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Emergency Funding</h2>
+        <p>
+          A region can broadcast an emergency funding request to every other region and to WHO HQ. WHO HQ carries
+          its own budget, larger than any single region&apos;s and <i>not</i> topped up by the regular budget cycle —
+          spending it down is a real, permanent tradeoff for you as the instructor. Each region and WHO HQ can
+          independently contribute some, all, or none of what&apos;s asked; there&apos;s no hard timer, so you decide
+          when to close a request and disburse whatever&apos;s been pledged from the Control page.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Redesigned Public Display</h2>
+        <p>
+          The projector display is now two columns instead of a map-plus-ticker: the left side shows live stat
+          tiles and per-region bar charts for confirmed cases, deaths, and Rt (each bar is directly labeled with
+          region code and value, not color alone); the right side is a live event feed with the newest item on top,
+          briefly highlighted when it first arrives. Older items scroll rather than disappearing.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Debrief: Actual vs. Ideal Playthrough</h2>
+        <p>
+          Alongside the real trajectory, a parallel &quot;shadow&quot; simulation runs the entire session in lockstep,
+          applying only the best-tier (OPTIMAL) consequence at every decision point. The Debrief page&apos;s opening
+          section compares the two directly — actual vs. ideal confirmed cases and deaths, world totals and
+          per-region — framed as infections and deaths that a stronger playthrough could realistically have
+          prevented. The same comparison also appears on the team Summary page and the projector&apos;s end-of-game
+          screen.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Population Trust &amp; Happiness</h2>
+        <p>
+          Each region now tracks two social metrics on its dashboard: public trust (unchanged field, now surfaced
+          more prominently) and a new population happiness index. Both drift down passively based on the global
+          escalation state and on fresh deaths, and both move directly in response to event-choice consequences —
+          harsh containment measures tend to cost happiness even when they help the epidemiology, and transparency
+          tends to help trust even when it&apos;s costly. World averages for both appear on every team&apos;s dashboard
+          header and on the public display.
+        </p>
+      </section>
+
       <Link
         href="/control"
         className="inline-block rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2.5"

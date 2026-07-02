@@ -43,6 +43,18 @@ export const resourceTypeEnum = pgEnum("resource_type", [
 ]);
 export const snapVoteStatusEnum = pgEnum("snap_vote_status", ["open", "closed"]);
 export const announcementScopeEnum = pgEnum("announcement_scope", ["global_display", "team"]);
+export const budgetCycleModeEnum = pgEnum("budget_cycle_mode", ["default", "custom", "snap_vote"]);
+export const budgetCycleStatusEnum = pgEnum("budget_cycle_status", [
+  "pending_instructor",
+  "collecting_responses",
+  "collecting_donations",
+  "closed",
+]);
+export const budgetChoiceEnum = pgEnum("budget_choice", ["accept", "request_more"]);
+export const marketRequestStatusEnum = pgEnum("market_request_status", ["pending", "approved", "rejected"]);
+export const tradeOfferStatusEnum = pgEnum("trade_offer_status", ["pending", "accepted", "rejected"]);
+export const emergencyRequestStatusEnum = pgEnum("emergency_request_status", ["open", "closed"]);
+export const marketResourceEnum = pgEnum("market_resource", ["PPE_DAYS", "ANTIVIRALS"]);
 
 // Static reference data — seeded once from 04-regions.md
 export const regions = pgTable("regions", {
@@ -121,6 +133,17 @@ export const globalState = pgTable("global_state", {
   // events still carries a cost. lastDriftAppliedAt tracks the last time it
   // was applied so repeated polls don't double-apply it.
   lastDriftAppliedAt: timestamp("last_drift_applied_at"),
+  // WHO HQ's own budget/stockpile (see lib/economy.ts) — deliberately larger
+  // than any single region's starting fund and, unlike regions, never
+  // resupplied by the periodic budget cycle. Depletes as it sells PPE/
+  // antivirals to regions (item 3) and as the instructor contributes to
+  // emergency funding requests (item 5).
+  whoHqFund: integer("who_hq_fund").notNull().default(500_000_000),
+  whoHqPpeStock: integer("who_hq_ppe_stock").notNull().default(2000),
+  whoHqAntiviralsStock: integer("who_hq_antivirals_stock").notNull().default(200_000),
+  // Narrative-day (see lib/sim-clock.ts) of the last budget cycle disbursement
+  // — the next one is due 14 narrative days later. 0 means none has run yet.
+  lastBudgetCycleNarrativeDay: real("last_budget_cycle_narrative_day").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -146,6 +169,36 @@ export const modelState = pgTable("model_state", {
   hcwSurgePct: integer("hcw_surge_pct").notNull(),
   politicalTensionIndex: integer("political_tension_index").notNull(),
   publicTrustIndex: integer("public_trust_index").notNull(),
+  // "Population happiness" — a distinct social metric from trust (item 8):
+  // trust tracks whether the public believes official communications;
+  // happiness tracks general public sentiment/morale, driven by NPI
+  // severity, death growth, escalation state, and event outcomes. See
+  // lib/model-engine.ts for how each is updated.
+  populationHappinessIndex: integer("population_happiness_index").notNull().default(60),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// A parallel "what if every decision had been Optimal" shadow simulation,
+// updated in lockstep with model_state (see lib/model-engine.ts) — every
+// scored decision applies its OPTIMAL-tier delta here regardless of what
+// tier actually happened, and the same epidemic-progression/drift formula
+// runs against this table's own Rt/CFR. This is what powers the debrief's
+// "actual vs. achievable" comparison (item 7) without needing to replay the
+// whole game's history after the fact.
+export const modelStateOptimal = pgTable("model_state_optimal", {
+  id: serial("id").primaryKey(),
+  regionId: text("region_id")
+    .notNull()
+    .unique()
+    .references(() => regions.id),
+  rt: real("rt").notNull(),
+  cfrMultiplier: real("cfr_multiplier").notNull(),
+  confirmedCases: integer("confirmed_cases").notNull(),
+  estimatedTrueCasesLow: integer("estimated_true_cases_low").notNull(),
+  estimatedTrueCasesHigh: integer("estimated_true_cases_high").notNull(),
+  deaths: integer("deaths").notNull(),
+  publicTrustIndex: integer("public_trust_index").notNull(),
+  populationHappinessIndex: integer("population_happiness_index").notNull().default(60),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -403,4 +456,128 @@ export const announcementAcks = pgTable(
     ackedAt: timestamp("acked_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("announcement_acks_uniq").on(t.announcementId, t.teamId)]
+);
+
+// Periodic budget cycle (item 2) — see lib/budget-cycle.ts. Fires every 14
+// narrative days. The instructor picks one of three modes when it's due:
+// push the default disbursement silently, adjust amounts before pushing, or
+// open a snap-vote-style window where each region can accept the default or
+// request more — and if anyone requests more, a second window asks every
+// OTHER region how much of their own disbursement they want to donate.
+export const budgetCycles = pgTable("budget_cycles", {
+  id: serial("id").primaryKey(),
+  cycleNumber: integer("cycle_number").notNull(),
+  narrativeDayDue: real("narrative_day_due").notNull(),
+  status: budgetCycleStatusEnum("status").notNull().default("pending_instructor"),
+  mode: budgetCycleModeEnum("mode"),
+  closesAt: timestamp("closes_at"), // response/donation window deadline, when mode = snap_vote
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  closedAt: timestamp("closed_at"),
+});
+
+export const budgetCycleResponses = pgTable(
+  "budget_cycle_responses",
+  {
+    id: serial("id").primaryKey(),
+    budgetCycleId: integer("budget_cycle_id")
+      .notNull()
+      .references(() => budgetCycles.id),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    choice: budgetChoiceEnum("choice").notNull(),
+    requestedAmount: integer("requested_amount"), // set when choice = request_more
+    amountDisbursed: integer("amount_disbursed"), // final amount, set at cycle close
+    respondedAt: timestamp("responded_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("budget_cycle_responses_uniq").on(t.budgetCycleId, t.teamId)]
+);
+
+export const budgetCycleDonations = pgTable(
+  "budget_cycle_donations",
+  {
+    id: serial("id").primaryKey(),
+    budgetCycleId: integer("budget_cycle_id")
+      .notNull()
+      .references(() => budgetCycles.id),
+    fromTeamId: integer("from_team_id")
+      .notNull()
+      .references(() => teams.id),
+    toTeamId: integer("to_team_id")
+      .notNull()
+      .references(() => teams.id),
+    amount: integer("amount").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("budget_cycle_donations_uniq").on(t.budgetCycleId, t.fromTeamId, t.toTeamId)]
+);
+
+// WHO HQ marketplace (item 3) — regions buy PPE/antivirals from WHO HQ's own
+// stockpile at an adaptive price (see lib/economy.ts pricing formula),
+// requiring instructor approval. Other regions get a brief heads-up window
+// to submit their own request before the instructor processes the batch.
+export const marketRequests = pgTable("market_requests", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id),
+  resourceType: marketResourceEnum("resource_type").notNull(),
+  amount: integer("amount").notNull(),
+  pricePerUnit: real("price_per_unit").notNull(), // locked at request time
+  totalCost: integer("total_cost").notNull(),
+  status: marketRequestStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByUserId: integer("resolved_by_user_id").references(() => users.id),
+});
+
+// Direct region-to-region purchase offers (item 3, simplified — no
+// counter-offers: the receiving region can only accept or reject).
+export const regionTradeOffers = pgTable("region_trade_offers", {
+  id: serial("id").primaryKey(),
+  fromTeamId: integer("from_team_id") // buyer
+    .notNull()
+    .references(() => teams.id),
+  toTeamId: integer("to_team_id") // seller
+    .notNull()
+    .references(() => teams.id),
+  resourceType: marketResourceEnum("resource_type").notNull(),
+  amount: integer("amount").notNull(),
+  pricePerUnit: real("price_per_unit").notNull(),
+  totalPrice: integer("total_price").notNull(),
+  status: tradeOfferStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+});
+
+// Emergency funding requests (item 5) — a team asks all other regions AND
+// WHO HQ (which has its own, larger, non-resupplied budget) to help meet a
+// funding goal. Stays open until the instructor closes it (facilitator-paced
+// rather than a hard timer, unlike the market heads-up window, so it fits
+// naturally into however the room is actually moving).
+export const emergencyFundingRequests = pgTable("emergency_funding_requests", {
+  id: serial("id").primaryKey(),
+  requestingTeamId: integer("requesting_team_id")
+    .notNull()
+    .references(() => teams.id),
+  amountRequested: integer("amount_requested").notNull(),
+  reason: text("reason").notNull(),
+  status: emergencyRequestStatusEnum("status").notNull().default("open"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  closedAt: timestamp("closed_at"),
+});
+
+export const emergencyFundingContributions = pgTable(
+  "emergency_funding_contributions",
+  {
+    id: serial("id").primaryKey(),
+    requestId: integer("request_id")
+      .notNull()
+      .references(() => emergencyFundingRequests.id),
+    contributorTeamId: integer("contributor_team_id").references(() => teams.id), // null if from WHO HQ
+    isWhoHq: boolean("is_who_hq").notNull().default(false),
+    amount: integer("amount").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("emergency_funding_contributions_uniq").on(t.requestId, t.contributorTeamId, t.isWhoHq)]
 );

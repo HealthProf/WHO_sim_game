@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   regions,
   modelState,
+  modelStateOptimal,
   modelStateHistory,
   globalState,
   eventDispatches,
@@ -17,6 +18,13 @@ import {
   snapVotes,
   announcementAcks,
   announcements,
+  budgetCycleDonations,
+  budgetCycleResponses,
+  budgetCycles,
+  marketRequests,
+  regionTradeOffers,
+  emergencyFundingContributions,
+  emergencyFundingRequests,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
@@ -44,6 +52,13 @@ export async function POST() {
   await db.delete(snapVotes);
   await db.delete(announcementAcks); // -> announcements
   await db.delete(announcements); // -> eventDispatches (nullable)
+  await db.delete(budgetCycleDonations); // -> budgetCycles
+  await db.delete(budgetCycleResponses); // -> budgetCycles
+  await db.delete(budgetCycles);
+  await db.delete(marketRequests);
+  await db.delete(regionTradeOffers);
+  await db.delete(emergencyFundingContributions); // -> emergencyFundingRequests
+  await db.delete(emergencyFundingRequests);
   await db.delete(eventDispatches);
   await db.delete(modelStateHistory);
   await db.delete(instructorActions);
@@ -68,9 +83,25 @@ export async function POST() {
         hcwSurgePct: r.startingHcwSurgePct,
         politicalTensionIndex: r.startingPoliticalTension,
         publicTrustIndex: r.startingPublicTrust,
+        populationHappinessIndex: 60,
         updatedAt: new Date(),
       })
       .where(eq(modelState.regionId, r.id));
+
+    await db
+      .update(modelStateOptimal)
+      .set({
+        rt: r.startingRt,
+        cfrMultiplier: r.startingCfrMultiplier,
+        confirmedCases: r.startingConfirmed,
+        estimatedTrueCasesLow: r.startingEstTrueLow,
+        estimatedTrueCasesHigh: r.startingEstTrueHigh,
+        deaths: r.startingDeaths,
+        publicTrustIndex: r.startingPublicTrust,
+        populationHappinessIndex: 60,
+        updatedAt: new Date(),
+      })
+      .where(eq(modelStateOptimal.regionId, r.id));
   }
 
   await db
@@ -84,6 +115,10 @@ export async function POST() {
       pausedAccumulatedMs: 0,
       pausedAt: null,
       lastDriftAppliedAt: null,
+      whoHqFund: 500_000_000,
+      whoHqPpeStock: 2000,
+      whoHqAntiviralsStock: 200_000,
+      lastBudgetCycleNarrativeDay: 0,
       updatedAt: new Date(),
     })
     .where(eq(globalState.id, 1));
