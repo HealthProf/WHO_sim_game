@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import { QueryError } from "@/components/query-error";
+import { EmergencyCommitteePanel } from "@/components/emergency-committee-panel";
 import Link from "next/link";
 
 interface EventFull {
@@ -11,6 +13,7 @@ interface EventFull {
   title: string;
   day: number;
   isAnchor: boolean;
+  isCorePath: boolean;
   scope: string;
   triggerConditionDesc: string;
   modelDeltaDesc: string;
@@ -25,10 +28,16 @@ interface Dispatch {
   revealedToPublic: boolean;
 }
 
+interface TeamRef {
+  id: number;
+  regionId: string;
+}
+
 interface EventsData {
   events: EventFull[];
   dispatches: Dispatch[];
   chainStatus: Record<string, { ok: boolean; blockedBy: string[] }>;
+  teams: TeamRef[];
 }
 
 interface DashboardData {
@@ -41,8 +50,16 @@ interface InboxItem {
   ageMs: number;
 }
 
+const statusChipColor: Record<string, string> = {
+  dispatched: "bg-amber-900/60 text-amber-300",
+  responded: "bg-blue-900/60 text-blue-300",
+  scored: "bg-emerald-900/60 text-emerald-300",
+  closed: "bg-slate-800 text-slate-400",
+};
+
 export default function ControlPage() {
   const qc = useQueryClient();
+  const [coreOnly, setCoreOnly] = useState(false);
   const { data, error, refetch } = useQuery({ queryKey: ["events"], queryFn: () => apiFetch<EventsData>("/api/events"), refetchInterval: 10000 });
   const { data: dash, error: dashError, refetch: refetchDash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard"), refetchInterval: 10000 });
   const { data: inbox } = useQuery({ queryKey: ["scoring-inbox"], queryFn: () => apiFetch<{ inbox: InboxItem[] }>("/api/scores"), refetchInterval: 10000 });
@@ -72,9 +89,13 @@ export default function ControlPage() {
   const mandatoryCount = inbox?.inbox.filter((i) => i.mandatoryReview).length ?? 0;
   const oldestMs = inbox?.inbox.length ? Math.max(...inbox.inbox.map((i) => i.ageMs)) : 0;
 
+  const teamsByRegionId = new Map(data.teams.map((t) => [t.id, t.regionId]));
+  const allRegionIds = data.teams.map((t) => t.regionId).sort();
+
   const totalGameDays = dash.globalState.totalGameDays;
+  const visibleEvents = coreOnly ? data.events.filter((e) => e.isCorePath) : data.events;
   const eventsByGameDay = new Map<number, { narrativeDay: number; events: EventFull[] }>();
-  for (const e of data.events.slice().sort((a, b) => a.day - b.day)) {
+  for (const e of visibleEvents.slice().sort((a, b) => a.day - b.day)) {
     const gameDay = mapNarrativeDayToGameDay(e.day, totalGameDays);
     if (!eventsByGameDay.has(gameDay)) eventsByGameDay.set(gameDay, { narrativeDay: e.day, events: [] });
     eventsByGameDay.get(gameDay)!.events.push(e);
@@ -144,9 +165,27 @@ export default function ControlPage() {
         </div>
       </section>
 
+      <EmergencyCommitteePanel />
+
       {/* Event queue, grouped by day */}
       <section>
-        <h2 className="text-lg font-semibold mb-3">Event Queue</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">Event Queue</h2>
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              onClick={() => setCoreOnly(false)}
+              className={`rounded-full px-3 py-1 font-medium ${!coreOnly ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"}`}
+            >
+              All 16 events
+            </button>
+            <button
+              onClick={() => setCoreOnly(true)}
+              className={`rounded-full px-3 py-1 font-medium ${coreOnly ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"}`}
+            >
+              Core path only (~60min)
+            </button>
+          </div>
+        </div>
         <div className="space-y-6">
           {[...eventsByGameDay.entries()].map(([gameDay, group]) => (
             <div key={gameDay}>
@@ -166,12 +205,28 @@ export default function ControlPage() {
                         ? "border-blue-800"
                         : "border-slate-800";
 
+                  // For GLOBAL/MULTI events dispatched to every team, show a
+                  // per-region checklist (not just a count) so the
+                  // facilitator can call out exactly who hasn't responded
+                  // while circulating the room.
+                  const dispatchedRegions = new Map(
+                    dispatches.filter((d) => d.targetTeamId != null).map((d) => [teamsByRegionId.get(d.targetTeamId!) ?? "?", d])
+                  );
+                  const showFullRegionChecklist = (e.scope === "GLOBAL" || e.scope === "MULTI") && dispatches.length > 1;
+
                   return (
                     <div key={e.id} className={`bg-slate-900 border ${borderColor} rounded-lg p-4`}>
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <p className="font-medium">
+                          <p className="font-medium flex items-center gap-2 flex-wrap">
                             {e.title} <span className="text-xs text-slate-500">({e.id}, {e.scope})</span>
+                            <span
+                              className={`text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 ${
+                                e.isCorePath ? "bg-blue-950 text-blue-300" : "bg-slate-800 text-slate-400"
+                              }`}
+                            >
+                              {e.isCorePath ? "Core" : "Optional"}
+                            </span>
                           </p>
                           <p className="text-xs text-slate-500 mt-1">{e.triggerConditionDesc}</p>
                           <p className="text-xs text-slate-400 mt-2 max-w-xl">{e.modelDeltaDesc}</p>
@@ -189,11 +244,29 @@ export default function ControlPage() {
                           {allScored && <span className="text-xs text-emerald-400 font-semibold">All scored</span>}
                         </div>
                       </div>
+
+                      {showFullRegionChecklist && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {allRegionIds.map((regionId) => {
+                            const d = dispatchedRegions.get(regionId);
+                            const colorClass = d ? statusChipColor[d.status] ?? "bg-slate-800 text-slate-400" : "bg-slate-900 text-slate-600 border border-slate-800";
+                            return (
+                              <span key={regionId} className={`rounded-full px-2.5 py-1 text-xs font-medium ${colorClass}`}>
+                                {regionId}
+                                {d?.revealedToPublic ? " ✓" : ""}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       {dispatches.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {dispatches.map((d) => (
                             <div key={d.id} className="flex items-center gap-2 bg-slate-800/60 rounded-full px-3 py-1 text-xs">
-                              <span>#{d.id} · {d.status}</span>
+                              <span>
+                                #{d.id} {d.targetTeamId ? `(${teamsByRegionId.get(d.targetTeamId) ?? "?"})` : ""} · {d.status}
+                              </span>
                               {!d.revealedToPublic && (
                                 <button
                                   onClick={() => pushToGlobal.mutate({ dispatchId: d.id, headline: `${e.title} — now live` })}

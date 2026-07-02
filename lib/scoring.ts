@@ -21,6 +21,26 @@ export function tierForCompositePct(compositePct: number): Tier {
   return "CRITICAL_FAILURE";
 }
 
+export type ConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
+
+// "Calibration wager": teams self-report how confident they are in a
+// decision alongside making it. This is a small additive adjustment on top
+// of the untouched 40/30/30 composite/tier thresholds above — it never
+// changes the base formula, it only nudges the final score toward rewarding
+// good calibration (confident when right) and punishing overconfidence
+// (confident when wrong). Hedging (LOW confidence) is never penalized,
+// since flagging genuine uncertainty is the behavior this scenario is
+// designed to teach, not something to discourage.
+export function computeCalibrationAdjustment(
+  confidence: ConfidenceLevel | null | undefined,
+  rawTier: Tier
+): number {
+  if (!confidence || confidence === "MEDIUM") return 0;
+  const goodTier = rawTier === "OPTIMAL" || rawTier === "ADEQUATE";
+  if (confidence === "HIGH") return goodTier ? 3 : -5;
+  return 0; // LOW confidence: no adjustment either way
+}
+
 // Default per-dimension scores implied by a tier, used to pre-populate the
 // fast-path suggested score before the instructor accepts or overrides it.
 export function defaultScoresForTier(tier: Tier): DimensionScores {

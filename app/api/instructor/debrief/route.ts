@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { eventDispatches, decisions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
+import { computeTeamHighlights } from "@/lib/summary-report";
 
 // After-action debrief artifacts per simulation-docs/03-events.md EVT-014/
 // EVT-016 implementation notes and 05-product-requirements.md §10: model
@@ -43,10 +44,24 @@ export async function GET() {
     })
     .slice(0, 10);
 
+  const teamHighlights = await computeTeamHighlights();
+
+  const allPledges = await db.query.resourcePledges.findMany();
+  const pledgeTotals: Record<string, { given: number; received: number }> = {};
+  for (const t of allTeams) pledgeTotals[t.regionId] = { given: 0, received: 0 };
+  for (const p of allPledges) {
+    const fromRegion = allTeams.find((t) => t.id === p.fromTeamId)?.regionId;
+    const toRegion = allTeams.find((t) => t.id === p.toTeamId)?.regionId;
+    if (fromRegion) pledgeTotals[fromRegion].given += 1;
+    if (toRegion) pledgeTotals[toRegion].received += 1;
+  }
+
   return NextResponse.json({
     modelStateHistory: history,
     evt006Allocations: evt006,
     evt012Allocations: evt012,
     mostConsequentialScores: mostConsequential,
+    teamHighlights,
+    pledgeTotals,
   });
 }

@@ -34,6 +34,14 @@ export const simStatusEnum = pgEnum("sim_status", [
   "paused",
   "completed",
 ]);
+export const confidenceLevelEnum = pgEnum("confidence_level", ["LOW", "MEDIUM", "HIGH"]);
+export const resourceTypeEnum = pgEnum("resource_type", [
+  "FUND",
+  "PPE_DAYS",
+  "ANTIVIRALS",
+  "HCW_SURGE_PCT",
+]);
+export const snapVoteStatusEnum = pgEnum("snap_vote_status", ["open", "closed"]);
 
 // Static reference data — seeded once from 04-regions.md
 export const regions = pgTable("regions", {
@@ -106,6 +114,12 @@ export const globalState = pgTable("global_state", {
   // day-level only.
   gameDaysPerRealMinute: real("game_days_per_real_minute").notNull().default(1.5),
   totalGameDays: integer("total_game_days").notNull().default(90),
+  // Passive drift (see lib/model-engine.ts applyPassiveDrift): a small
+  // continuous Rt creep applied while the sim is running and no fresh
+  // containment decision has landed, so idle real time between dispatched
+  // events still carries a cost. lastDriftAppliedAt tracks the last time it
+  // was applied so repeated polls don't double-apply it.
+  lastDriftAppliedAt: timestamp("last_drift_applied_at"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -170,6 +184,11 @@ export const events = pgTable("events", {
   requiresMandatoryReview: boolean("requires_mandatory_review").notNull().default(false),
   requiresCoordination: boolean("requires_coordination").notNull().default(false),
   isAllocationEvent: boolean("is_allocation_event").notNull().default(false), // EVT-006/EVT-012 style
+  // Marks the recommended lean spine of events for a ~60-minute live session
+  // (see lib/db/seed-data/events.ts for which events are flagged and why).
+  // Purely advisory — dispatch is never blocked by this, it's a facilitator
+  // hint on the Control page for deciding what to cut if time is short.
+  isCorePath: boolean("is_core_path").notNull().default(true),
 });
 
 export const eventChainLinks = pgTable("event_chain_links", {
@@ -212,6 +231,10 @@ export const decisions = pgTable("decisions", {
   rationaleText: text("rationale_text").notNull(),
   resourceAllocationJson: jsonb("resource_allocation_json"),
   coordinatedWithTeamsJson: jsonb("coordinated_with_teams_json"),
+  // Self-reported confidence in this decision ("calibration wager" — see
+  // lib/scoring.ts computeCalibrationAdjustment). Null for system-generated
+  // no-response fallback decisions, which carry no calibration signal.
+  confidenceLevel: confidenceLevelEnum("confidence_level"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
 });
 
@@ -224,6 +247,11 @@ export const scores = pgTable("scores", {
   evidenceScore: integer("evidence_score").notNull(),
   politicalScore: integer("political_score").notNull(),
   equityScore: integer("equity_score").notNull(),
+  // Composite before the calibration-wager adjustment (see lib/scoring.ts) —
+  // kept for transparency/debrief even though `tier` is derived from the
+  // final, adjusted compositePct below.
+  rawCompositePct: real("raw_composite_pct").notNull(),
+  calibrationAdjustment: real("calibration_adjustment").notNull().default(0),
   compositePct: real("composite_pct").notNull(),
   tier: tierEnum("tier").notNull(),
   suggestedTier: tierEnum("suggested_tier"),
@@ -265,3 +293,73 @@ export const globalFeedItems = pgTable("global_feed_items", {
   eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Private per-team "what just happened to you" feed — one row per scored
+// decision (the templated consequence card, built from the event's existing
+// consequencesJson prose, see lib/consequences.ts) plus snap-vote and pledge
+// notifications. Surfaced on the team dashboard; distinct from
+// globalFeedItems, which is the shared projector ticker.
+export const teamNotifications = pgTable("team_notifications", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id),
+  eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
+  kind: text("kind").notNull().default("consequence"), // consequence | snap_vote | pledge
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Resource pledge ledger — turns the previously narrative-only "we'll share
+// PPE/funds/HCW capacity" decisions into an actual transfer between two
+// regions' live model_state resource fields. Visible to everyone (same
+// transparency model as coordination_messages).
+export const resourcePledges = pgTable("resource_pledges", {
+  id: serial("id").primaryKey(),
+  fromTeamId: integer("from_team_id")
+    .notNull()
+    .references(() => teams.id),
+  toTeamId: integer("to_team_id")
+    .notNull()
+    .references(() => teams.id),
+  resourceType: resourceTypeEnum("resource_type").notNull(),
+  amount: integer("amount").notNull(),
+  eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
+  createdByUserId: integer("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Facilitator "break-glass" synchronous snap vote — a wildcard pressure tool
+// separate from the scripted event queue (see lib/snap-vote.ts). One open
+// vote at a time; closing it applies a small generic model effect based on
+// participation/agreement rather than a per-question authored consequence.
+export const snapVotes = pgTable("snap_votes", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  optionsJson: jsonb("options_json").notNull(), // string[]
+  createdByUserId: integer("created_by_user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  closesAt: timestamp("closes_at").notNull(),
+  status: snapVoteStatusEnum("status").notNull().default("open"),
+  resultSummary: text("result_summary"),
+});
+
+export const snapVoteResponses = pgTable(
+  "snap_vote_responses",
+  {
+    id: serial("id").primaryKey(),
+    snapVoteId: integer("snap_vote_id")
+      .notNull()
+      .references(() => snapVotes.id),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    choice: text("choice").notNull(),
+    submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("snap_vote_responses_vote_team_uniq").on(t.snapVoteId, t.teamId)]
+);

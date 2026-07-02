@@ -3,8 +3,9 @@ import { db } from "@/lib/db";
 import { decisions, eventDispatches, events, scores, teams } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
-import { computeCompositePct, defaultScoresForTier, tierForCompositePct, type Tier } from "@/lib/scoring";
-import { applyModelDelta } from "@/lib/model-engine";
+import { computeCalibrationAdjustment, computeCompositePct, defaultScoresForTier, tierForCompositePct, type Tier } from "@/lib/scoring";
+import { applyModelDelta, clamp } from "@/lib/model-engine";
+import { pushConsequence } from "@/lib/consequences";
 import type { ModelDelta } from "@/lib/db/seed-data/events";
 
 // GET: priority-sorted scoring inbox. Sort key (see design discussion on
@@ -112,7 +113,10 @@ export async function scoreDecision(
     fastPathed = false;
   }
 
-  const compositePct = computeCompositePct({ evidenceScore, politicalScore, equityScore });
+  const rawCompositePct = computeCompositePct({ evidenceScore, politicalScore, equityScore });
+  const rawTier = tierForCompositePct(rawCompositePct);
+  const calibrationAdjustment = computeCalibrationAdjustment(decision.confidenceLevel, rawTier);
+  const compositePct = clamp(rawCompositePct + calibrationAdjustment, 0, 100);
   const tier = tierForCompositePct(compositePct);
   const tierOverridden = !!suggestedTier && tier !== suggestedTier;
 
@@ -123,6 +127,8 @@ export async function scoreDecision(
       evidenceScore,
       politicalScore,
       equityScore,
+      rawCompositePct,
+      calibrationAdjustment,
       compositePct,
       tier,
       suggestedTier,
@@ -140,6 +146,15 @@ export async function scoreDecision(
       deltas,
       submittingRegionId: team.regionId,
       reason: `${event.id} scored: ${tier}`,
+    });
+    await pushConsequence({
+      event,
+      dispatchId: dispatch.id,
+      teamId: team.id,
+      regionId: team.regionId,
+      tier,
+      deltas,
+      actorUserId: scoredByUserId,
     });
   }
 

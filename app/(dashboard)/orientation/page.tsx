@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { ProfileSections } from "@/components/profile-sections";
 import Link from "next/link";
 
 interface OrientationData {
@@ -12,6 +13,11 @@ interface OrientationData {
     profileMarkdown: string;
     rt: number;
     cfrMultiplier: number;
+    fundRemaining: number;
+    ppeDaysRemaining: number;
+    antiviralsRemaining: number;
+    hcwSurgePct: number;
+    surveillanceIndex: number;
   } | null;
 }
 
@@ -50,15 +56,25 @@ export default function OrientationPage() {
       </section>
 
       {region && (
-        <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-slate-100">Your Role: {region.roleTitle}</h2>
-          <p className="text-sm text-slate-500">{region.hqLocation}</p>
-          <div className="flex gap-6 text-sm text-slate-300">
-            <span>Starting Rt: {region.rt.toFixed(2)}</span>
-            <span>Starting CFR multiplier: {region.cfrMultiplier.toFixed(2)}x</span>
+        <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-100">Your Role: {region.roleTitle}</h2>
+            <p className="text-sm text-slate-500">{region.hqLocation}</p>
           </div>
-          <div className="text-sm text-slate-300 whitespace-pre-wrap pt-2 border-t border-slate-800">
-            {region.profileMarkdown}
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+            <Stat label="Fund" value={`$${(region.fundRemaining / 1_000_000).toFixed(1)}M`} />
+            <Stat label="PPE days" value={region.ppeDaysRemaining} />
+            <Stat label="Antivirals" value={region.antiviralsRemaining.toLocaleString()} />
+            <Stat label="HCW surge" value={`${region.hcwSurgePct}%`} />
+            <Stat label="Surveillance" value={`${region.surveillanceIndex}/10`} />
+            <Stat label="Starting Rt" value={region.rt.toFixed(2)} />
+            <Stat label="Starting CFR mult." value={`${region.cfrMultiplier.toFixed(2)}x`} />
+          </div>
+
+          <div className="pt-2 border-t border-slate-800">
+            <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Briefing</p>
+            <ProfileSections markdown={region.profileMarkdown} />
           </div>
         </section>
       )}
@@ -94,8 +110,20 @@ export default function OrientationPage() {
               available any time you need to double check the details.
             </p>
           </div>
+          <div>
+            <p className="font-medium text-slate-200">Pledges</p>
+            <p className="text-slate-400">
+              Pledge PPE, funds, antivirals, or HCW surge capacity directly to another region — it actually moves
+              resources between regions&apos; live ledgers, not just a note in a rationale field.
+            </p>
+          </div>
         </div>
       </section>
+
+      <p className="text-xs text-slate-500">
+        Note: once the simulation is running, regional Rt drifts upward slowly on its own if no fresh containment
+        decision has been scored for a while — time itself has a cost, not just individual bad decisions.
+      </p>
 
       <Link
         href="/dashboard"
@@ -103,6 +131,15 @@ export default function OrientationPage() {
       >
         Continue to Situation Room
       </Link>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-slate-800/50 rounded-lg p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-base font-semibold">{value}</p>
     </div>
   );
 }

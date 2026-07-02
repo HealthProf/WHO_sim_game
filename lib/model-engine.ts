@@ -51,7 +51,16 @@ export async function applyModelDelta(opts: {
   await recomputeEscalationState();
 }
 
-async function applyFieldDelta(
+const FIELD_BOUNDS: Record<string, [number, number]> = {
+  rt: [0, 10],
+  cfrMultiplier: [0, 10],
+  surveillanceIndex: [0, 10],
+  hospitalCapacityPct: [0, 100],
+  politicalTensionIndex: [0, 100],
+  publicTrustIndex: [0, 100],
+};
+
+export async function applyFieldDelta(
   regionId: string,
   field: Exclude<ModelDelta["field"], "mediaPressureIndex">,
   delta: number
@@ -59,15 +68,7 @@ async function applyFieldDelta(
   const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
   if (!state) return;
 
-  const bounds: Record<string, [number, number]> = {
-    rt: [0, 10],
-    cfrMultiplier: [0, 10],
-    surveillanceIndex: [0, 10],
-    hospitalCapacityPct: [0, 100],
-    politicalTensionIndex: [0, 100],
-    publicTrustIndex: [0, 100],
-  };
-  const [min, max] = bounds[field] ?? [-Infinity, Infinity];
+  const [min, max] = FIELD_BOUNDS[field] ?? [-Infinity, Infinity];
   const next = clamp((state[field] as number) + delta, min, max);
 
   await db
@@ -76,8 +77,26 @@ async function applyFieldDelta(
     .where(eq(modelState.regionId, regionId));
 }
 
-function clamp(v: number, min: number, max: number) {
+export function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
+}
+
+// Thresholds for "this swing is big enough to auto-surface" (see
+// lib/consequences.ts). Deliberately generous — these should only catch
+// genuinely dramatic single-decision swings, not routine Adequate-tier
+// nudges, so the projector/team-dashboard callouts stay meaningful.
+const SIGNIFICANT_DELTA_THRESHOLDS: Partial<Record<ModelDelta["field"], number>> = {
+  rt: 0.2,
+  cfrMultiplier: 0.3,
+  politicalTensionIndex: 15,
+  publicTrustIndex: 15,
+  mediaPressureIndex: 15,
+  surveillanceIndex: 3,
+  hospitalCapacityPct: 15,
+};
+
+export function isSignificantDelta(deltas: ModelDelta[]): boolean {
+  return deltas.some((d) => Math.abs(d.delta) >= (SIGNIFICANT_DELTA_THRESHOLDS[d.field] ?? Infinity));
 }
 
 // Escalation state per simulation-docs/01-scenario.md § Escalation States.
@@ -133,4 +152,41 @@ export async function computeGlobalRt(): Promise<number> {
     weightSum += region.populationWeight;
   }
   return weightSum > 0 ? weightedRtSum / weightSum : 0;
+}
+
+// Passive drift: "the virus doesn't wait for you." A small continuous Rt
+// creep applied to every region while the simulation is running, independent
+// of any scored decision — so idle real time between dispatched events still
+// carries a cost, and the escalation state can climb on its own if teams
+// stall. Batched into >=2-minute increments (rather than applied on every
+// ~15s poll) so it doesn't spam model_state_history with tiny rows.
+const DRIFT_RATE_PER_MINUTE = 0.015; // Rt units per real minute, per region
+const DRIFT_BATCH_MINUTES = 2;
+
+export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDriftAppliedAt: Date | null; simulationStartedAt: Date | null }) {
+  const state = gs ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }));
+  if (!state || state.simulationStatus !== "running") return;
+
+  const now = new Date();
+  const last = state.lastDriftAppliedAt ? new Date(state.lastDriftAppliedAt) : state.simulationStartedAt ? new Date(state.simulationStartedAt) : now;
+  const elapsedMinutes = (now.getTime() - last.getTime()) / 60_000;
+  if (elapsedMinutes < DRIFT_BATCH_MINUTES) return;
+
+  const delta = DRIFT_RATE_PER_MINUTE * elapsedMinutes;
+  const allRegions = await db.query.regions.findMany();
+  for (const region of allRegions) {
+    await applyFieldDelta(region.id, "rt", delta);
+    const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region.id) });
+    if (updated) {
+      await db.insert(modelStateHistory).values({
+        regionId: region.id,
+        day: updated.day,
+        snapshotJson: updated,
+        reason: "Passive drift: no active containment measures scored recently",
+      });
+    }
+  }
+
+  await db.update(globalState).set({ lastDriftAppliedAt: now }).where(eq(globalState.id, 1));
+  await recomputeEscalationState();
 }

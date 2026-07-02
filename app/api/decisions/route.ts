@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const confidenceLevel = ["LOW", "MEDIUM", "HIGH"].includes(body.confidenceLevel) ? body.confidenceLevel : null;
+
   const [decision] = await db
     .insert(decisions)
     .values({
@@ -48,6 +50,7 @@ export async function POST(req: NextRequest) {
       rationaleText,
       resourceAllocationJson: body.resourceAllocationJson ?? null,
       coordinatedWithTeamsJson: body.coordinatedWithTeamsJson ?? null,
+      confidenceLevel,
     })
     .returning();
 

@@ -7,7 +7,15 @@ import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
 
 interface InboxItem {
-  decision: { id: number; teamId: number; rationaleText: string; structuredChoice: string | null; resourceAllocationJson: Record<string, number> | null; coordinatedWithTeamsJson: string[] | null };
+  decision: {
+    id: number;
+    teamId: number;
+    rationaleText: string;
+    structuredChoice: string | null;
+    resourceAllocationJson: Record<string, number> | null;
+    coordinatedWithTeamsJson: string[] | null;
+    confidenceLevel: string | null;
+  };
   event: { id: string; title: string; narrativeMarkdown: string; consequencesJson: { optimal: string; adequate: string; inadequate: string; critical: string } } | null;
   team: { regionId: string } | null;
   suggestedTier: string | null;
@@ -43,7 +51,12 @@ export default function ScoreDecisionPage() {
   if (queryError) return <QueryError error={queryError} onRetry={() => refetch()} label="submission" />;
   if (!item) return <p className="text-slate-400">Loading submission...</p>;
 
-  const compositePct = ((evidenceScore * 0.4 + politicalScore * 0.3 + equityScore * 0.3) / 4) * 100;
+  const rawCompositePct = ((evidenceScore * 0.4 + politicalScore * 0.3 + equityScore * 0.3) / 4) * 100;
+  const rawTier = rawCompositePct >= 85 ? "OPTIMAL" : rawCompositePct >= 65 ? "ADEQUATE" : rawCompositePct >= 40 ? "INADEQUATE" : "CRITICAL_FAILURE";
+  const confidence = item.decision.confidenceLevel;
+  const goodRawTier = rawTier === "OPTIMAL" || rawTier === "ADEQUATE";
+  const calibrationAdjustment = confidence === "HIGH" ? (goodRawTier ? 3 : -5) : 0;
+  const compositePct = Math.max(0, Math.min(100, rawCompositePct + calibrationAdjustment));
   const tier = compositePct >= 85 ? "OPTIMAL" : compositePct >= 65 ? "ADEQUATE" : compositePct >= 40 ? "INADEQUATE" : "CRITICAL_FAILURE";
 
   return (
@@ -59,6 +72,7 @@ export default function ScoreDecisionPage() {
           <p><span className="text-slate-500">Allocation: </span>{JSON.stringify(item.decision.resourceAllocationJson)}</p>
         )}
         <p><span className="text-slate-500">Coordinated with: </span>{(item.decision.coordinatedWithTeamsJson ?? []).join(", ") || "none reported"}</p>
+        <p><span className="text-slate-500">Confidence wager: </span>{confidence ?? "not provided"}</p>
         <p className="whitespace-pre-wrap"><span className="text-slate-500">Rationale: </span>{item.decision.rationaleText}</p>
       </section>
 
@@ -81,8 +95,11 @@ export default function ScoreDecisionPage() {
         <ScoreSlider label="Health Equity (30%)" value={equityScore} onChange={setEquityScore} />
 
         <p className="text-sm">
-          Composite: <span className="font-semibold">{compositePct.toFixed(1)}%</span> - Tier:{" "}
-          <span className="font-semibold">{tier}</span>
+          Raw composite: <span className="font-semibold">{rawCompositePct.toFixed(1)}%</span>
+          {calibrationAdjustment !== 0 && (
+            <span className="text-slate-400"> {calibrationAdjustment > 0 ? "+" : ""}{calibrationAdjustment} calibration ({confidence} confidence, {rawTier.toLowerCase()} call)</span>
+          )}
+          {" "}→ Final: <span className="font-semibold">{compositePct.toFixed(1)}%</span> - Tier: <span className="font-semibold">{tier}</span>
         </p>
 
         <input
