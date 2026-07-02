@@ -11,6 +11,7 @@ import { computeCompositePct, defaultScoresForTier } from "./scoring";
 import { applyModelDelta, applyPassiveDrift } from "./model-engine";
 import { pushConsequence } from "./consequences";
 import { closeExpiredSnapVotes } from "./snap-vote";
+import { maybeAnnounceResolution } from "./announcements";
 
 export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
@@ -126,6 +127,7 @@ export async function processDeadlines() {
     }
 
     await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));
+    await maybeAnnounceResolution(event.id);
     autoApplied++;
   }
 

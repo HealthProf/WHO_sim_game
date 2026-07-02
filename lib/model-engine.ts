@@ -160,8 +160,19 @@ export async function computeGlobalRt(): Promise<number> {
 // carries a cost, and the escalation state can climb on its own if teams
 // stall. Batched into >=2-minute increments (rather than applied on every
 // ~15s poll) so it doesn't spam model_state_history with tiny rows.
+//
+// This same tick also advances the epidemic curve itself — confirmedCases,
+// estimatedTrueCases, and deaths were previously never touched by *any* code
+// path (only rt/cfrMultiplier/etc. moved), so the case/death numbers on
+// every dashboard and the public display map sat frozen at their Day-1 seed
+// values for the entire session regardless of what teams decided. Growth is
+// scaled by each region's *current* Rt/CFR multiplier, so it's directly
+// responsive to decisions: good NPI calls visibly slow case growth for the
+// rest of the session, a CFR-multiplier spike visibly worsens the death
+// count relative to new cases from that point on.
 const DRIFT_RATE_PER_MINUTE = 0.015; // Rt units per real minute, per region
 const DRIFT_BATCH_MINUTES = 2;
+const BASE_CFR = 0.008; // 0.8% base CFR per 01-scenario.md, before the regional multiplier
 
 export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDriftAppliedAt: Date | null; simulationStartedAt: Date | null }) {
   const state = gs ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }));
@@ -172,17 +183,43 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
   const elapsedMinutes = (now.getTime() - last.getTime()) / 60_000;
   if (elapsedMinutes < DRIFT_BATCH_MINUTES) return;
 
-  const delta = DRIFT_RATE_PER_MINUTE * elapsedMinutes;
+  const rtDelta = DRIFT_RATE_PER_MINUTE * elapsedMinutes;
   const allRegions = await db.query.regions.findMany();
   for (const region of allRegions) {
-    await applyFieldDelta(region.id, "rt", delta);
+    const before = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region.id) });
+    if (!before) continue;
+
+    await applyFieldDelta(region.id, "rt", rtDelta);
+
+    // Case growth rate scales with current Rt (using the pre-drift value —
+    // this batch's own small Rt bump shouldn't retroactively inflate this
+    // batch's case growth). Floors above zero so a fully-suppressed region
+    // still sees the trickle of cases already in the pipeline get confirmed,
+    // and every region always grows by at least 1 case per batch so the
+    // numbers are visibly live even when the underlying rate rounds to 0.
+    const growthRatePerMinute = clamp(0.002 + before.rt * 0.006, 0, 0.05);
+    const newConfirmed = Math.max(1, Math.round(before.confirmedCases * growthRatePerMinute * elapsedMinutes));
+    const trueCaseGrowthFactor = before.confirmedCases > 0 ? (before.confirmedCases + newConfirmed) / before.confirmedCases : 1;
+    const newDeaths = Math.max(0, Math.round(newConfirmed * BASE_CFR * before.cfrMultiplier));
+
+    await db
+      .update(modelState)
+      .set({
+        confirmedCases: before.confirmedCases + newConfirmed,
+        estimatedTrueCasesLow: Math.round(before.estimatedTrueCasesLow * trueCaseGrowthFactor),
+        estimatedTrueCasesHigh: Math.round(before.estimatedTrueCasesHigh * trueCaseGrowthFactor),
+        deaths: before.deaths + newDeaths,
+        updatedAt: new Date(),
+      })
+      .where(eq(modelState.regionId, region.id));
+
     const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region.id) });
     if (updated) {
       await db.insert(modelStateHistory).values({
         regionId: region.id,
         day: updated.day,
         snapshotJson: updated,
-        reason: "Passive drift: no active containment measures scored recently",
+        reason: "Passive drift: outbreak progression + no active containment measures scored recently",
       });
     }
   }

@@ -18,10 +18,13 @@ export default function GuidePage() {
           </li>
           <li>
             <b className="text-slate-100">Dispatch events</b> from the Command Center&apos;s Event Queue, grouped by
-            simulated day. Anchor events (marked in each event&apos;s trigger note) are meant to fire on a fixed
-            schedule; adaptive events are meant to fire when their trigger condition is met — read the trigger note
-            and use your judgment on timing. An event greyed out with &quot;Blocked by...&quot; means a prerequisite
-            event hasn&apos;t been fully resolved yet (chain integrity — this is enforced automatically).
+            simulated day. Clicking Dispatch opens a region picker — most events default to all six selected, but a
+            few (marked <b className="text-purple-300">Targeted</b>, e.g. the SEARO data-sharing standoff) default to
+            the specific subset named in the original design; you can always adjust the selection before confirming.
+            Anchor events (marked in each event&apos;s trigger note) are meant to fire on a fixed schedule; adaptive
+            events are meant to fire when their trigger condition is met — read the trigger note and use your
+            judgment on timing. An event greyed out with &quot;Blocked by...&quot; means a prerequisite event
+            hasn&apos;t been fully resolved yet (chain integrity — this is enforced automatically).
           </li>
           <li>
             <b className="text-slate-100">Teams respond</b> on their own screens — you don&apos;t need to do
@@ -91,6 +94,28 @@ export default function GuidePage() {
           small automatic model effect: near-unanimous agreement eases global media pressure, a split vote raises it,
           and any region that didn&apos;t participate takes a small political-tension hit. Teams only see response
           <i>counts</i> while a vote is open, never the breakdown, so they can&apos;t herd-vote off each other.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Deadlines, Targeted Events &amp; Popups</h2>
+        <ul className="list-disc list-inside space-y-2">
+          <li><b className="text-slate-100">Active Deadlines panel</b> — the Command Center and the public display both show every currently-open countdown at once (not just whichever event you happen to be looking at), so you can track several concurrent timers across different events.</li>
+          <li><b className="text-slate-100">Targeted events</b> — EVT-002 (SEARO/WPRO/EURO) and the two adaptive events (EVT-009, EVT-013) are designed to go to a subset of regions, not everyone. Once every targeted region&apos;s decision is scored, the whole room automatically learns the outcome: a 10-second popup on the projector, and a popup on every team&apos;s dashboard that has to be closed with a button (not just a 10-second flash — a missed toast is easy to lose during a live session).</li>
+          <li><b className="text-slate-100">&quot;New event&quot; popups</b> — every dispatch also triggers a 10-second projector popup and a must-close popup on every targeted team&apos;s dashboard, so teams don&apos;t have to be staring at the Events page to notice something arrived.</li>
+        </ul>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Glossary &amp; Advisory Board</h2>
+        <p>
+          Teams get a full Glossary page (plain-language definitions of every acronym and technical term — PHEIC,
+          IHR Article 12, Rt, CFR, COVAX, etc.), plus a small &quot;Key Terms&quot; box automatically shown on each
+          event page with just the terms relevant to that decision. Every decision event also shows an{" "}
+          <b className="text-slate-100">Advisory Board</b> — 3-4 diverse, sometimes-contradictory stakeholder
+          opinions (an epidemiologist, a host-government liaison, a donor-state diplomat, etc.). These are
+          deliberately not a hint toward the &quot;correct&quot; answer — some openly argue for options that would
+          score poorly, the way real advisors actually do.
         </p>
       </section>
 

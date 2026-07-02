@@ -3,7 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { ProfileSections } from "@/components/profile-sections";
+import { KeyTerms } from "@/components/key-terms";
 import Link from "next/link";
+
+const SCENARIO_PARAGRAPH_1 =
+  "A novel betacoronavirus (NCoV-X1) has emerged. Day 14 since the first case, and the WHO Emergency Committee is meeting for the first time to consider a PHEIC declaration. Human-to-human transmission is confirmed in 3 countries across 2 regions. The pathogen's origin — natural spillover vs. lab-adjacent — is deliberately unresolved; you will never be told a \"correct answer\" on that question, in-game or otherwise.";
+const SCENARIO_PARAGRAPH_2 =
+  "Over the course of this session, WHO headquarters and all six regional offices (including yours) will face a series of decision events: some affect only your region, some are global and require every team to respond, and a few explicitly require coordinating with other regions before you submit. Every decision is scored across three weighted dimensions — evidence-based practice, political/economic realism, and health equity — and the outcome changes the live model of the outbreak (Rt, CFR, escalation state) that everyone can see on the shared dashboard.";
 
 interface OrientationData {
   ownRegion: {
@@ -38,22 +44,11 @@ export default function OrientationPage() {
 
       <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
         <h2 className="text-lg font-semibold text-slate-100">The Scenario</h2>
-        <p>
-          A novel betacoronavirus (NCoV-X1) has emerged. Day 14 since the first case, and the WHO Emergency
-          Committee is meeting for the first time to consider a PHEIC declaration. Human-to-human transmission is
-          confirmed in 3 countries across 2 regions. The pathogen&apos;s origin — natural spillover vs. lab-adjacent —
-          is deliberately unresolved; you will never be told a &quot;correct answer&quot; on that question, in-game or
-          otherwise.
-        </p>
-        <p>
-          Over the course of this session, WHO headquarters and all six regional offices (including yours) will
-          face a series of decision events: some affect only your region, some are global and require every team to
-          respond, and a few explicitly require coordinating with other regions before you submit. Every decision is
-          scored across three weighted dimensions — evidence-based practice, political/economic realism, and health
-          equity — and the outcome changes the live model of the outbreak that everyone can see on the shared
-          dashboard.
-        </p>
+        <p>{SCENARIO_PARAGRAPH_1}</p>
+        <p>{SCENARIO_PARAGRAPH_2}</p>
       </section>
+
+      <KeyTerms texts={[SCENARIO_PARAGRAPH_1, SCENARIO_PARAGRAPH_2]} />
 
       {region && (
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">

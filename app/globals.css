@@ -35,5 +35,12 @@ body {
 }
 
 .animate-marquee {
-  animation: marquee 25s linear infinite;
+  /* Duration is set inline per-render (see app/display/[token]/page.tsx) so
+     it scales with how much ticker text there actually is — a fixed
+     duration made long feed lists race past unreadably fast. This value is
+     just a fallback if the inline style is ever missing. */
+  animation-name: marquee;
+  animation-duration: 60s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }

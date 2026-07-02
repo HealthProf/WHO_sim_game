@@ -6,6 +6,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
+import { KeyTerms } from "@/components/key-terms";
+import { AdvisoryBoard } from "@/components/advisory-board";
 
 interface EventFull {
   id: string;
@@ -98,6 +100,9 @@ export default function EventDetailPage() {
         <p className="font-medium mb-2">Decision Prompt</p>
         <p className="whitespace-pre-wrap text-slate-300">{event.decisionPromptMarkdown}</p>
       </section>
+
+      <KeyTerms texts={[event.narrativeMarkdown, event.decisionPromptMarkdown]} />
+      <AdvisoryBoard eventId={event.id} />
 
       {alreadyResolved ? (
         <p className="text-emerald-400 text-sm">This event has been scored and closed.</p>

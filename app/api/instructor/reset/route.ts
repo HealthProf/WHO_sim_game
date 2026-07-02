@@ -15,6 +15,8 @@ import {
   resourcePledges,
   snapVoteResponses,
   snapVotes,
+  announcementAcks,
+  announcements,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
@@ -40,6 +42,8 @@ export async function POST() {
   await db.delete(resourcePledges); // -> eventDispatches (nullable)
   await db.delete(snapVoteResponses); // -> snapVotes
   await db.delete(snapVotes);
+  await db.delete(announcementAcks); // -> announcements
+  await db.delete(announcements); // -> eventDispatches (nullable)
   await db.delete(eventDispatches);
   await db.delete(modelStateHistory);
   await db.delete(instructorActions);

@@ -18,6 +18,14 @@ interface DisplaySnapVote {
   totalTeams: number;
 }
 
+interface DisplayAnnouncement {
+  id: number;
+  title: string;
+  message: string;
+  autoDismissSeconds: number | null;
+  createdAt: string;
+}
+
 interface DisplayData extends GlobalClockFields {
   currentDay: number;
   escalationState: "GREEN" | "AMBER" | "RED";
@@ -28,6 +36,15 @@ interface DisplayData extends GlobalClockFields {
   feedItems: { id: number; text: string; createdAt: string }[];
   rounds: SummaryRound[] | null;
   snapVote: DisplaySnapVote | null;
+  activeDeadlines: { eventTitle: string; deadlineAt: string }[];
+  activeAnnouncement: DisplayAnnouncement | null;
+}
+
+// Ticker duration scales with how much text there actually is, instead of a
+// fixed duration that made long feed lists race past unreadably fast —
+// roughly a comfortable reading pace, with sane floor/ceiling.
+function tickerDurationSeconds(text: string): number {
+  return Math.min(180, Math.max(30, text.length * 0.15));
 }
 
 const escalationBg: Record<string, string> = {
@@ -41,6 +58,11 @@ export default function PublicDisplayPage() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Tracks when *this browser* first observed the current announcement, not
+  // its server createdAt — the popup is shown for a fixed duration from
+  // there, so a slow poll cycle can never cause it to be missed or cut
+  // short (see lib/announcements.ts getActiveGlobalAnnouncement).
+  const [announcementSeen, setAnnouncementSeen] = useState<{ id: number; seenAt: number } | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -58,13 +80,17 @@ export default function PublicDisplayPage() {
         setData(json);
         setLastError(null);
         setLastSuccessAt(Date.now());
+        const incoming = json.activeAnnouncement as DisplayAnnouncement | null;
+        if (incoming) {
+          setAnnouncementSeen((prev) => (prev?.id === incoming.id ? prev : { id: incoming.id, seenAt: Date.now() }));
+        }
       } catch (err) {
         if (!active) return;
         setLastError(err instanceof Error ? err.message : "Failed to reach the server");
       }
     }
     poll();
-    const interval = setInterval(poll, 10000);
+    const interval = setInterval(poll, 4000);
     return () => {
       active = false;
       clearInterval(interval);
@@ -138,6 +164,33 @@ export default function PublicDisplayPage() {
         </div>
       )}
 
+      {data.activeDeadlines.length > 0 && (
+        <div className="shrink-0 bg-slate-900 border-b border-slate-800 px-8 py-2 flex items-center gap-6 overflow-x-auto">
+          <span className="text-xs uppercase tracking-wide text-slate-500 shrink-0">Active Deadlines</span>
+          {data.activeDeadlines.map((d) => {
+            const remainingMs = Math.max(0, new Date(d.deadlineAt).getTime() - now);
+            const minutes = Math.floor(remainingMs / 60000);
+            const seconds = Math.floor((remainingMs % 60000) / 1000);
+            return (
+              <span key={d.eventTitle} className="text-sm text-slate-300 shrink-0 whitespace-nowrap">
+                {d.eventTitle}: <span className="text-amber-400 font-semibold tabular-nums">{minutes}m {String(seconds).padStart(2, "0")}s</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {data.activeAnnouncement &&
+        announcementSeen?.id === data.activeAnnouncement.id &&
+        now - announcementSeen.seenAt < (data.activeAnnouncement.autoDismissSeconds ?? 10) * 1000 && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-12 pointer-events-none">
+            <div className="max-w-4xl w-full rounded-2xl border-4 border-blue-500 bg-blue-950 p-10 text-center shadow-2xl">
+              <p className="text-lg uppercase tracking-widest text-blue-300 font-semibold mb-3">{data.activeAnnouncement.title}</p>
+              <p className="text-3xl xl:text-4xl font-bold text-white leading-snug">{data.activeAnnouncement.message}</p>
+            </div>
+          </div>
+        )}
+
       <div className="flex-1 min-h-0 relative">
         <ComposableMap projectionConfig={{ scale: 155 }} width={980} height={520} className="w-full h-full">
           <Geographies geography={GEO_URL}>
@@ -184,11 +237,20 @@ export default function PublicDisplayPage() {
       </div>
 
       <footer className="shrink-0 bg-slate-900 border-t border-slate-800 py-4 overflow-hidden whitespace-nowrap">
-        <div className="animate-marquee inline-block text-2xl xl:text-3xl font-semibold text-amber-300">
-          {data.feedItems.length > 0
-            ? data.feedItems.map((f) => `● ${f.text}`).join("     ")
-            : "● Awaiting the first dispatched update from the facilitator..."}
-        </div>
+        {(() => {
+          const tickerText =
+            data.feedItems.length > 0
+              ? data.feedItems.map((f) => `● ${f.text}`).join("     ")
+              : "● Awaiting the first dispatched update from the facilitator...";
+          return (
+            <div
+              className="animate-marquee inline-block text-2xl xl:text-3xl font-semibold text-amber-300"
+              style={{ animationDuration: `${tickerDurationSeconds(tickerText)}s` }}
+            >
+              {tickerText}
+            </div>
+          );
+        })()}
       </footer>
     </div>
   );

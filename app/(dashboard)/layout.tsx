@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { SignOutButton } from "@/components/signout-button";
 import { HeaderClock } from "@/components/header-clock";
+import { TeamAnnouncementWatcher } from "@/components/team-announcement-watcher";
 import Link from "next/link";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -8,6 +9,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      <TeamAnnouncementWatcher />
       <header className="border-b border-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-wide text-slate-500">Operation Veiled Horizon</p>
@@ -22,6 +24,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Link href="/pledges" className="text-slate-300 hover:text-white">Pledges</Link>
           <Link href="/profile" className="text-slate-300 hover:text-white">Profile</Link>
           <Link href="/summary" className="text-slate-300 hover:text-white">Summary Report</Link>
+          <Link href="/glossary" className="text-slate-300 hover:text-white">Glossary</Link>
           <SignOutButton />
         </nav>
       </header>

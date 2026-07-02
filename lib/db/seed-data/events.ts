@@ -50,12 +50,23 @@ export interface EventSeed {
   // tranche -> trajectory briefing -> IHR reform -> close). Optional: the
   // secondary conflict/media/politics beats, worth running if time allows.
   isCorePath: boolean;
+  // Pre-fills the Control page's dispatch region picker. null = suggest all
+  // six (the common case, including events whose narrative names a "primary"
+  // region but whose decision prompt explicitly asks every team to respond,
+  // e.g. EVT-003/EVT-005/EVT-008/EVT-011). A concrete list means 03-events.md
+  // names a genuinely restricted audience (e.g. EVT-002: SEARO/WPRO/EURO).
+  // EVT-009/EVT-013 are also restricted in the source design but the actual
+  // target set depends on live scores, so they're left null here (no sane
+  // static default) and the instructor picks regions manually at dispatch
+  // time — the Control page prompts for this on every dispatch.
+  suggestedTargetRegions: string[] | null;
 }
 
 export const eventSeed: EventSeed[] = [
   {
     id: "EVT-001",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "PHEIC Declaration",
     day: 1,
     category: "Surveillance & Data Sharing / Institutional Authority",
@@ -100,6 +111,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-002",
     isCorePath: true,
+    suggestedTargetRegions: ["SEARO", "WPRO", "EURO"],
     title: "SEARO Data-Sharing Standoff",
     day: 1,
     category: "Surveillance & Data Sharing",
@@ -149,6 +161,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-003",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "EURO Unilateral Travel Ban / IHR Article 43 Challenge",
     day: 2,
     category: "Travel & Border Restrictions",
@@ -199,6 +212,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-004",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "NPI Decision (Regional)",
     day: 2,
     category: "Non-Pharmaceutical Interventions",
@@ -242,6 +256,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-005",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "Healthcare Worker Exposure / PPE Shortage",
     day: 2,
     category: "International Aid & Funding / Healthcare Resource Allocation",
@@ -285,6 +300,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-006",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "Early-Access Vaccine Allocation (\"The Equity Crucible\")",
     day: 3,
     category: "Vaccine & Therapeutic Distribution",
@@ -332,6 +348,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-007",
     isCorePath: false,
+    suggestedTargetRegions: null,
     title: "MSF Open Letter",
     day: 3,
     category: "Public Communication & Risk Messaging",
@@ -378,6 +395,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-008",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "AMRO Vaccine Nationalism Disclosure",
     day: 3,
     category: "Vaccine & Therapeutic Distribution / International Aid",
@@ -421,6 +439,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-009",
     isCorePath: false,
+    suggestedTargetRegions: null,
     title: "Public Trust Crisis / NPI Compliance Collapse",
     day: 3,
     category: "Public Communication & Risk Messaging / NPIs",
@@ -464,6 +483,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-010",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "Misinformation Surge (Lab-Origin Conspiracy)",
     day: 3,
     category: "Public Communication & Risk Messaging",
@@ -510,6 +530,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-011",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "AFRO Healthcare Surge / HCW Deployment Request",
     day: 4,
     category: "International Aid & Funding / Healthcare Resource Allocation",
@@ -559,6 +580,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-012",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "Second Vaccine Tranche (Revised Allocation)",
     day: 4,
     category: "Vaccine & Therapeutic Distribution",
@@ -603,6 +625,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-013",
     isCorePath: false,
+    suggestedTargetRegions: null,
     title: "Political Interference / Member State Demands",
     day: 4,
     category: "Institutional Authority / Public Communication",
@@ -649,6 +672,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-014",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "Outbreak Trajectory Briefing",
     day: 5,
     category: "Surveillance & Data Sharing",
@@ -676,6 +700,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-015",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "IHR Reform Proposal (Legacy Decision)",
     day: 5,
     category: "Surveillance & Data Sharing / Institutional Authority",
@@ -714,6 +739,7 @@ export const eventSeed: EventSeed[] = [
   {
     id: "EVT-016",
     isCorePath: true,
+    suggestedTargetRegions: null,
     title: "After-Action Report Initiation (Administrative Close)",
     day: 5,
     category: "Administrative close",

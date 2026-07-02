@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireInstructor, requireSession } from "@/lib/api-helpers";
 import { canDispatch } from "@/lib/chain";
 import { computeDeadlineAt } from "@/lib/deadline";
+import { announceDispatch } from "@/lib/announcements";
 
 // GET: list all events with dispatch/chain status. Instructors see everything;
 // students see only dispatches targeted at their team (or global broadcasts).
@@ -34,16 +35,17 @@ export async function GET() {
   return NextResponse.json({ events: allEvents, dispatches: myDispatches, chainStatus });
 }
 
-// POST: instructor dispatches an event to a specific team or globally (one
-// dispatch row per team, per simulation-docs/06-data-model.md note on
-// GLOBAL-scope events).
+// POST: instructor dispatches an event to a specific team, a specific set of
+// regions, or globally (one dispatch row per targeted team, per
+// simulation-docs/06-data-model.md note on GLOBAL-scope events).
 export async function POST(req: NextRequest) {
   const { session, error } = await requireInstructor();
   if (error) return error;
 
   const body = await req.json();
   const eventId = body.eventId as string;
-  const targetTeamId = body.targetTeamId as number | null | undefined; // undefined/null = broadcast to all teams
+  const targetTeamId = body.targetTeamId as number | null | undefined; // single-team shorthand
+  const targetRegionIds = body.targetRegionIds as string[] | null | undefined; // preferred: explicit region picker from the Control page
 
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
@@ -59,7 +61,15 @@ export async function POST(req: NextRequest) {
   const dispatchedAt = new Date();
   const deadlineAt = await computeDeadlineAt(eventId, dispatchedAt);
 
-  const targetIds = targetTeamId ? [targetTeamId] : (await db.query.teams.findMany()).map((t) => t.id);
+  const allTeams = await db.query.teams.findMany();
+  let targetIds: number[];
+  if (targetRegionIds && targetRegionIds.length > 0) {
+    targetIds = allTeams.filter((t) => targetRegionIds.includes(t.regionId)).map((t) => t.id);
+  } else if (targetTeamId) {
+    targetIds = [targetTeamId];
+  } else {
+    targetIds = allTeams.map((t) => t.id);
+  }
 
   const created = [];
   for (const teamId of targetIds) {
@@ -77,12 +87,15 @@ export async function POST(req: NextRequest) {
     created.push(row);
   }
 
+  const audienceDesc = targetIds.length >= allTeams.length ? "all teams (global)" : `${targetIds.map((id) => allTeams.find((t) => t.id === id)?.regionId).join(", ")}`;
   await db.insert(instructorActions).values({
     instructorUserId: Number(session!.user.id),
     actionType: "dispatch_event",
-    targetDesc: `${eventId} -> ${targetTeamId ? `team ${targetTeamId}` : "all teams (global)"}`,
+    targetDesc: `${eventId} -> ${audienceDesc}`,
     reason: body.reason ?? null,
   });
+
+  await announceDispatch({ eventId, eventTitle: event.title, targetTeamIds: targetIds });
 
   return NextResponse.json({ dispatches: created });
 }
