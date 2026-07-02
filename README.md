@@ -34,8 +34,7 @@ semester (or once, ever, if you just re-reset the database between classes).
 
 ## Step 2: Get your own copy of the project
 
-1. Open the project's GitHub page (the link you were given — it will look
-   like `github.com/<something>/WHO_sim_game`).
+1. Open the project's GitHub page (the link you were given — `github.com/HealthProf/WHO_sim_game`).
 2. Click the **Fork** button near the top right of the page, then click
    **Create fork**. This makes your own personal copy of the project under
    your GitHub account, which you can deploy and reset freely without
