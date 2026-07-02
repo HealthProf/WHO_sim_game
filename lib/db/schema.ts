@@ -365,7 +365,7 @@ export const teamNotifications = pgTable("team_notifications", {
     .notNull()
     .references(() => teams.id),
   eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
-  kind: text("kind").notNull().default("consequence"), // consequence | snap_vote | pledge
+  kind: text("kind").notNull().default("consequence"), // consequence | snap_vote | pledge | market | trade | budget_cycle | emergency_funding | decision_revealed
   message: text("message").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -580,4 +580,26 @@ export const emergencyFundingContributions = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("emergency_funding_contributions_uniq").on(t.requestId, t.contributorTeamId, t.isWhoHq)]
+);
+
+// De-dupe ledger for the automatic "good direction" social-metric rewards
+// (see lib/social-thresholds.ts) — the bad-direction warning/escalation
+// arcs are real dispatched events (EVT-017 through EVT-025) that the
+// instructor controls the pacing of, but a milestone reward for sustained
+// high trust/happiness or low political tension is a no-decision-needed
+// bonus applied automatically the same way passive drift is, so it needs
+// its own guard against re-awarding on every poll tick. regionId is a
+// plain text column (not FK'd to regions) so "GLOBAL" can be used as the
+// sentinel for the world-average versions without a NULL-uniqueness
+// footgun (Postgres treats NULL as distinct from NULL in unique indexes).
+export const socialMilestoneAwards = pgTable(
+  "social_milestone_awards",
+  {
+    id: serial("id").primaryKey(),
+    regionId: text("region_id").notNull(), // region code, or "GLOBAL"
+    metric: text("metric").notNull(), // "publicTrust" | "happiness" | "politicalTension"
+    tier: text("tier").notNull(), // "milestone1" | "milestone2"
+    awardedAt: timestamp("awarded_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("social_milestone_awards_uniq").on(t.regionId, t.metric, t.tier)]
 );

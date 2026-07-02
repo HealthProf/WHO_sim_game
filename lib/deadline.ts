@@ -11,8 +11,9 @@ import { computeCompositePct, defaultScoresForTier } from "./scoring";
 import { applyModelDelta, applyOptimalShadowDelta, applyPassiveDrift } from "./model-engine";
 import { pushConsequence } from "./consequences";
 import { closeExpiredSnapVotes } from "./snap-vote";
-import { maybeAnnounceResolution } from "./announcements";
+import { maybeAnnounceResolution, announceDecisionRevealed } from "./announcements";
 import { processBudgetCycleTimers } from "./budget-cycle";
+import { checkSocialMilestones } from "./social-thresholds";
 
 export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
@@ -46,6 +47,7 @@ export async function processDeadlines() {
   await applyPassiveDrift(gs).catch(() => {});
   await closeExpiredSnapVotes().catch(() => {});
   await processBudgetCycleTimers().catch(() => {});
+  await checkSocialMilestones().catch(() => {});
 
   const now = new Date();
   let remindersSent = 0;
@@ -127,6 +129,14 @@ export async function processDeadlines() {
         tier,
         deltas: deltas as never,
         actorUserId: systemUser.id,
+      });
+      await announceDecisionRevealed({
+        eventId: event.id,
+        eventTitle: event.title,
+        regionId: region,
+        submittingTeamId: dispatch.targetTeamId,
+        structuredChoice: null,
+        tier,
       });
     }
 

@@ -46,6 +46,7 @@ interface EventsData {
   dispatches: Dispatch[];
   chainStatus: Record<string, { ok: boolean; blockedBy: string[] }>;
   teams: TeamRef[];
+  targetHints: Record<string, string[]>;
 }
 
 interface DashboardData {
@@ -268,6 +269,12 @@ export default function ControlPage() {
                   );
                   const showFullRegionChecklist = (e.scope === "GLOBAL" || e.scope === "MULTI") && dispatches.length > 1;
                   const isRestricted = !!e.suggestedTargetRegions && e.suggestedTargetRegions.length < ALL_REGIONS.length;
+                  // Live-computed audience for adaptive events whose trigger
+                  // names a region that can only be known from current game
+                  // state (e.g. EVT-013's "any region's political tension >
+                  // 70") — takes priority over the static suggestion below
+                  // since it reflects what's actually true right now.
+                  const targetHint = data.targetHints?.[e.id];
                   const pickerOpen = pickerOpenFor === e.id;
 
                   return (
@@ -283,9 +290,14 @@ export default function ControlPage() {
                             >
                               {e.isCorePath ? "Core" : "Optional"}
                             </span>
-                            {isRestricted && (
+                            {isRestricted && !targetHint && (
                               <span className="text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 bg-purple-950 text-purple-300">
                                 Targeted: {e.suggestedTargetRegions!.join("/")}
+                              </span>
+                            )}
+                            {targetHint && targetHint.length > 0 && (
+                              <span className="text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 bg-amber-950 text-amber-300" title="Computed live from current game state">
+                                Currently qualifies: {targetHint.join("/")}
                               </span>
                             )}
                           </p>
@@ -295,7 +307,7 @@ export default function ControlPage() {
                         <div className="flex flex-col gap-2 items-end shrink-0">
                           <button
                             disabled={!chain?.ok}
-                            onClick={() => (pickerOpen ? setPickerOpenFor(null) : openPicker(e.id, e.suggestedTargetRegions))}
+                            onClick={() => (pickerOpen ? setPickerOpenFor(null) : openPicker(e.id, targetHint ?? e.suggestedTargetRegions))}
                             className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-1.5"
                             title={!chain?.ok ? `Blocked by: ${chain?.blockedBy.join(", ")}` : ""}
                           >
@@ -309,9 +321,11 @@ export default function ControlPage() {
                       {pickerOpen && (
                         <div className="mt-3 bg-slate-800/60 rounded-lg p-3 space-y-2">
                           <p className="text-xs text-slate-400">
-                            {isRestricted
-                              ? `The source design targets ${e.suggestedTargetRegions!.join(", ")} for this event — adjust if you want a different audience.`
-                              : "Pick which regions receive this event."}
+                            {targetHint && targetHint.length > 0
+                              ? `Pre-filled with ${targetHint.join(", ")} — the region(s) that currently satisfy this event's trigger condition. Adjust if you want a different audience.`
+                              : isRestricted
+                                ? `The source design targets ${e.suggestedTargetRegions!.join(", ")} for this event — adjust if you want a different audience.`
+                                : "Pick which regions receive this event."}
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {ALL_REGIONS.map((r) => (

@@ -9,11 +9,21 @@ export function RecentDevelopments({ notifications }: { notifications: { id: num
     consequence: "Consequence",
     snap_vote: "Emergency Committee",
     pledge: "Pledge",
+    market: "Marketplace",
+    trade: "Trade",
+    budget_cycle: "Budget Cycle",
+    emergency_funding: "Emergency Funding",
+    decision_revealed: "Decision Revealed",
   };
   const kindColor: Record<string, string> = {
     consequence: "text-blue-400",
     snap_vote: "text-red-400",
     pledge: "text-emerald-400",
+    market: "text-amber-400",
+    trade: "text-amber-400",
+    budget_cycle: "text-purple-400",
+    emergency_funding: "text-purple-400",
+    decision_revealed: "text-cyan-400",
   };
 
   return (

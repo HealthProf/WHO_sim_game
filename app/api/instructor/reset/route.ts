@@ -25,6 +25,7 @@ import {
   regionTradeOffers,
   emergencyFundingContributions,
   emergencyFundingRequests,
+  socialMilestoneAwards,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
@@ -59,6 +60,7 @@ export async function POST() {
   await db.delete(regionTradeOffers);
   await db.delete(emergencyFundingContributions); // -> emergencyFundingRequests
   await db.delete(emergencyFundingRequests);
+  await db.delete(socialMilestoneAwards);
   await db.delete(eventDispatches);
   await db.delete(modelStateHistory);
   await db.delete(instructorActions);
