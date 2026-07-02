@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
+import { getTeamAnnouncements } from "@/lib/announcements";
 
 // Polled every ~15s by team dashboards (see 07-open-questions.md Q4). Returns
 // the shared Global Situation Summary for every region, plus the requesting
@@ -45,6 +46,7 @@ export async function GET() {
 
   let ownRegion = null;
   let notifications: { id: number; kind: string; message: string; createdAt: Date }[] = [];
+  let announcements: Awaited<ReturnType<typeof getTeamAnnouncements>> = [];
   if (session!.user.role === "student" && session!.user.regionId) {
     const s = allModelState.find((m) => m.regionId === session!.user.regionId);
     const r = allRegions.find((r) => r.id === session!.user.regionId);
@@ -62,6 +64,7 @@ export async function GET() {
         orderBy: [desc(teamNotifications.createdAt)],
         limit: 8,
       });
+      announcements = await getTeamAnnouncements(session!.user.teamId);
     }
   }
 
@@ -75,5 +78,6 @@ export async function GET() {
     ownRegion,
     allRegionsFull,
     notifications,
+    announcements,
   });
 }

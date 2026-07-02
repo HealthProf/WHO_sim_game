@@ -6,6 +6,7 @@ import { requireInstructor } from "@/lib/api-helpers";
 import { computeCalibrationAdjustment, computeCompositePct, defaultScoresForTier, tierForCompositePct, type Tier } from "@/lib/scoring";
 import { applyModelDelta, clamp } from "@/lib/model-engine";
 import { pushConsequence } from "@/lib/consequences";
+import { maybeAnnounceResolution } from "@/lib/announcements";
 import type { ModelDelta } from "@/lib/db/seed-data/events";
 
 // GET: priority-sorted scoring inbox. Sort key (see design discussion on
@@ -159,6 +160,7 @@ export async function scoreDecision(
   }
 
   await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));
+  await maybeAnnounceResolution(event.id);
 
   return score;
 }

@@ -42,6 +42,7 @@ export const resourceTypeEnum = pgEnum("resource_type", [
   "HCW_SURGE_PCT",
 ]);
 export const snapVoteStatusEnum = pgEnum("snap_vote_status", ["open", "closed"]);
+export const announcementScopeEnum = pgEnum("announcement_scope", ["global_display", "team"]);
 
 // Static reference data — seeded once from 04-regions.md
 export const regions = pgTable("regions", {
@@ -189,6 +190,12 @@ export const events = pgTable("events", {
   // Purely advisory — dispatch is never blocked by this, it's a facilitator
   // hint on the Control page for deciding what to cut if time is short.
   isCorePath: boolean("is_core_path").notNull().default(true),
+  // Pre-fills the Control page's region picker on dispatch — null means
+  // "suggest all six" (the common case). A non-null array means the event's
+  // source design (03-events.md) names a specific subset (e.g. EVT-002:
+  // SEARO/WPRO/EURO). Always editable by the instructor before dispatch —
+  // this is a suggestion, not an enforced restriction.
+  suggestedTargetRegions: jsonb("suggested_target_regions"), // string[] | null
 });
 
 export const eventChainLinks = pgTable("event_chain_links", {
@@ -362,4 +369,38 @@ export const snapVoteResponses = pgTable(
     submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("snap_vote_responses_vote_team_uniq").on(t.snapVoteId, t.teamId)]
+);
+
+// Popup announcements — see lib/announcements.ts. Two scopes:
+// "global_display" rows are transient (auto-dismiss after
+// autoDismissSeconds, tracked purely by elapsed time, no ack needed —
+// they're on a shared projector, not tied to any one viewer).
+// "team" rows persist until that team explicitly closes them (see
+// announcementAcks below) since a missed in-app popup is easy for a
+// student to miss entirely otherwise.
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  scope: announcementScopeEnum("scope").notNull(),
+  kind: text("kind").notNull(), // "event_dispatched" | "decision_resolved"
+  eventId: text("event_id").references(() => events.id),
+  targetTeamIds: jsonb("target_team_ids"), // number[] | null (null = all teams; scope="team" only)
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  autoDismissSeconds: integer("auto_dismiss_seconds"), // set for scope="global_display"; null for scope="team"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const announcementAcks = pgTable(
+  "announcement_acks",
+  {
+    id: serial("id").primaryKey(),
+    announcementId: integer("announcement_id")
+      .notNull()
+      .references(() => announcements.id),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    ackedAt: timestamp("acked_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("announcement_acks_uniq").on(t.announcementId, t.teamId)]
 );

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { globalState } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { globalState, eventDispatches, events } from "@/lib/db/schema";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { buildSummaryReport } from "@/lib/summary-report";
 import { getSnapVoteState } from "@/lib/snap-vote";
+import { getActiveGlobalAnnouncement } from "@/lib/announcements";
 
 // Public-safe read-only endpoint for the projector display. No auth (route is
 // protected only by an unguessable URL token — see /display/[token]). While
@@ -51,7 +52,29 @@ export async function GET() {
   // question, countdown, and response count; the full tally appears once
   // it's closed.
   const snapVote = await getSnapVoteState({ forInstructor: false });
+  const activeAnnouncement = await getActiveGlobalAnnouncement();
 
+  // Public-safe deadline countdowns: event title + time remaining only, no
+  // region attribution (which regions have/haven't responded stays on the
+  // instructor's Control page, not the shared projector). Dispatches of the
+  // same event fired together share a deadline, so dedupe by event.
+  const openDispatches = await db.query.eventDispatches.findMany({
+    where: and(eq(eventDispatches.status, "dispatched"), isNotNull(eventDispatches.deadlineAt)),
+  });
+  const seenEventIds = new Set<string>();
+  const activeDeadlines: { eventTitle: string; deadlineAt: Date }[] = [];
+  for (const d of openDispatches.sort((a, b) => new Date(a.deadlineAt!).getTime() - new Date(b.deadlineAt!).getTime())) {
+    if (seenEventIds.has(d.eventId)) continue;
+    seenEventIds.add(d.eventId);
+    const event = await db.query.events.findFirst({ where: eq(events.id, d.eventId) });
+    if (event) activeDeadlines.push({ eventTitle: event.title, deadlineAt: d.deadlineAt! });
+  }
+
+  // Only reference events/consequence text that's still part of this build
+  // — the ticker already only ever draws from globalFeedItems rows this app
+  // itself inserted (real event titles/consequencesJson/snap-vote/pledge
+  // text), so there's no separate filtering needed here; see the comment on
+  // globalFeedItems in lib/db/schema.ts.
   return NextResponse.json({
     currentDay: gs?.currentDay,
     escalationState: gs?.escalationState,
@@ -68,5 +91,7 @@ export async function GET() {
     feedItems: feedItems.map((f) => ({ id: f.id, text: f.headlineText, createdAt: f.createdAt })),
     rounds,
     snapVote: snapVote.current,
+    activeDeadlines,
+    activeAnnouncement,
   });
 }

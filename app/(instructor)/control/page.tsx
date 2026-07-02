@@ -6,7 +6,10 @@ import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import { QueryError } from "@/components/query-error";
 import { EmergencyCommitteePanel } from "@/components/emergency-committee-panel";
+import { DeadlineCountdown } from "@/components/deadline-countdown";
 import Link from "next/link";
+
+const ALL_REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
 
 interface EventFull {
   id: string;
@@ -18,6 +21,7 @@ interface EventFull {
   triggerConditionDesc: string;
   modelDeltaDesc: string;
   narrativeMarkdown: string;
+  suggestedTargetRegions: string[] | null;
 }
 
 interface Dispatch {
@@ -26,6 +30,7 @@ interface Dispatch {
   targetTeamId: number | null;
   status: string;
   revealedToPublic: boolean;
+  deadlineAt: string | null;
 }
 
 interface TeamRef {
@@ -60,6 +65,9 @@ const statusChipColor: Record<string, string> = {
 export default function ControlPage() {
   const qc = useQueryClient();
   const [coreOnly, setCoreOnly] = useState(false);
+  const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+
   const { data, error, refetch } = useQuery({ queryKey: ["events"], queryFn: () => apiFetch<EventsData>("/api/events"), refetchInterval: 10000 });
   const { data: dash, error: dashError, refetch: refetchDash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard"), refetchInterval: 10000 });
   const { data: inbox } = useQuery({ queryKey: ["scoring-inbox"], queryFn: () => apiFetch<{ inbox: InboxItem[] }>("/api/scores"), refetchInterval: 10000 });
@@ -70,8 +78,12 @@ export default function ControlPage() {
   });
 
   const dispatchEvent = useMutation({
-    mutationFn: (eventId: string) => apiFetch("/api/events", { method: "POST", body: JSON.stringify({ eventId, targetTeamId: null }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["events"] }),
+    mutationFn: ({ eventId, targetRegionIds }: { eventId: string; targetRegionIds: string[] }) =>
+      apiFetch("/api/events", { method: "POST", body: JSON.stringify({ eventId, targetRegionIds }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["events"] });
+      setPickerOpenFor(null);
+    },
   });
 
   const pushToGlobal = useMutation({
@@ -99,6 +111,21 @@ export default function ControlPage() {
     const gameDay = mapNarrativeDayToGameDay(e.day, totalGameDays);
     if (!eventsByGameDay.has(gameDay)) eventsByGameDay.set(gameDay, { narrativeDay: e.day, events: [] });
     eventsByGameDay.get(gameDay)!.events.push(e);
+  }
+
+  // Every currently-open (awaiting response, deadline still ticking) dispatch
+  // across every event, sorted soonest-first — the point is to make it
+  // possible to track several concurrent timers across different events at
+  // once, not just the one you happen to be looking at.
+  const activeDeadlines = data.dispatches
+    .filter((d) => d.status === "dispatched" && d.deadlineAt)
+    .map((d) => ({ dispatch: d, event: data.events.find((e) => e.id === d.eventId) }))
+    .filter((x) => x.event)
+    .sort((a, b) => new Date(a.dispatch.deadlineAt!).getTime() - new Date(b.dispatch.deadlineAt!).getTime());
+
+  function openPicker(eventId: string, suggested: string[] | null) {
+    setPickerOpenFor(eventId);
+    setSelectedRegions(suggested ?? ALL_REGIONS);
   }
 
   return (
@@ -165,6 +192,27 @@ export default function ControlPage() {
         </div>
       </section>
 
+      {/* Active deadlines — every currently-ticking countdown at once */}
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <p className="text-xs uppercase tracking-wide text-slate-400 mb-3">
+          Active Deadlines {activeDeadlines.length > 0 && `(${activeDeadlines.length})`}
+        </p>
+        {activeDeadlines.length === 0 ? (
+          <p className="text-sm text-slate-500">Nothing awaiting a team response right now.</p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {activeDeadlines.map(({ dispatch, event }) => (
+              <div key={dispatch.id} className="bg-slate-800/60 rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-sm">
+                <span className="truncate">
+                  {event!.title} {dispatch.targetTeamId ? `(${teamsByRegionId.get(dispatch.targetTeamId) ?? "?"})` : ""}
+                </span>
+                <DeadlineCountdown deadlineAt={dispatch.deadlineAt!} className="text-amber-400 font-medium shrink-0 tabular-nums" />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <EmergencyCommitteePanel />
 
       {/* Event queue, grouped by day */}
@@ -213,6 +261,8 @@ export default function ControlPage() {
                     dispatches.filter((d) => d.targetTeamId != null).map((d) => [teamsByRegionId.get(d.targetTeamId!) ?? "?", d])
                   );
                   const showFullRegionChecklist = (e.scope === "GLOBAL" || e.scope === "MULTI") && dispatches.length > 1;
+                  const isRestricted = !!e.suggestedTargetRegions && e.suggestedTargetRegions.length < ALL_REGIONS.length;
+                  const pickerOpen = pickerOpenFor === e.id;
 
                   return (
                     <div key={e.id} className={`bg-slate-900 border ${borderColor} rounded-lg p-4`}>
@@ -227,14 +277,19 @@ export default function ControlPage() {
                             >
                               {e.isCorePath ? "Core" : "Optional"}
                             </span>
+                            {isRestricted && (
+                              <span className="text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 bg-purple-950 text-purple-300">
+                                Targeted: {e.suggestedTargetRegions!.join("/")}
+                              </span>
+                            )}
                           </p>
                           <p className="text-xs text-slate-500 mt-1">{e.triggerConditionDesc}</p>
                           <p className="text-xs text-slate-400 mt-2 max-w-xl">{e.modelDeltaDesc}</p>
                         </div>
                         <div className="flex flex-col gap-2 items-end shrink-0">
                           <button
-                            disabled={!chain?.ok || dispatchEvent.isPending}
-                            onClick={() => dispatchEvent.mutate(e.id)}
+                            disabled={!chain?.ok}
+                            onClick={() => (pickerOpen ? setPickerOpenFor(null) : openPicker(e.id, e.suggestedTargetRegions))}
                             className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-1.5"
                             title={!chain?.ok ? `Blocked by: ${chain?.blockedBy.join(", ")}` : ""}
                           >
@@ -244,6 +299,47 @@ export default function ControlPage() {
                           {allScored && <span className="text-xs text-emerald-400 font-semibold">All scored</span>}
                         </div>
                       </div>
+
+                      {pickerOpen && (
+                        <div className="mt-3 bg-slate-800/60 rounded-lg p-3 space-y-2">
+                          <p className="text-xs text-slate-400">
+                            {isRestricted
+                              ? `The source design targets ${e.suggestedTargetRegions!.join(", ")} for this event — adjust if you want a different audience.`
+                              : "Pick which regions receive this event."}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {ALL_REGIONS.map((r) => (
+                              <label key={r} className="flex items-center gap-1.5 text-xs bg-slate-900 border border-slate-700 rounded-full px-3 py-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedRegions.includes(r)}
+                                  onChange={(ev) =>
+                                    setSelectedRegions(
+                                      ev.target.checked ? [...selectedRegions, r] : selectedRegions.filter((x) => x !== r)
+                                    )
+                                  }
+                                />
+                                {r}
+                              </label>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => setSelectedRegions(ALL_REGIONS)} className="text-xs text-blue-400 hover:text-blue-300">
+                              Select all
+                            </button>
+                            <button onClick={() => setSelectedRegions([])} className="text-xs text-blue-400 hover:text-blue-300">
+                              Clear
+                            </button>
+                            <button
+                              disabled={selectedRegions.length === 0 || dispatchEvent.isPending}
+                              onClick={() => dispatchEvent.mutate({ eventId: e.id, targetRegionIds: selectedRegions })}
+                              className="ml-auto rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-1.5"
+                            >
+                              Confirm Dispatch to {selectedRegions.length || 0} region{selectedRegions.length === 1 ? "" : "s"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {showFullRegionChecklist && (
                         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -267,6 +363,7 @@ export default function ControlPage() {
                               <span>
                                 #{d.id} {d.targetTeamId ? `(${teamsByRegionId.get(d.targetTeamId) ?? "?"})` : ""} · {d.status}
                               </span>
+                              {d.status === "dispatched" && d.deadlineAt && <DeadlineCountdown deadlineAt={d.deadlineAt} className="text-amber-300 tabular-nums" />}
                               {!d.revealedToPublic && (
                                 <button
                                   onClick={() => pushToGlobal.mutate({ dispatchId: d.id, headline: `${e.title} — now live` })}
