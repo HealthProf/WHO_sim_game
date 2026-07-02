@@ -79,3 +79,47 @@ export async function buildSummaryReport(): Promise<SummaryRound[]> {
 function tierImpactDesc(event: { modelDeltaDesc: string }, tier: string): string {
   return `Tier: ${tier.replace("_", " ")}. ${event.modelDeltaDesc}`;
 }
+
+export interface TeamHighlightEntry {
+  eventId: string;
+  eventTitle: string;
+  tier: string;
+  compositePct: number;
+}
+
+export interface TeamHighlights {
+  regionId: string;
+  strongest: TeamHighlightEntry[];
+  weakest: TeamHighlightEntry[];
+}
+
+// Per-team "3 strongest / 3 weakest decisions" — the personalized "week in
+// review" artifact called for in simulation-docs/03-events.md's EVT-014
+// implementation note, structured around the composite score each decision
+// actually received (not just its tier), so ties resolve sensibly.
+export async function computeTeamHighlights(): Promise<TeamHighlights[]> {
+  const allTeams = await db.query.teams.findMany();
+  const allDispatches = await db.query.eventDispatches.findMany();
+  const allDecisions = await db.query.decisions.findMany();
+  const allScores = await db.query.scores.findMany();
+  const allEvents = await db.query.events.findMany();
+
+  return allTeams.map((team) => {
+    const entries: TeamHighlightEntry[] = [];
+    for (const decision of allDecisions.filter((d) => d.teamId === team.id)) {
+      const score = allScores.find((s) => s.decisionId === decision.id);
+      if (!score) continue;
+      const dispatch = allDispatches.find((d) => d.id === decision.eventDispatchId);
+      const event = dispatch ? allEvents.find((e) => e.id === dispatch.eventId) : null;
+      if (!event) continue;
+      entries.push({ eventId: event.id, eventTitle: event.title, tier: score.tier, compositePct: score.compositePct });
+    }
+
+    const sorted = entries.slice().sort((a, b) => b.compositePct - a.compositePct);
+    return {
+      regionId: team.regionId,
+      strongest: sorted.slice(0, 3),
+      weakest: sorted.slice(-3).reverse().filter((e) => !sorted.slice(0, 3).includes(e)),
+    };
+  });
+}

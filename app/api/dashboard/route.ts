@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { globalState } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { globalState, teamNotifications } from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
@@ -44,6 +44,7 @@ export async function GET() {
   });
 
   let ownRegion = null;
+  let notifications: { id: number; kind: string; message: string; createdAt: Date }[] = [];
   if (session!.user.role === "student" && session!.user.regionId) {
     const s = allModelState.find((m) => m.regionId === session!.user.regionId);
     const r = allRegions.find((r) => r.id === session!.user.regionId);
@@ -54,6 +55,13 @@ export async function GET() {
         roleTitle: r.roleTitle,
         hqLocation: r.hqLocation,
       };
+    }
+    if (session!.user.teamId) {
+      notifications = await db.query.teamNotifications.findMany({
+        where: eq(teamNotifications.teamId, session!.user.teamId),
+        orderBy: [desc(teamNotifications.createdAt)],
+        limit: 8,
+      });
     }
   }
 
@@ -66,5 +74,6 @@ export async function GET() {
     sharedSummary,
     ownRegion,
     allRegionsFull,
+    notifications,
   });
 }

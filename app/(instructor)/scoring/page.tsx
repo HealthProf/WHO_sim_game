@@ -6,7 +6,7 @@ import { QueryError } from "@/components/query-error";
 import Link from "next/link";
 
 interface InboxItem {
-  decision: { id: number; teamId: number; submittedAt: string; structuredChoice: string | null };
+  decision: { id: number; teamId: number; submittedAt: string; structuredChoice: string | null; confidenceLevel: string | null };
   event: { id: string; title: string; requiresMandatoryReview: boolean } | null;
   team: { regionId: string } | null;
   suggestedTier: string | null;
@@ -69,8 +69,8 @@ export default function ScoringInboxPage() {
                   {item.event?.title ?? "?"} <span className="text-xs text-slate-500">({item.team?.regionId})</span>
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Choice: {item.decision.structuredChoice ?? "-"} - Suggested tier: {item.suggestedTier ?? "n/a"} - Age:{" "}
-                  {Math.round(item.ageMs / 60000)}m
+                  Choice: {item.decision.structuredChoice ?? "-"} - Confidence: {item.decision.confidenceLevel ?? "n/a"} - Suggested
+                  tier: {item.suggestedTier ?? "n/a"} - Age: {Math.round(item.ageMs / 60000)}m
                 </p>
                 {item.mandatoryReview && <p className="text-xs text-red-400 mt-1 font-semibold">MANDATORY REVIEW — cannot fast-path</p>}
               </div>

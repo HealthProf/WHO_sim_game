@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { buildSummaryReport } from "@/lib/summary-report";
+import { getSnapVoteState } from "@/lib/snap-vote";
 
 // Public-safe read-only endpoint for the projector display. No auth (route is
 // protected only by an unguessable URL token — see /display/[token]). While
@@ -45,6 +46,11 @@ export async function GET() {
   });
 
   const rounds = gs?.simulationStatus === "completed" ? await buildSummaryReport() : null;
+  // Public display never reveals live vote breakdowns while a vote is open
+  // (same herd-voting concern as the team-facing endpoint) — only the
+  // question, countdown, and response count; the full tally appears once
+  // it's closed.
+  const snapVote = await getSnapVoteState({ forInstructor: false });
 
   return NextResponse.json({
     currentDay: gs?.currentDay,
@@ -61,5 +67,6 @@ export async function GET() {
     regions: publicRegionData,
     feedItems: feedItems.map((f) => ({ id: f.id, text: f.headlineText, createdAt: f.createdAt })),
     rounds,
+    snapVote: snapVote.current,
   });
 }

@@ -10,6 +10,14 @@ import type { SummaryRound } from "@/lib/summary-report";
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
+interface DisplaySnapVote {
+  question: string;
+  options: string[];
+  closesAt: string;
+  respondedCount: number;
+  totalTeams: number;
+}
+
 interface DisplayData extends GlobalClockFields {
   currentDay: number;
   escalationState: "GREEN" | "AMBER" | "RED";
@@ -19,6 +27,7 @@ interface DisplayData extends GlobalClockFields {
   regions: { regionId: string; fullName: string; confirmedCases: number; deaths: number; rt: number }[];
   feedItems: { id: number; text: string; createdAt: string }[];
   rounds: SummaryRound[] | null;
+  snapVote: DisplaySnapVote | null;
 }
 
 const escalationBg: Record<string, string> = {
@@ -31,6 +40,12 @@ export default function PublicDisplayPage() {
   const [data, setData] = useState<DisplayData | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -107,6 +122,21 @@ export default function PublicDisplayPage() {
           <span>Media Pressure {data.mediaPressureIndex}</span>
         </div>
       </header>
+
+      {data.snapVote && (
+        <div className="shrink-0 bg-red-800 px-8 py-4 flex items-center justify-between gap-6">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-red-200 font-semibold">Emergency Committee — Snap Vote</p>
+            <p className="text-xl xl:text-2xl font-bold text-white">{data.snapVote.question}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-3xl xl:text-4xl font-bold tabular-nums text-white">
+              {Math.max(0, Math.ceil((new Date(data.snapVote.closesAt).getTime() - now) / 1000))}s
+            </p>
+            <p className="text-sm text-red-200">{data.snapVote.respondedCount}/{data.snapVote.totalTeams} regions responded</p>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 relative">
         <ComposableMap projectionConfig={{ scale: 155 }} width={980} height={520} className="w-full h-full">

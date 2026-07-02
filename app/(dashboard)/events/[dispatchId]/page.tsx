@@ -44,6 +44,7 @@ export default function EventDetailPage() {
   const [structuredChoice, setStructuredChoice] = useState("");
   const [rationale, setRationale] = useState("");
   const [coordinatedWith, setCoordinatedWith] = useState<string[]>([]);
+  const [confidenceLevel, setConfidenceLevel] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
   const [allocation, setAllocation] = useState<Record<string, number>>(
     Object.fromEntries(REGIONS.map((r) => [r, 0]))
   );
@@ -58,6 +59,7 @@ export default function EventDetailPage() {
           structuredChoice: structuredChoice || null,
           rationaleText: rationale,
           coordinatedWithTeamsJson: coordinatedWith,
+          confidenceLevel,
           resourceAllocationJson: event?.isAllocationEvent ? allocation : null,
         }),
       }),
@@ -169,6 +171,30 @@ export default function EventDetailPage() {
                   />
                   {r}
                 </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-2">How confident is your team in this decision?</p>
+            <p className="text-xs text-slate-500 mb-2">
+              This isn&apos;t scored on whether you were confident — it&apos;s scored on whether your confidence matched the
+              outcome. Flagging real uncertainty is never penalized.
+            </p>
+            <div className="flex gap-2">
+              {(["LOW", "MEDIUM", "HIGH"] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setConfidenceLevel(level)}
+                  className={`rounded-md px-4 py-2 text-sm font-medium border ${
+                    confidenceLevel === level
+                      ? "bg-blue-600 border-blue-500 text-white"
+                      : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
+                  }`}
+                >
+                  {level.charAt(0) + level.slice(1).toLowerCase()}
+                </button>
               ))}
             </div>
           </div>

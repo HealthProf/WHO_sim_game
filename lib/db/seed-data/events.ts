@@ -43,11 +43,19 @@ export interface EventSeed {
   requiresCoordination: boolean;
   isAllocationEvent: boolean;
   chainPrev: string[];
+  // Recommended lean spine for a ~60-minute live session (see the Control
+  // page's core/optional filter) — advisory only, never blocks dispatch.
+  // Core: the anchors plus the equity/solidarity throughline (PHEIC -> SEARO
+  // data -> NPI -> vaccine equity crucible -> AFRO healthcare surge -> second
+  // tranche -> trajectory briefing -> IHR reform -> close). Optional: the
+  // secondary conflict/media/politics beats, worth running if time allows.
+  isCorePath: boolean;
 }
 
 export const eventSeed: EventSeed[] = [
   {
     id: "EVT-001",
+    isCorePath: true,
     title: "PHEIC Declaration",
     day: 1,
     category: "Surveillance & Data Sharing / Institutional Authority",
@@ -91,6 +99,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-002",
+    isCorePath: true,
     title: "SEARO Data-Sharing Standoff",
     day: 1,
     category: "Surveillance & Data Sharing",
@@ -139,6 +148,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-003",
+    isCorePath: true,
     title: "EURO Unilateral Travel Ban / IHR Article 43 Challenge",
     day: 2,
     category: "Travel & Border Restrictions",
@@ -188,6 +198,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-004",
+    isCorePath: true,
     title: "NPI Decision (Regional)",
     day: 2,
     category: "Non-Pharmaceutical Interventions",
@@ -230,6 +241,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-005",
+    isCorePath: true,
     title: "Healthcare Worker Exposure / PPE Shortage",
     day: 2,
     category: "International Aid & Funding / Healthcare Resource Allocation",
@@ -272,6 +284,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-006",
+    isCorePath: true,
     title: "Early-Access Vaccine Allocation (\"The Equity Crucible\")",
     day: 3,
     category: "Vaccine & Therapeutic Distribution",
@@ -318,6 +331,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-007",
+    isCorePath: false,
     title: "MSF Open Letter",
     day: 3,
     category: "Public Communication & Risk Messaging",
@@ -363,6 +377,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-008",
+    isCorePath: true,
     title: "AMRO Vaccine Nationalism Disclosure",
     day: 3,
     category: "Vaccine & Therapeutic Distribution / International Aid",
@@ -405,6 +420,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-009",
+    isCorePath: false,
     title: "Public Trust Crisis / NPI Compliance Collapse",
     day: 3,
     category: "Public Communication & Risk Messaging / NPIs",
@@ -447,6 +463,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-010",
+    isCorePath: true,
     title: "Misinformation Surge (Lab-Origin Conspiracy)",
     day: 3,
     category: "Public Communication & Risk Messaging",
@@ -492,6 +509,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-011",
+    isCorePath: true,
     title: "AFRO Healthcare Surge / HCW Deployment Request",
     day: 4,
     category: "International Aid & Funding / Healthcare Resource Allocation",
@@ -540,6 +558,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-012",
+    isCorePath: true,
     title: "Second Vaccine Tranche (Revised Allocation)",
     day: 4,
     category: "Vaccine & Therapeutic Distribution",
@@ -583,6 +602,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-013",
+    isCorePath: false,
     title: "Political Interference / Member State Demands",
     day: 4,
     category: "Institutional Authority / Public Communication",
@@ -628,6 +648,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-014",
+    isCorePath: true,
     title: "Outbreak Trajectory Briefing",
     day: 5,
     category: "Surveillance & Data Sharing",
@@ -654,6 +675,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-015",
+    isCorePath: true,
     title: "IHR Reform Proposal (Legacy Decision)",
     day: 5,
     category: "Surveillance & Data Sharing / Institutional Authority",
@@ -691,6 +713,7 @@ export const eventSeed: EventSeed[] = [
   },
   {
     id: "EVT-016",
+    isCorePath: true,
     title: "After-Action Report Initiation (Administrative Close)",
     day: 5,
     category: "Administrative close",

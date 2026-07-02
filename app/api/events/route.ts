@@ -21,7 +21,13 @@ export async function GET() {
   }
 
   if (session!.user.role === "instructor") {
-    return NextResponse.json({ events: allEvents, dispatches: allDispatches, chainStatus });
+    const allTeams = await db.query.teams.findMany();
+    return NextResponse.json({
+      events: allEvents,
+      dispatches: allDispatches,
+      chainStatus,
+      teams: allTeams.map((t) => ({ id: t.id, regionId: t.regionId })),
+    });
   }
 
   const myDispatches = allDispatches.filter((d) => d.targetTeamId === session!.user.teamId);

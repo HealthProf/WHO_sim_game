@@ -11,17 +11,22 @@ import {
   coordinationMessages,
   instructorActions,
   globalFeedItems,
+  teamNotifications,
+  resourcePledges,
+  snapVoteResponses,
+  snapVotes,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
 
 // Resets the game to a fresh start: wipes every in-progress-game table
 // (dispatches, decisions, scores, model history, coordination log, feed
-// items, action log) and restores model_state/global_state to their
-// original seeded values, derived from the regions table's starting*
-// columns so this never gets out of sync with lib/db/seed-data/regions.ts.
-// Leaves regions, events, event_chain_links, teams, and users untouched —
-// login accounts and static content are never affected by a reset.
+// items, action log, team notifications, pledges, snap votes) and restores
+// model_state/global_state to their original seeded values, derived from
+// the regions table's starting* columns so this never gets out of sync with
+// lib/db/seed-data/regions.ts. Leaves regions, events, event_chain_links,
+// teams, and users untouched — login accounts and static content are never
+// affected by a reset.
 export async function POST() {
   const { session, error } = await requireInstructor();
   if (error) return error;
@@ -31,6 +36,10 @@ export async function POST() {
   await db.delete(decisions); // -> eventDispatches
   await db.delete(coordinationMessages); // -> eventDispatches (nullable)
   await db.delete(globalFeedItems); // -> eventDispatches (nullable)
+  await db.delete(teamNotifications); // -> eventDispatches (nullable)
+  await db.delete(resourcePledges); // -> eventDispatches (nullable)
+  await db.delete(snapVoteResponses); // -> snapVotes
+  await db.delete(snapVotes);
   await db.delete(eventDispatches);
   await db.delete(modelStateHistory);
   await db.delete(instructorActions);
@@ -70,6 +79,7 @@ export async function POST() {
       simulationStartedAt: null,
       pausedAccumulatedMs: 0,
       pausedAt: null,
+      lastDriftAppliedAt: null,
       updatedAt: new Date(),
     })
     .where(eq(globalState.id, 1));

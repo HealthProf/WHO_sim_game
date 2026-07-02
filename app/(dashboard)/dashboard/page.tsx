@@ -3,6 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
+import { ProfileSections } from "@/components/profile-sections";
+import { TeamSnapVoteBanner } from "@/components/snap-vote-banner";
+import { RecentDevelopments } from "@/components/recent-developments";
 
 interface DashboardData {
   globalState: { currentDay: number; escalationState: "GREEN" | "AMBER" | "RED"; mediaPressureIndex: number; simulationStatus: string };
@@ -33,6 +36,7 @@ interface DashboardData {
     roleTitle: string;
     hqLocation: string;
   } | null;
+  notifications: { id: number; kind: string; message: string; createdAt: string }[];
 }
 
 const escalationColor: Record<string, string> = {
@@ -53,6 +57,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <TeamSnapVoteBanner />
+
       <section className="flex items-center gap-4">
         <span className={`px-3 py-1 rounded-full text-xs font-semibold text-white ${escalationColor[data.globalState.escalationState]}`}>
           {data.globalState.escalationState}
@@ -62,6 +68,11 @@ export default function DashboardPage() {
         <span className="text-sm text-slate-400">Media Pressure: {data.globalState.mediaPressureIndex}</span>
         <span className="text-sm text-slate-500 ml-auto capitalize">{data.globalState.simulationStatus.replace("_", " ")}</span>
       </section>
+      <p className="text-xs text-slate-500 -mt-6">
+        Rt drifts upward slowly on its own while the sim is running and no fresh containment decision has landed — idle time has a cost too.
+      </p>
+
+      {data.notifications.length > 0 && <RecentDevelopments notifications={data.notifications} />}
 
       {data.ownRegion && (
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -79,7 +90,9 @@ export default function DashboardPage() {
           </div>
           <details className="text-sm text-slate-300">
             <summary className="cursor-pointer text-slate-400">Full regional profile</summary>
-            <div className="mt-2 whitespace-pre-wrap">{data.ownRegion.profileMarkdown}</div>
+            <div className="mt-3">
+              <ProfileSections markdown={data.ownRegion.profileMarkdown} />
+            </div>
           </details>
         </section>
       )}

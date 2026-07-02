@@ -8,7 +8,9 @@ import { db } from "./db";
 import { eventDispatches, events, decisions, scores, users, globalState } from "./db/schema";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import { computeCompositePct, defaultScoresForTier } from "./scoring";
-import { applyModelDelta } from "./model-engine";
+import { applyModelDelta, applyPassiveDrift } from "./model-engine";
+import { pushConsequence } from "./consequences";
+import { closeExpiredSnapVotes } from "./snap-vote";
 
 export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
@@ -38,6 +40,9 @@ export async function processDeadlines() {
   if (!gs || gs.simulationStatus !== "running") {
     return { remindersSent: 0, autoApplied: 0, skipped: "simulation not running" };
   }
+
+  await applyPassiveDrift(gs).catch(() => {});
+  await closeExpiredSnapVotes().catch(() => {});
 
   const now = new Date();
   let remindersSent = 0;
@@ -91,6 +96,8 @@ export async function processDeadlines() {
       evidenceScore: dims.evidenceScore,
       politicalScore: dims.politicalScore,
       equityScore: dims.equityScore,
+      rawCompositePct: compositePct,
+      calibrationAdjustment: 0,
       compositePct,
       tier,
       suggestedTier: tier,
@@ -106,6 +113,15 @@ export async function processDeadlines() {
         deltas: deltas as never,
         submittingRegionId: region,
         reason: `${event.id} deadline expired, no response: ${tier} auto-applied`,
+      });
+      await pushConsequence({
+        event,
+        dispatchId: dispatch.id,
+        teamId: dispatch.targetTeamId,
+        regionId: region,
+        tier,
+        deltas: deltas as never,
+        actorUserId: systemUser.id,
       });
     }
 
