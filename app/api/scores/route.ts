@@ -4,7 +4,7 @@ import { decisions, eventDispatches, events, scores, teams } from "@/lib/db/sche
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
 import { computeCalibrationAdjustment, computeCompositePct, defaultScoresForTier, tierForCompositePct, type Tier } from "@/lib/scoring";
-import { applyModelDelta, clamp } from "@/lib/model-engine";
+import { applyModelDelta, applyOptimalShadowDelta, clamp } from "@/lib/model-engine";
 import { pushConsequence } from "@/lib/consequences";
 import { maybeAnnounceResolution } from "@/lib/announcements";
 import type { ModelDelta } from "@/lib/db/seed-data/events";
@@ -142,12 +142,17 @@ export async function scoreDecision(
 
   const team = await db.query.teams.findFirst({ where: eq(teams.id, decision.teamId) });
   if (team) {
-    const deltas = ((event.modelDeltaJson as Record<string, ModelDelta[]>) ?? {})[tier] ?? [];
+    const deltaJson = (event.modelDeltaJson as Record<string, ModelDelta[]>) ?? {};
+    const deltas = deltaJson[tier] ?? [];
     await applyModelDelta({
       deltas,
       submittingRegionId: team.regionId,
       reason: `${event.id} scored: ${tier}`,
     });
+    // Mirror the OPTIMAL-tier delta onto the counterfactual shadow
+    // simulation regardless of what tier actually happened — see
+    // simulation-docs and lib/model-engine.ts for why (debrief item 7).
+    await applyOptimalShadowDelta(deltaJson.OPTIMAL ?? [], team.regionId);
     await pushConsequence({
       event,
       dispatchId: dispatch.id,

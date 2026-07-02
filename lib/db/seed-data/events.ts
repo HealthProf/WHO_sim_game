@@ -14,9 +14,35 @@ export interface ModelDelta {
     | "hospitalCapacityPct"
     | "politicalTensionIndex"
     | "publicTrustIndex"
-    | "mediaPressureIndex";
+    | "populationHappinessIndex"
+    | "mediaPressureIndex"
+    | "fundRemaining"
+    | "ppeDaysRemaining"
+    | "antiviralsRemaining"
+    | "hcwSurgePct";
   region: "SELF" | "GLOBAL" | "AFRO" | "AMRO" | "EMRO" | "EURO" | "SEARO" | "WPRO";
   delta: number;
+}
+
+// Concrete resource cost of picking a structured option — deducted from the
+// submitting team's own ledger immediately at submission time (not at
+// scoring), since "how much this path costs" is a property of the choice
+// itself, independent of how well it's later judged to have been executed.
+// Also drives the affordability gating on the event form (item 4 — a team
+// can't select an option it can't currently afford) and the "impact on your
+// dashboard" text shown for every option (item 1).
+export interface OptionCost {
+  fund?: number;
+  ppeDays?: number;
+  antivirals?: number;
+}
+
+export interface StructuredOption {
+  label: string;
+  text: string;
+  suggestedTier: Tier;
+  cost?: OptionCost;
+  impactDesc: string; // plain-language "what this costs / what it changes" shown to teams
 }
 
 export interface EventSeed {
@@ -33,7 +59,7 @@ export interface EventSeed {
   narrativeMarkdown: string;
   decisionPromptMarkdown: string;
   minRationaleWords: number;
-  structuredOptionsJson: { label: string; text: string; suggestedTier: Tier }[] | null;
+  structuredOptionsJson: StructuredOption[] | null;
   triggerConditionDesc: string;
   consequencesJson: { optimal: string; adequate: string; inadequate: string; critical: string };
   modelDeltaDesc: string;
@@ -82,10 +108,34 @@ export const eventSeed: EventSeed[] = [
       "Submit your formal position on PHEIC declaration: (1) are Article 12 criteria met, (2) recommended declaration language, (3) position on SEARO's terminology request.",
     minRationaleWords: 200,
     structuredOptionsJson: [
-      { label: "A", text: "Declare PHEIC immediately, standard language — economics irrelevant to Article 12.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Declare but with modified language acknowledging economic impact.", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Delay 48h for more data.", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "Abstain pending member state consultation.", suggestedTier: "INADEQUATE" },
+      {
+        label: "A",
+        text: "Declare PHEIC immediately, standard language — economics irrelevant to Article 12.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 300_000 },
+        impactDesc: "Costs $300K to mobilize the Emergency Committee's formal declaration process (legal drafting, translation, member-state notification). No PPE/antiviral impact.",
+      },
+      {
+        label: "B",
+        text: "Declare but with modified language acknowledging economic impact.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 150_000 },
+        impactDesc: "Costs $150K in legal drafting for the modified language — cheaper than A, but the hedged wording is what keeps this at Adequate rather than Optimal.",
+      },
+      {
+        label: "C",
+        text: "Delay 48h to gather additional case/transmission data before deciding.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No direct cost — but every hour of delay is an hour of undetected transmission continuing unchecked, and it hands EURO an opening to act unilaterally before WHO has spoken.",
+      },
+      {
+        label: "D",
+        text: "Abstain pending full member-state consultation.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No direct cost — but WHO has no formal voice in the Emergency Committee's first session, and the vacuum gets filled by whoever moves first.",
+      },
     ],
     triggerConditionDesc: "Anchor, fires at simulation open (08:00 Day 1)",
     consequencesJson: {
@@ -127,10 +177,34 @@ export const eventSeed: EventSeed[] = [
       "SEARO responds to WHO's data request; WPRO/EURO submit formal position + any actions considered.",
     minRationaleWords: 150,
     structuredOptionsJson: [
-      { label: "A", text: "Release full sequence immediately.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Controlled release to WHO reference labs only (confidential).", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Refuse pending national review (~72h).", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "Request WHO mediation first.", suggestedTier: "INADEQUATE" },
+      {
+        label: "A",
+        text: "Release the full genomic sequence, including the RBD, to all international labs immediately.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 200_000 },
+        impactDesc: "Costs $200K for rapid re-sequencing/verification before public release. Fastest path to restoring outside labs' ability to independently validate anything about the pathogen.",
+      },
+      {
+        label: "B",
+        text: "Controlled release: full sequence shared confidentially with WHO reference labs only, not published publicly.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 100_000 },
+        impactDesc: "Costs $100K in secure-transfer/confidentiality-agreement overhead. Satisfies the technical need faster than a public release would, but the secrecy itself keeps drawing scrutiny.",
+      },
+      {
+        label: "C",
+        text: "Decline to release pending a national biosecurity review, estimated at 72 hours.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No direct cost — but WPRO's 24-hour border-closure threat is real, and every hour of continued redaction adds to the \"proof\" the misinformation campaign later cites.",
+      },
+      {
+        label: "D",
+        text: "Request WHO convene formal mediation between SEARO and the states threatening border closure before deciding.",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 50_000 },
+        impactDesc: "Costs $50K to convene mediation. Buys a little goodwill for process, but doesn't get the sequence into anyone's hands any faster than outright refusal.",
+      },
     ],
     triggerConditionDesc: "Adaptive, fires 3h after EVT-001 resolves.",
     consequencesJson: {
@@ -177,9 +251,27 @@ export const eventSeed: EventSeed[] = [
       "EURO responds to Article 43 obligation + justifies measures. SEARO submits formal protest + any retaliatory/diplomatic response. Other teams state a position on whether WHO should publicly challenge EURO.",
     minRationaleWords: 150,
     structuredOptionsJson: [
-      { label: "A", text: "Full Article 43 notification with justification, maintain bans.", suggestedTier: "ADEQUATE" },
-      { label: "B", text: "Modify to risk-based screening per WHO guidance.", suggestedTier: "OPTIMAL" },
-      { label: "C", text: "Maintain bans, decline WHO notification (cites sovereignty).", suggestedTier: "INADEQUATE" },
+      {
+        label: "A",
+        text: "File full Article 43 notification with epidemiological justification; maintain the blanket bans as-is.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 500_000 },
+        impactDesc: "Costs $500K in legal/administrative notification overhead. Respects IHR process, but the underlying measures are still broader than the evidence supports.",
+      },
+      {
+        label: "B",
+        text: "Replace the blanket bans with risk-based entry screening at high-transit points, per WHO guidance, with a defined sunset clause.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 1_200_000 },
+        impactDesc: "Costs $1.2M to stand up screening infrastructure (testing stations, staff, humanitarian-corridor exemptions) — more expensive than just keeping the bans, but it's the only option that actually resolves MSF's supply-chain concern.",
+      },
+      {
+        label: "C",
+        text: "Maintain the bans and decline to file Article 43 notification, citing sovereign authority over border policy.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No direct cost — but this is a formal IHR violation, and AFRO's supply chain (routed through EURO) takes the collateral damage.",
+      },
     ],
     triggerConditionDesc: "Adaptive. Nominal 08:00 Day 2; early trigger (20:00 Day 1) if EVT-001 delayed or EVT-002 refused.",
     consequencesJson: {
@@ -228,10 +320,34 @@ export const eventSeed: EventSeed[] = [
       "Submit an NPI plan: (1) measures selected, (2) implementation timeline, (3) communication strategy, (4) equity provisions. Select all measures that apply: mask mandate, physical distancing, venue capacity limits, school measures, workplace guidance, mass gathering restrictions, hand hygiene infrastructure, targeted high-risk-setting measures.",
     minRationaleWords: 250,
     structuredOptionsJson: [
-      { label: "LAYERED", text: "Layered bundle (4+ measures) + equity provisions.", suggestedTier: "OPTIMAL" },
-      { label: "MODERATE", text: "Moderate bundle (2-3 measures) + some equity provisions.", suggestedTier: "ADEQUATE" },
-      { label: "MINIMAL", text: "1-2 measures, delayed, no equity provisions.", suggestedTier: "INADEQUATE" },
-      { label: "NONE", text: "No measures / counterproductive measures.", suggestedTier: "CRITICAL_FAILURE" },
+      {
+        label: "LAYERED",
+        text: "Full layered bundle: mask mandate + physical distancing + venue capacity limits + mass-gathering restrictions, paired with wage-replacement support for affected workers and hygiene-infrastructure investment (hand-washing stations, ventilation upgrades in high-risk settings).",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 3_000_000, ppeDays: 5 },
+        impactDesc: "Costs $3.0M (wage-replacement support + hygiene infrastructure) and draws down 5 days of PPE stock (mask distribution). The largest single Rt lever in the simulation (−15 to −25%), but it's visibly disruptive to daily life and the most expensive option on the table.",
+      },
+      {
+        label: "MODERATE",
+        text: "Moderate bundle: mask mandate + venue capacity limits, backed by a public information campaign, but no dedicated wage-replacement or equity support.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 900_000 },
+        impactDesc: "Costs $900K (campaign + limited enforcement). Meaningfully slows transmission (Rt −8 to −14%) at a fraction of the Layered bundle's cost, but with no equity provisions it falls hardest on workers who can't avoid crowded settings.",
+      },
+      {
+        label: "MINIMAL",
+        text: "A single non-mandatory measure (mask advisory only), implemented after a 48-hour consultation delay.",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 150_000 },
+        impactDesc: "Costs only $150K and preserves near-term political capital — but a single non-mandatory measure implemented late has minimal epidemiological effect, and it's what sets up the compliance-collapse risk later in the week.",
+      },
+      {
+        label: "NONE",
+        text: "No new measures beyond existing guidance; defer to member states.",
+        suggestedTier: "CRITICAL_FAILURE",
+        cost: {},
+        impactDesc: "No cost, no disruption to anyone right now — but Rt continues climbing unchecked, and this is the single most reliable path to triggering a healthcare capacity surge in your region within days.",
+      },
     ],
     triggerConditionDesc: "Adaptive — fires when global Rt stays above 3.5 for 12+ hours, or automatically Day 2 afternoon.",
     consequencesJson: {
@@ -272,10 +388,34 @@ export const eventSeed: EventSeed[] = [
       "SEARO submits an emergency resource request. EMRO states its position on sharing own limited stock. All others indicate contribution + any conditions.",
     minRationaleWords: 150,
     structuredOptionsJson: [
-      { label: "A", text: "Full solidarity — contribute 20% of regional PPE stock, no conditions.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Conditional — 10% with accountability reporting.", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Decline contribution, offer technical/logistics support instead.", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "No response.", suggestedTier: "CRITICAL_FAILURE" },
+      {
+        label: "A",
+        text: "Full solidarity — contribute a meaningful share of your regional PPE stock to SEARO, no conditions attached.",
+        suggestedTier: "OPTIMAL",
+        cost: { ppeDays: 4 },
+        impactDesc: "Costs 4 days of your own PPE stock, transferred to SEARO with no strings attached. The biggest dent in your own reserve of any option here — a real bet that solidarity now is worth the exposure risk to your own frontline staff later.",
+      },
+      {
+        label: "B",
+        text: "Conditional contribution — a smaller share of PPE stock, with accountability reporting attached.",
+        suggestedTier: "ADEQUATE",
+        cost: { ppeDays: 2 },
+        impactDesc: "Costs 2 days of your own PPE stock. Half the exposure of full solidarity, but the reporting conditions slow down how fast SEARO can actually use it.",
+      },
+      {
+        label: "C",
+        text: "Decline to contribute PPE; offer technical/logistics support instead (supply-chain expertise, not physical stock).",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 200_000 },
+        impactDesc: "Costs $200K in technical support instead of any PPE — keeps your own stock fully intact, but SEARO's actual shortage (physical masks and gowns) doesn't get any smaller.",
+      },
+      {
+        label: "D",
+        text: "No response.",
+        suggestedTier: "CRITICAL_FAILURE",
+        cost: {},
+        impactDesc: "No cost — and no help. SEARO's healthcare workers keep working exposed while this option costs your region nothing.",
+      },
     ],
     triggerConditionDesc: "Adaptive — fires when SEARO Rt > 3.8 AND SEARO PPE stock < 15 days, or automatically at 17:00 Day 2.",
     consequencesJson: {
@@ -364,10 +504,34 @@ export const eventSeed: EventSeed[] = [
       "Teams must agree on ONE joint WHO response within 3 hours (inter-regional coordination required via the coordination log). If no agreement, independent responses count as a coordination failure.",
     minRationaleWords: 150,
     structuredOptionsJson: [
-      { label: "A", text: "Joint acknowledgment — accept equity shortfall, commit to revised framework for next tranche.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Joint rebuttal — defend allocation, reject characterization.", suggestedTier: "INADEQUATE" },
-      { label: "C", text: "Partial acknowledgment.", suggestedTier: "ADEQUATE" },
-      { label: "D", text: "No joint response (independent).", suggestedTier: "CRITICAL_FAILURE" },
+      {
+        label: "A",
+        text: "Joint acknowledgment — accept the equity shortfall publicly and commit to a specific, revised allocation framework for the next tranche.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 400_000 },
+        impactDesc: "Costs $400K to draft and coordinate the revised framework document across all six regions. The most expensive communication option here, but it's the only one that gives EVT-012 a concrete commitment to be held to.",
+      },
+      {
+        label: "B",
+        text: "Joint rebuttal — defend the original allocation and reject MSF's characterization.",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 250_000 },
+        impactDesc: "Costs $250K in legal/communications defense. Cheaper than acknowledging fault, but defending an allocation MSF has already publicly criticized tends to intensify coverage rather than end it.",
+      },
+      {
+        label: "C",
+        text: "Partial acknowledgment — note the concern without a specific corrective commitment.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 150_000 },
+        impactDesc: "Costs $150K. Cheapest of the coordinated responses, and stabilizes the story without fully resolving it.",
+      },
+      {
+        label: "D",
+        text: "No joint response — each region issues its own independent statement.",
+        suggestedTier: "CRITICAL_FAILURE",
+        cost: {},
+        impactDesc: "No cost — but six different, likely conflicting statements from six regions reads as institutional disarray, and this is what the coordination-failure penalty is scored against.",
+      },
     ],
     triggerConditionDesc: "Adaptive, fires 2h after EVT-006 resolves.",
     consequencesJson: {
@@ -411,10 +575,34 @@ export const eventSeed: EventSeed[] = [
       "AMRO addresses the disclosure — was it disclosed to WHO, does it violate agreements, what corrective action? Other teams state their position/recommended WHO action.",
     minRationaleWords: 150,
     structuredOptionsJson: [
-      { label: "A", text: "Acknowledge, commit to sharing a portion via COVAX.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Defend as sovereign right, offer transparency.", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Dispute characterization, request WHO fact-finding.", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "No response pending legal review.", suggestedTier: "CRITICAL_FAILURE" },
+      {
+        label: "A",
+        text: "Acknowledge the disclosure and commit to routing a meaningful share of the bilateral doses back through COVAX.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 300_000 },
+        impactDesc: "Costs $300K in transparency review and coordination with the member state. The only option that actually gives something back rather than just managing the story.",
+      },
+      {
+        label: "B",
+        text: "Defend the bilateral deal as sovereign right, while offering full transparency on its terms.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 100_000 },
+        impactDesc: "Costs $100K in disclosure preparation. Cheapest credible option — manages the immediate story without committing any doses back.",
+      },
+      {
+        label: "C",
+        text: "Dispute the journalist's characterization and request a formal WHO fact-finding review.",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 200_000 },
+        impactDesc: "Costs $200K to initiate the review. Buys time, but disputing a documented leak rather than addressing it tends to read as evasive.",
+      },
+      {
+        label: "D",
+        text: "No public response pending internal legal review.",
+        suggestedTier: "CRITICAL_FAILURE",
+        cost: {},
+        impactDesc: "No cost — but silence on an already-public leaked document reads as confirmation, and AFRO/SEARO are watching this response closely after EVT-006.",
+      },
     ],
     triggerConditionDesc: "Adaptive — fires if AMRO's EVT-006 allocation disproportionately retained doses, or automatically 13:00 Day 3.",
     consequencesJson: {
@@ -455,12 +643,36 @@ export const eventSeed: EventSeed[] = [
       "Submit an emergency communication + enforcement strategy addressing: misinformation response, gathering recommendation, revised NPI package.",
     minRationaleWords: 300,
     structuredOptionsJson: [
-      { label: "A", text: "Recommend cancellation + community engagement + livestream alternative.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Recommend modification (capacity limit, outdoor, mask requirement).", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Permit with enhanced entry screening.", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "No recommendation, defer to member state.", suggestedTier: "INADEQUATE" },
+      {
+        label: "A",
+        text: "Recommend cancellation, paired with direct community engagement (organizer meetings, not just a public statement) and a livestream alternative.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 800_000 },
+        impactDesc: "Costs $800K to stand up the livestream infrastructure and run the engagement campaign. The most expensive option, but it's the only one that gives organizers and attendees a real alternative instead of just a prohibition.",
+      },
+      {
+        label: "B",
+        text: "Recommend modification — capacity limits, move outdoors where possible, mask requirement — rather than outright cancellation.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 300_000, ppeDays: 2 },
+        impactDesc: "Costs $300K plus 2 PPE-days (mask distribution at the venue). Cheaper and more politically palatable than cancellation, but a partial mitigation on an 80,000-person indoor gathering still leaves real transmission risk.",
+      },
+      {
+        label: "C",
+        text: "Permit the gathering with enhanced entry screening only.",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 150_000 },
+        impactDesc: "Costs $150K for screening staff at entry points. Entry screening catches symptomatic people on the way in — it does nothing about presymptomatic transmission once everyone's inside for hours.",
+      },
+      {
+        label: "D",
+        text: "No recommendation issued; defer entirely to the member state's own judgment.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No cost — but no guidance either, at the exact moment community trust in guidance is already collapsing.",
+      },
     ],
-    triggerConditionDesc: "Adaptive — fires only if 2+ regions scored Inadequate/Critical on EVT-004; otherwise EVT-009-ALT (lower-stakes variant) fires instead.",
+    triggerConditionDesc: "Adaptive — fires only if 2+ regions scored Inadequate/Critical on EVT-004; otherwise a lower-stakes misinformation-only variant fires instead (not separately implemented in this build — see the facilitator guide).",
     consequencesJson: {
       optimal: "A with robust engagement — compliance partially restored, Rt increase contained.",
       adequate: "B — compliance stabilizes, gathering proceeds with partial mitigation.",
@@ -499,10 +711,34 @@ export const eventSeed: EventSeed[] = [
       "Submit a coordinated misinformation response strategy: public statement on bioweapon claims, engagement with the preprint, recommended government messaging, specific support to SEARO.",
     minRationaleWords: 200,
     structuredOptionsJson: [
-      { label: "A", text: "Proactive — strong rebuttal with specific evidence, direct engagement with preprint authors/journal editors.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Measured — acknowledge concern, note investigation ongoing, don't directly address allegations.", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Reactive — respond only to direct media inquiries.", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "Escalate — request UN Security Council discussion (over-escalation).", suggestedTier: "CRITICAL_FAILURE" },
+      {
+        label: "A",
+        text: "Stand up a rapid-response communications unit: publish a detailed technical rebuttal citing genomic evidence, and directly contact the preprint's authors and their journal's editors requesting a correction or retraction review.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 700_000 },
+        impactDesc: "Costs $700K to stand up the rapid-response unit and the legal/scientific review of the preprint's claims. Historically the fastest way to slow a viral false claim — but directly contacting named authors carries real reputational risk if it isn't handled carefully; it can be read as institutional pressure on independent researchers rather than good-faith engagement.",
+      },
+      {
+        label: "B",
+        text: "Issue one coordinated statement acknowledging public concern, noting that all hypotheses remain under investigation, without addressing the specific bioweapon claims directly.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 150_000 },
+        impactDesc: "Costs $150K for a single coordinated statement. Far cheaper than a full rapid-response campaign, and carries little risk of becoming its own story — but it's also slower to actually slow the spread of the claim.",
+      },
+      {
+        label: "C",
+        text: "Respond only when directly asked by credentialed media outlets; no proactive statement.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No direct cost, and it avoids amplifying the claim by engaging with it. But a fast-moving viral claim with no public response from WHO in the gap is often read by the public as tacit confirmation — silence has its own cost, it's just not a budget line.",
+      },
+      {
+        label: "D",
+        text: "Formally request the UN Security Council convene an emergency session addressing the disinformation campaign as a security threat.",
+        suggestedTier: "CRITICAL_FAILURE",
+        cost: { fund: 1_200_000 },
+        impactDesc: "Costs $1.2M in formal diplomatic process and staff time — the most expensive option by far. Elevating a social-media conspiracy theory to the UN's highest security forum can be read as WHO itself treating the claim as credible enough to require a Security Council response, which tends to legitimize exactly what you're trying to shut down.",
+      },
     ],
     triggerConditionDesc: "Adaptive — fires when Media Pressure Index > 65, or automatically 18:00 Day 3.",
     consequencesJson: {
@@ -546,10 +782,34 @@ export const eventSeed: EventSeed[] = [
       "All teams except AFRO specify deployment numbers, duration, conditions, own-capacity impact management. AFRO specifies where HCWs are most needed + support infrastructure available.",
     minRationaleWords: 200,
     structuredOptionsJson: [
-      { label: "A", text: "Full deployment — 15% of surplus HCW capacity, 7-day rotation.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Partial — 7%, 5-day rotation.", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Financial contribution only (fund third-party recruitment).", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "Decline — surge risk too high.", suggestedTier: "INADEQUATE" },
+      {
+        label: "A",
+        text: "Full deployment — commit 15% of your surplus HCW capacity to AFRO for a 7-day rotation.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 1_500_000 },
+        impactDesc: "Costs $1.5M in deployment logistics (travel, housing, coordination with AFRO's health ministries) on top of committing real staff time away from your own hospitals. The most impactful option for AFRO and the most expensive/disruptive for you.",
+      },
+      {
+        label: "B",
+        text: "Partial deployment — 7% of surplus HCW capacity, 5-day rotation.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 700_000 },
+        impactDesc: "Costs $700K in logistics. Roughly half the commitment and half the relief delivered, but far less strain on your own capacity.",
+      },
+      {
+        label: "C",
+        text: "Financial contribution only — fund third-party recruitment rather than deploying your own staff.",
+        suggestedTier: "INADEQUATE",
+        cost: { fund: 2_000_000 },
+        impactDesc: "Costs $2.0M — more expensive than either deployment option, since third-party recruitment carries a premium. Doesn't touch your own HCW capacity at all, but delivers meaningfully less relief per dollar than actually sending trained people.",
+      },
+      {
+        label: "D",
+        text: "Decline — the surge risk to your own health system is too high right now.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No cost to you — and no relief for AFRO's healthcare system, which is already at >95% bed occupancy with zero reserve capacity.",
+      },
     ],
     triggerConditionDesc: "Adaptive — fires 08:00 Day 4 if AFRO CFR multiplier > 3.5 or AFRO PPE stock < 10 days.",
     consequencesJson: {
@@ -641,10 +901,34 @@ export const eventSeed: EventSeed[] = [
       "Formal response addressing: accommodate/partially accommodate/reject; legal/normative basis; what (if anything) to communicate publicly.",
     minRationaleWords: 200,
     structuredOptionsJson: [
-      { label: "A", text: "Reject, citing WHO's constitutional independence; accept threatened consequences.", suggestedTier: "OPTIMAL" },
-      { label: "B", text: "Negotiate modified accommodation preserving independence in principle.", suggestedTier: "ADEQUATE" },
-      { label: "C", text: "Accommodate to preserve relationship/funding.", suggestedTier: "INADEQUATE" },
-      { label: "D", text: "Escalate to DG/Emergency Committee without a regional decision.", suggestedTier: "CRITICAL_FAILURE" },
+      {
+        label: "A",
+        text: "Reject the demand, citing WHO's constitutional independence, and accept whatever consequences the member state follows through on.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 400_000 },
+        impactDesc: "Costs $400K in legal defense of WHO's independence and managing the immediate fallout of a funding/access threat. The most expensive option up front, and the one that risks the member state actually following through — but it's also the only one that doesn't set a precedent for the next demand.",
+      },
+      {
+        label: "B",
+        text: "Negotiate a modified accommodation that preserves institutional independence in principle while addressing the member state's stated concern.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 200_000 },
+        impactDesc: "Costs $200K in negotiation overhead. Cheaper than outright rejection and usually avoids the worst consequences, but requires genuinely careful drafting to not tip into de facto accommodation.",
+      },
+      {
+        label: "C",
+        text: "Accommodate the demand to preserve the funding/operational relationship.",
+        suggestedTier: "INADEQUATE",
+        cost: {},
+        impactDesc: "No direct cost — the member state is satisfied, at least for now. But regional public communications become subject to their filter for the rest of the simulation, and the next region facing similar pressure has less room to say no.",
+      },
+      {
+        label: "D",
+        text: "Escalate to the DG/Emergency Committee without making a regional decision.",
+        suggestedTier: "CRITICAL_FAILURE",
+        cost: {},
+        impactDesc: "No cost — and no decision. Passing the problem upward without a position of your own reads as either indecision or tacit capitulation, and the demanding member state notices the difference.",
+      },
     ],
     triggerConditionDesc: "Adaptive — fires when any region's political tension index > 70.",
     consequencesJson: {
@@ -716,10 +1000,34 @@ export const eventSeed: EventSeed[] = [
       "(1) identify 2 most significant IHR gaps revealed this week, (2) specify supported amendments and why, (3) address sovereignty interaction, (4) reflect on at least one of the team's own decisions this week that the proposed reform would have prevented or improved.",
     minRationaleWords: 400,
     structuredOptionsJson: [
-      { label: "A", text: "Enforcement package — stronger IHR compliance mechanisms, financial penalties for non-reporting.", suggestedTier: "ADEQUATE" },
-      { label: "B", text: "Equity package — enshrine health equity in IHR Article 2, mandatory COVAX-equivalent mechanism.", suggestedTier: "OPTIMAL" },
-      { label: "C", text: "Transparency package — mandatory real-time data sharing with independent verification.", suggestedTier: "ADEQUATE" },
-      { label: "D", text: "Custom — team-proposed framework.", suggestedTier: "ADEQUATE" },
+      {
+        label: "A",
+        text: "Enforcement package — stronger IHR compliance mechanisms, financial penalties for non-reporting.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 100_000 },
+        impactDesc: "Costs $100K in proposal drafting. Addresses non-compliance directly, but penalties alone don't fix the surveillance-capacity gaps that made non-compliance possible in the first place.",
+      },
+      {
+        label: "B",
+        text: "Equity package — enshrine health equity in IHR Article 2, mandatory COVAX-equivalent mechanism for future emergencies.",
+        suggestedTier: "OPTIMAL",
+        cost: { fund: 100_000 },
+        impactDesc: "Costs $100K in proposal drafting — same cost as the other packages, so this is a values choice, not a budget one. Most directly ties institutional reform to what actually happened this week.",
+      },
+      {
+        label: "C",
+        text: "Transparency package — mandatory real-time data sharing with independent verification.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 100_000 },
+        impactDesc: "Costs $100K in proposal drafting. Would have directly changed how EVT-002 played out, but doesn't address the equity gaps from the vaccine allocation events.",
+      },
+      {
+        label: "D",
+        text: "Custom — propose your own framework not covered by the above.",
+        suggestedTier: "ADEQUATE",
+        cost: { fund: 150_000 },
+        impactDesc: "Costs $150K — more drafting work than the pre-built packages. Only scores well if it's specific and genuinely tied to your team's own decisions this week, not generic.",
+      },
     ],
     triggerConditionDesc: "Adaptive, fires 30 minutes after EVT-014 delivery is confirmed.",
     consequencesJson: {

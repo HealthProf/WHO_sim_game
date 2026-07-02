@@ -18,11 +18,33 @@ interface MyHighlights {
   weakest: TeamHighlightEntry[];
 }
 
+interface RegionFinalResult {
+  regionId: string;
+  actualConfirmed: number;
+  actualDeaths: number;
+  optimalConfirmed: number;
+  optimalDeaths: number;
+  infectionsPrevented: number;
+  deathsPrevented: number;
+}
+
+interface FinalResults {
+  regions: RegionFinalResult[];
+  totalActualConfirmed: number;
+  totalActualDeaths: number;
+  totalOptimalConfirmed: number;
+  totalOptimalDeaths: number;
+  totalInfectionsPrevented: number;
+  totalDeathsPrevented: number;
+}
+
 export default function TeamSummaryPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["summary-report"],
-    queryFn: () => apiFetch<{ rounds: SummaryRound[]; myHighlights: MyHighlights | null }>("/api/summary-report"),
+    queryFn: () => apiFetch<{ rounds: SummaryRound[]; myHighlights: MyHighlights | null; finalResults: FinalResults }>("/api/summary-report"),
   });
+
+  const myRegionResult = data?.myHighlights ? data.finalResults.regions.find((r) => r.regionId === data.myHighlights!.regionId) : null;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -33,6 +55,41 @@ export default function TeamSummaryPage() {
           how each region approached the same events.
         </p>
       </div>
+
+      {data?.finalResults && (
+        <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <h2 className="font-medium">Final Results: Actual vs. Ideal Playthrough</h2>
+          <p className="text-xs text-slate-400">
+            &quot;Ideal&quot; is a parallel shadow simulation that received only the best-tier consequence at every
+            decision point across every region — a realistic ceiling on what this session could have achieved.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-500">World Confirmed (actual)</p>
+              <p className="text-lg font-bold">{data.finalResults.totalActualConfirmed.toLocaleString()}</p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-500">World Deaths (actual)</p>
+              <p className="text-lg font-bold">{data.finalResults.totalActualDeaths.toLocaleString()}</p>
+            </div>
+            <div className="bg-amber-950/40 border border-amber-800 rounded-lg p-3">
+              <p className="text-xs text-amber-300">Infections Preventable</p>
+              <p className="text-lg font-bold">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
+            </div>
+            <div className="bg-red-950/40 border border-red-800 rounded-lg p-3">
+              <p className="text-xs text-red-300">Deaths Preventable</p>
+              <p className="text-lg font-bold">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
+            </div>
+          </div>
+          {myRegionResult && (
+            <p className="text-xs text-slate-400">
+              Your region ({myRegionResult.regionId}): {myRegionResult.actualConfirmed.toLocaleString()} confirmed /{" "}
+              {myRegionResult.actualDeaths.toLocaleString()} deaths actual, vs. {myRegionResult.optimalConfirmed.toLocaleString()} /{" "}
+              {myRegionResult.optimalDeaths.toLocaleString()} under an ideal playthrough.
+            </p>
+          )}
+        </section>
+      )}
 
       {data?.myHighlights && (
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 grid sm:grid-cols-2 gap-4 text-sm">

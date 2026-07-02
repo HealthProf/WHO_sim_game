@@ -4,6 +4,7 @@ import { eventDispatches, decisions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
 import { computeTeamHighlights } from "@/lib/summary-report";
+import { computeFinalResults } from "@/lib/final-results";
 
 // After-action debrief artifacts per simulation-docs/03-events.md EVT-014/
 // EVT-016 implementation notes and 05-product-requirements.md §10: model
@@ -56,6 +57,8 @@ export async function GET() {
     if (toRegion) pledgeTotals[toRegion].received += 1;
   }
 
+  const finalResults = await computeFinalResults();
+
   return NextResponse.json({
     modelStateHistory: history,
     evt006Allocations: evt006,
@@ -63,5 +66,6 @@ export async function GET() {
     mostConsequentialScores: mostConsequential,
     teamHighlights,
     pledgeTotals,
+    finalResults,
   });
 }

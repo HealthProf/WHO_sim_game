@@ -4,9 +4,9 @@
 // Model Impact and § Escalation States.
 
 import { db } from "./db";
-import { modelState, modelStateHistory, globalState, regions } from "./db/schema";
+import { modelState, modelStateOptimal, modelStateHistory, globalState } from "./db/schema";
 import { eq } from "drizzle-orm";
-import type { Tier, ModelDelta } from "./db/seed-data/events";
+import type { ModelDelta } from "./db/seed-data/events";
 
 const ALL_REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"] as const;
 
@@ -58,6 +58,11 @@ const FIELD_BOUNDS: Record<string, [number, number]> = {
   hospitalCapacityPct: [0, 100],
   politicalTensionIndex: [0, 100],
   publicTrustIndex: [0, 100],
+  populationHappinessIndex: [0, 100],
+  hcwSurgePct: [0, 100],
+  fundRemaining: [0, Infinity],
+  ppeDaysRemaining: [0, Infinity],
+  antiviralsRemaining: [0, Infinity],
 };
 
 export async function applyFieldDelta(
@@ -93,6 +98,10 @@ const SIGNIFICANT_DELTA_THRESHOLDS: Partial<Record<ModelDelta["field"], number>>
   mediaPressureIndex: 15,
   surveillanceIndex: 3,
   hospitalCapacityPct: 15,
+  populationHappinessIndex: 15,
+  fundRemaining: 5_000_000,
+  ppeDaysRemaining: 10,
+  antiviralsRemaining: 2000,
 };
 
 export function isSignificantDelta(deltas: ModelDelta[]): boolean {
@@ -154,6 +163,41 @@ export async function computeGlobalRt(): Promise<number> {
   return weightSum > 0 ? weightedRtSum / weightSum : 0;
 }
 
+// --- Counterfactual "Optimal" shadow simulation (see modelStateOptimal in
+// lib/db/schema.ts and simulation-docs — item 7 of the debrief redesign) ---
+//
+// Only a subset of ModelDelta fields exist on the shadow table (it tracks
+// epidemic/social outcomes, not the resource economy — fund/PPE/antivirals
+// deltas simply don't apply to "what if every call had been Optimal").
+const SHADOW_FIELDS = new Set(["rt", "cfrMultiplier", "publicTrustIndex", "populationHappinessIndex"]);
+const SHADOW_BOUNDS: Record<string, [number, number]> = {
+  rt: [0, 10],
+  cfrMultiplier: [0, 10],
+  publicTrustIndex: [0, 100],
+  populationHappinessIndex: [0, 100],
+};
+
+// Called alongside applyModelDelta specifically from the scoring code paths
+// (never from budget/market/pledge/snap-vote mechanics, which aren't a
+// per-event decision tier) — mirrors the event's OPTIMAL-tier deltas onto
+// the shadow table regardless of what tier actually happened.
+export async function applyOptimalShadowDelta(deltas: ModelDelta[], submittingRegionId: string) {
+  for (const delta of deltas) {
+    if (!SHADOW_FIELDS.has(delta.field)) continue;
+    const targetRegions = delta.region === "SELF" ? [submittingRegionId] : delta.region === "GLOBAL" ? [...ALL_REGIONS] : [delta.region];
+    for (const regionId of targetRegions) {
+      const state = await db.query.modelStateOptimal.findFirst({ where: eq(modelStateOptimal.regionId, regionId) });
+      if (!state) continue;
+      const [min, max] = SHADOW_BOUNDS[delta.field] ?? [-Infinity, Infinity];
+      const next = clamp((state[delta.field as keyof typeof state] as number) + delta.delta, min, max);
+      await db
+        .update(modelStateOptimal)
+        .set({ [delta.field]: next, updatedAt: new Date() } as never)
+        .where(eq(modelStateOptimal.regionId, regionId));
+    }
+  }
+}
+
 // Passive drift: "the virus doesn't wait for you." A small continuous Rt
 // creep applied to every region while the simulation is running, independent
 // of any scored decision — so idle real time between dispatched events still
@@ -170,11 +214,34 @@ export async function computeGlobalRt(): Promise<number> {
 // responsive to decisions: good NPI calls visibly slow case growth for the
 // rest of the session, a CFR-multiplier spike visibly worsens the death
 // count relative to new cases from that point on.
+//
+// The identical formula also runs against modelStateOptimal (using ITS OWN
+// rt/cfrMultiplier, which only ever received Optimal-tier deltas) so the
+// counterfactual trajectory develops in lockstep with the real one across
+// the whole session, not just at the moments a decision was scored.
 const DRIFT_RATE_PER_MINUTE = 0.015; // Rt units per real minute, per region
 const DRIFT_BATCH_MINUTES = 2;
 const BASE_CFR = 0.008; // 0.8% base CFR per 01-scenario.md, before the regional multiplier
 
-export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDriftAppliedAt: Date | null; simulationStartedAt: Date | null }) {
+// Population happiness (item 8) drifts down slightly with every new death
+// this tick and with sustained escalation, independent of any single event's
+// modelDelta — general public morale erodes just from the crisis dragging on.
+const HAPPINESS_ESCALATION_DRAIN: Record<string, number> = { GREEN: 0, AMBER: 0.15, RED: 0.4 };
+
+function computeEpidemicGrowth(before: { rt: number; cfrMultiplier: number; confirmedCases: number; estimatedTrueCasesLow: number; estimatedTrueCasesHigh: number }, elapsedMinutes: number) {
+  const growthRatePerMinute = clamp(0.002 + before.rt * 0.006, 0, 0.05);
+  const newConfirmed = Math.max(1, Math.round(before.confirmedCases * growthRatePerMinute * elapsedMinutes));
+  const trueCaseGrowthFactor = before.confirmedCases > 0 ? (before.confirmedCases + newConfirmed) / before.confirmedCases : 1;
+  const newDeaths = Math.max(0, Math.round(newConfirmed * BASE_CFR * before.cfrMultiplier));
+  return {
+    newConfirmed,
+    newDeaths,
+    newEstTrueLow: Math.round(before.estimatedTrueCasesLow * trueCaseGrowthFactor),
+    newEstTrueHigh: Math.round(before.estimatedTrueCasesHigh * trueCaseGrowthFactor),
+  };
+}
+
+export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDriftAppliedAt: Date | null; simulationStartedAt: Date | null; escalationState?: string }) {
   const state = gs ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }));
   if (!state || state.simulationStatus !== "running") return;
 
@@ -184,6 +251,9 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
   if (elapsedMinutes < DRIFT_BATCH_MINUTES) return;
 
   const rtDelta = DRIFT_RATE_PER_MINUTE * elapsedMinutes;
+  const escalationState = state.escalationState ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }))?.escalationState ?? "GREEN";
+  const happinessDrain = HAPPINESS_ESCALATION_DRAIN[escalationState] ?? 0;
+
   const allRegions = await db.query.regions.findMany();
   for (const region of allRegions) {
     const before = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region.id) });
@@ -191,24 +261,17 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
 
     await applyFieldDelta(region.id, "rt", rtDelta);
 
-    // Case growth rate scales with current Rt (using the pre-drift value —
-    // this batch's own small Rt bump shouldn't retroactively inflate this
-    // batch's case growth). Floors above zero so a fully-suppressed region
-    // still sees the trickle of cases already in the pipeline get confirmed,
-    // and every region always grows by at least 1 case per batch so the
-    // numbers are visibly live even when the underlying rate rounds to 0.
-    const growthRatePerMinute = clamp(0.002 + before.rt * 0.006, 0, 0.05);
-    const newConfirmed = Math.max(1, Math.round(before.confirmedCases * growthRatePerMinute * elapsedMinutes));
-    const trueCaseGrowthFactor = before.confirmedCases > 0 ? (before.confirmedCases + newConfirmed) / before.confirmedCases : 1;
-    const newDeaths = Math.max(0, Math.round(newConfirmed * BASE_CFR * before.cfrMultiplier));
+    const growth = computeEpidemicGrowth(before, elapsedMinutes);
+    const happinessLoss = Math.round(happinessDrain * elapsedMinutes + growth.newDeaths * 0.05);
 
     await db
       .update(modelState)
       .set({
-        confirmedCases: before.confirmedCases + newConfirmed,
-        estimatedTrueCasesLow: Math.round(before.estimatedTrueCasesLow * trueCaseGrowthFactor),
-        estimatedTrueCasesHigh: Math.round(before.estimatedTrueCasesHigh * trueCaseGrowthFactor),
-        deaths: before.deaths + newDeaths,
+        confirmedCases: before.confirmedCases + growth.newConfirmed,
+        estimatedTrueCasesLow: growth.newEstTrueLow,
+        estimatedTrueCasesHigh: growth.newEstTrueHigh,
+        deaths: before.deaths + growth.newDeaths,
+        populationHappinessIndex: clamp(before.populationHappinessIndex - happinessLoss, 0, 100),
         updatedAt: new Date(),
       })
       .where(eq(modelState.regionId, region.id));
@@ -221,6 +284,28 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
         snapshotJson: updated,
         reason: "Passive drift: outbreak progression + no active containment measures scored recently",
       });
+    }
+
+    // Mirror the same passage-of-time effects onto the shadow simulation,
+    // using ITS OWN rt/cfrMultiplier (which diverges from the real one as
+    // Optimal-tier deltas accumulate differently than actual ones).
+    const shadow = await db.query.modelStateOptimal.findFirst({ where: eq(modelStateOptimal.regionId, region.id) });
+    if (shadow) {
+      const shadowRt = clamp(shadow.rt + rtDelta, 0, 10);
+      const shadowGrowth = computeEpidemicGrowth({ ...shadow, rt: shadow.rt }, elapsedMinutes);
+      const shadowHappinessLoss = Math.round(happinessDrain * elapsedMinutes + shadowGrowth.newDeaths * 0.05);
+      await db
+        .update(modelStateOptimal)
+        .set({
+          rt: shadowRt,
+          confirmedCases: shadow.confirmedCases + shadowGrowth.newConfirmed,
+          estimatedTrueCasesLow: shadowGrowth.newEstTrueLow,
+          estimatedTrueCasesHigh: shadowGrowth.newEstTrueHigh,
+          deaths: shadow.deaths + shadowGrowth.newDeaths,
+          populationHappinessIndex: clamp(shadow.populationHappinessIndex - shadowHappinessLoss, 0, 100),
+          updatedAt: new Date(),
+        })
+        .where(eq(modelStateOptimal.regionId, region.id));
     }
   }
 

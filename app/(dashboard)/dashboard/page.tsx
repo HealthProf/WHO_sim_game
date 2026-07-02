@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
 import { ProfileSections } from "@/components/profile-sections";
 import { TeamSnapVoteBanner } from "@/components/snap-vote-banner";
+import { BudgetCycleBanner } from "@/components/budget-cycle-banner";
 import { RecentDevelopments } from "@/components/recent-developments";
 
 interface DashboardData {
@@ -32,11 +33,14 @@ interface DashboardData {
     hcwSurgePct: number;
     politicalTensionIndex: number;
     publicTrustIndex: number;
+    populationHappinessIndex: number;
     profileMarkdown: string;
     roleTitle: string;
     hqLocation: string;
   } | null;
   notifications: { id: number; kind: string; message: string; createdAt: string }[];
+  globalAvgHappiness: number;
+  globalAvgPublicTrust: number;
 }
 
 const escalationColor: Record<string, string> = {
@@ -58,6 +62,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <TeamSnapVoteBanner />
+      <BudgetCycleBanner />
 
       <section className="flex items-center gap-4">
         <span className={`px-3 py-1 rounded-full text-xs font-semibold text-white ${escalationColor[data.globalState.escalationState]}`}>
@@ -66,6 +71,8 @@ export default function DashboardPage() {
         <span className="text-sm text-slate-400">Day {data.globalState.currentDay}</span>
         <span className="text-sm text-slate-400">Global Rt: {data.globalRt.toFixed(2)}</span>
         <span className="text-sm text-slate-400">Media Pressure: {data.globalState.mediaPressureIndex}</span>
+        <span className="text-sm text-slate-400">Global Avg. Public Trust: {data.globalAvgPublicTrust}</span>
+        <span className="text-sm text-slate-400">Global Avg. Happiness: {data.globalAvgHappiness}</span>
         <span className="text-sm text-slate-500 ml-auto capitalize">{data.globalState.simulationStatus.replace("_", " ")}</span>
       </section>
       <p className="text-xs text-slate-500 -mt-6">
@@ -87,6 +94,7 @@ export default function DashboardPage() {
             <Stat label="CFR multiplier" value={data.ownRegion.cfrMultiplier.toFixed(2)} />
             <Stat label="Political tension" value={data.ownRegion.politicalTensionIndex} />
             <Stat label="Public trust" value={data.ownRegion.publicTrustIndex} />
+            <Stat label="Population happiness" value={data.ownRegion.populationHappinessIndex} />
           </div>
           <details className="text-sm text-slate-300">
             <summary className="cursor-pointer text-slate-400">Full regional profile</summary>

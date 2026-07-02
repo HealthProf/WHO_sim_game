@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import { QueryError } from "@/components/query-error";
+import { regionColors } from "@/lib/who-region-map";
 import type { SummaryRound } from "@/lib/summary-report";
 
 interface TeamHighlightEntry {
@@ -13,6 +14,26 @@ interface TeamHighlightEntry {
   compositePct: number;
 }
 
+interface RegionFinalResult {
+  regionId: string;
+  actualConfirmed: number;
+  actualDeaths: number;
+  optimalConfirmed: number;
+  optimalDeaths: number;
+  infectionsPrevented: number;
+  deathsPrevented: number;
+}
+
+interface FinalResults {
+  regions: RegionFinalResult[];
+  totalActualConfirmed: number;
+  totalActualDeaths: number;
+  totalOptimalConfirmed: number;
+  totalOptimalDeaths: number;
+  totalInfectionsPrevented: number;
+  totalDeathsPrevented: number;
+}
+
 interface DebriefData {
   modelStateHistory: { id: number; regionId: string; day: number; reason: string; createdAt: string; snapshotJson: { rt: number; cfrMultiplier: number } }[];
   evt006Allocations: { regionId: string; allocation: Record<string, number> | null }[];
@@ -20,6 +41,7 @@ interface DebriefData {
   mostConsequentialScores: { score: { tier: string; compositePct: number }; decision: { id: number; rationaleText: string } | undefined }[];
   teamHighlights: { regionId: string; strongest: TeamHighlightEntry[]; weakest: TeamHighlightEntry[] }[];
   pledgeTotals: Record<string, { given: number; received: number }>;
+  finalResults: FinalResults;
 }
 
 export default function DebriefPage() {
@@ -32,6 +54,70 @@ export default function DebriefPage() {
   return (
     <div className="space-y-8">
       <h2 className="text-lg font-semibold">After-Action Debrief</h2>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
+        <div>
+          <h3 className="text-xl font-semibold">Final Results: Actual vs. Ideal Playthrough</h3>
+          <p className="text-sm text-slate-400 mt-1">
+            &quot;Actual&quot; is what really happened in this session. &quot;Ideal&quot; is a parallel shadow simulation that
+            received only the OPTIMAL-tier consequence at every decision point — a realistic ceiling on how much
+            better this outcome could have been, not a theoretical zero.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <FinalStat label="Actual Confirmed" value={data.finalResults.totalActualConfirmed.toLocaleString()} />
+          <FinalStat label="Actual Deaths" value={data.finalResults.totalActualDeaths.toLocaleString()} />
+          <FinalStat label="Ideal Confirmed" value={data.finalResults.totalOptimalConfirmed.toLocaleString()} tone="emerald" />
+          <FinalStat label="Ideal Deaths" value={data.finalResults.totalOptimalDeaths.toLocaleString()} tone="emerald" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-amber-950/40 border border-amber-800 rounded-lg p-4">
+            <p className="text-xs uppercase tracking-wide text-amber-300">Infections That Could Have Been Prevented</p>
+            <p className="text-3xl font-bold mt-1">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
+          </div>
+          <div className="bg-red-950/40 border border-red-800 rounded-lg p-4">
+            <p className="text-xs uppercase tracking-wide text-red-300">Deaths That Could Have Been Prevented</p>
+            <p className="text-3xl font-bold mt-1">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-slate-300 mb-2">Per-Region Breakdown</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-left text-slate-400 border-b border-slate-800">
+                  <th className="py-2 pr-4">Region</th>
+                  <th className="py-2 pr-4">Actual Confirmed</th>
+                  <th className="py-2 pr-4">Ideal Confirmed</th>
+                  <th className="py-2 pr-4">Infections Prevented</th>
+                  <th className="py-2 pr-4">Actual Deaths</th>
+                  <th className="py-2 pr-4">Ideal Deaths</th>
+                  <th className="py-2 pr-4">Deaths Prevented</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.finalResults.regions.map((r) => (
+                  <tr key={r.regionId} className="border-b border-slate-900">
+                    <td className="py-2 pr-4 font-medium">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ background: regionColors[r.regionId] }} />
+                      {r.regionId}
+                    </td>
+                    <td className="py-2 pr-4">{r.actualConfirmed.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-emerald-400">{r.optimalConfirmed.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-amber-400 font-semibold">{r.infectionsPrevented.toLocaleString()}</td>
+                    <td className="py-2 pr-4">{r.actualDeaths.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-emerald-400">{r.optimalDeaths.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-red-400 font-semibold">{r.deathsPrevented.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <section>
         <h3 className="font-medium mb-3">Round-by-Round Summary</h3>
@@ -124,6 +210,15 @@ export default function DebriefPage() {
           </tbody>
         </table>
       </section>
+    </div>
+  );
+}
+
+function FinalStat({ label, value, tone }: { label: string; value: string; tone?: "emerald" }) {
+  return (
+    <div className="bg-slate-800/50 rounded-lg p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`text-xl font-bold mt-1 ${tone === "emerald" ? "text-emerald-400" : ""}`}>{value}</p>
     </div>
   );
 }

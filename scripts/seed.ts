@@ -6,6 +6,7 @@ import {
   teams,
   users,
   modelState,
+  modelStateOptimal,
   globalState,
   events,
   eventChainLinks,
@@ -83,6 +84,24 @@ async function main() {
         hcwSurgePct: r.startingHcwSurgePct,
         politicalTensionIndex: r.startingPoliticalTension,
         publicTrustIndex: r.startingPublicTrust,
+        populationHappinessIndex: 60,
+      })
+      .onConflictDoNothing();
+
+    // Counterfactual "optimal" shadow (see lib/model-engine.ts) starts from
+    // the same Day-1 values as the real simulation.
+    await db
+      .insert(modelStateOptimal)
+      .values({
+        regionId: r.id,
+        rt: r.startingRt,
+        cfrMultiplier: r.startingCfrMultiplier,
+        confirmedCases: r.startingConfirmed,
+        estimatedTrueCasesLow: r.startingEstTrueLow,
+        estimatedTrueCasesHigh: r.startingEstTrueHigh,
+        deaths: r.startingDeaths,
+        publicTrustIndex: r.startingPublicTrust,
+        populationHappinessIndex: 60,
       })
       .onConflictDoNothing();
   }
