@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { decisions, eventDispatches, events, scores, teams } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { decisions, eventDispatches, events, scores, teams, modelState } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
 import { computeCalibrationAdjustment, computeCompositePct, defaultScoresForTier, tierForCompositePct, type Tier } from "@/lib/scoring";
 import { applyModelDelta, applyOptimalShadowDelta, clamp } from "@/lib/model-engine";
 import { pushConsequence } from "@/lib/consequences";
 import { maybeAnnounceResolution, announceDecisionRevealed } from "@/lib/announcements";
+import { maybeStakeholderReact } from "@/lib/stakeholders";
 import type { ModelDelta } from "@/lib/db/seed-data/events";
 
 // GET: priority-sorted scoring inbox. Sort key (see design discussion on
@@ -22,30 +23,35 @@ export async function GET() {
   const scoredIds = new Set((await db.query.scores.findMany()).map((s) => s.decisionId));
   const unscored = allDecisions.filter((d) => !scoredIds.has(d.id));
 
-  const enriched = await Promise.all(
-    unscored.map(async (d) => {
-      const dispatch = await db.query.eventDispatches.findFirst({ where: eq(eventDispatches.id, d.eventDispatchId) });
-      const event = dispatch ? await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) }) : null;
-      const team = await db.query.teams.findFirst({ where: eq(teams.id, d.teamId) });
+  const dispatchIds = [...new Set(unscored.map((d) => d.eventDispatchId).filter((id): id is number => id != null))];
+  const allDispatches = dispatchIds.length > 0 ? await db.query.eventDispatches.findMany({ where: inArray(eventDispatches.id, dispatchIds) }) : [];
+  const eventIds = [...new Set(allDispatches.map((d) => d.eventId))];
+  const allEvents = eventIds.length > 0 ? await db.query.events.findMany({ where: inArray(events.id, eventIds) }) : [];
+  const teamIds = [...new Set(unscored.map((d) => d.teamId))];
+  const allTeams = teamIds.length > 0 ? await db.query.teams.findMany({ where: inArray(teams.id, teamIds) }) : [];
 
-      const options = (event?.structuredOptionsJson as { label: string; suggestedTier: Tier }[] | null) ?? null;
-      const suggestedTier = options?.find((o) => o.label === d.structuredChoice)?.suggestedTier ?? null;
+  const enriched = unscored.map((d) => {
+    const dispatch = allDispatches.find((disp) => disp.id === d.eventDispatchId) ?? null;
+    const event = dispatch ? (allEvents.find((e) => e.id === dispatch.eventId) ?? null) : null;
+    const team = allTeams.find((t) => t.id === d.teamId) ?? null;
 
-      const ageMs = Date.now() - new Date(d.submittedAt).getTime();
-      const deadlineRemainingMs = dispatch?.deadlineAt ? new Date(dispatch.deadlineAt).getTime() - Date.now() : Infinity;
+    const options = (event?.structuredOptionsJson as { label: string; suggestedTier: Tier }[] | null) ?? null;
+    const suggestedTier = options?.find((o) => o.label === d.structuredChoice)?.suggestedTier ?? null;
 
-      return {
-        decision: d,
-        event,
-        team,
-        dispatch,
-        suggestedTier,
-        mandatoryReview: !!event?.requiresMandatoryReview,
-        ageMs,
-        deadlineRemainingMs,
-      };
-    })
-  );
+    const ageMs = Date.now() - new Date(d.submittedAt).getTime();
+    const deadlineRemainingMs = dispatch?.deadlineAt ? new Date(dispatch.deadlineAt).getTime() - Date.now() : Infinity;
+
+    return {
+      decision: d,
+      event,
+      team,
+      dispatch,
+      suggestedTier,
+      mandatoryReview: !!event?.requiresMandatoryReview,
+      ageMs,
+      deadlineRemainingMs,
+    };
+  });
 
   enriched.sort((a, b) => {
     if (a.mandatoryReview !== b.mandatoryReview) return a.mandatoryReview ? -1 : 1;
@@ -92,10 +98,10 @@ export async function scoreDecision(
   const event = dispatch ? await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) }) : null;
   if (!dispatch || !event) throw new Error("Event not found");
 
-  let evidenceScore: number, politicalScore: number, equityScore: number, fastPathed: boolean, suggestedTier: Tier | null;
+  let evidenceScore: number, politicalScore: number, equityScore: number, fastPathed: boolean;
 
   const options = (event.structuredOptionsJson as { label: string; suggestedTier: Tier }[] | null) ?? null;
-  suggestedTier = options?.find((o) => o.label === decision.structuredChoice)?.suggestedTier ?? null;
+  const suggestedTier = options?.find((o) => o.label === decision.structuredChoice)?.suggestedTier ?? null;
 
   if (body.acceptSuggested) {
     if (event.requiresMandatoryReview) {
@@ -153,6 +159,7 @@ export async function scoreDecision(
     // simulation regardless of what tier actually happened — see
     // simulation-docs and lib/model-engine.ts for why (debrief item 7).
     await applyOptimalShadowDelta(deltaJson.OPTIMAL ?? [], team.regionId);
+    const afterState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, team.regionId) });
     await pushConsequence({
       event,
       dispatchId: dispatch.id,
@@ -161,6 +168,7 @@ export async function scoreDecision(
       tier,
       deltas,
       actorUserId: scoredByUserId,
+      afterState: afterState ?? undefined,
     });
     await announceDecisionRevealed({
       eventId: event.id,
@@ -170,6 +178,7 @@ export async function scoreDecision(
       structuredChoice: decision.structuredChoice,
       tier,
     });
+    await maybeStakeholderReact(team.id, tier);
   }
 
   await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));

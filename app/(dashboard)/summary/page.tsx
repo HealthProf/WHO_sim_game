@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import type { SummaryRound } from "@/lib/summary-report";
+import type { FinalResults } from "@/lib/final-results";
+import type { TeamChapter } from "@/lib/team-chapter";
 
 interface TeamHighlightEntry {
   eventId: string;
@@ -18,30 +20,12 @@ interface MyHighlights {
   weakest: TeamHighlightEntry[];
 }
 
-interface RegionFinalResult {
-  regionId: string;
-  actualConfirmed: number;
-  actualDeaths: number;
-  optimalConfirmed: number;
-  optimalDeaths: number;
-  infectionsPrevented: number;
-  deathsPrevented: number;
-}
-
-interface FinalResults {
-  regions: RegionFinalResult[];
-  totalActualConfirmed: number;
-  totalActualDeaths: number;
-  totalOptimalConfirmed: number;
-  totalOptimalDeaths: number;
-  totalInfectionsPrevented: number;
-  totalDeathsPrevented: number;
-}
 
 export default function TeamSummaryPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["summary-report"],
-    queryFn: () => apiFetch<{ rounds: SummaryRound[]; myHighlights: MyHighlights | null; finalResults: FinalResults }>("/api/summary-report"),
+    queryFn: () =>
+      apiFetch<{ rounds: SummaryRound[]; myHighlights: MyHighlights | null; finalResults: FinalResults; myChapter: TeamChapter | null }>("/api/summary-report"),
   });
 
   const myRegionResult = data?.myHighlights ? data.finalResults.regions.find((r) => r.regionId === data.myHighlights!.regionId) : null;
@@ -55,6 +39,40 @@ export default function TeamSummaryPage() {
           how each region approached the same events.
         </p>
       </div>
+
+      {data?.myChapter && (
+        <section className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-6 space-y-3">
+          <p className="text-xs uppercase tracking-widest text-slate-500">Your Chapter</p>
+          <h2 className="text-2xl font-bold text-white">{data.myChapter.headline}</h2>
+          <p className="text-sm text-slate-300">{data.myChapter.narrative}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm pt-2">
+            <div className="bg-slate-800/60 rounded-lg p-3">
+              <p className="text-xs text-slate-500">Decisions Scored</p>
+              <p className="text-lg font-bold">{data.myChapter.totalDecisions}</p>
+            </div>
+            <div className="bg-slate-800/60 rounded-lg p-3">
+              <p className="text-xs text-slate-500">Optimal Calls</p>
+              <p className="text-lg font-bold text-emerald-400">{data.myChapter.tierCounts.OPTIMAL ?? 0}</p>
+            </div>
+            <div className="bg-slate-800/60 rounded-lg p-3">
+              <p className="text-xs text-slate-500">Final Deaths</p>
+              <p className="text-lg font-bold">{data.myChapter.actualDeaths.toLocaleString()}</p>
+            </div>
+            <div className="bg-slate-800/60 rounded-lg p-3">
+              <p className="text-xs text-slate-500">Deaths Prevented vs. Ideal</p>
+              <p className="text-lg font-bold text-red-400">{data.myChapter.deathsPrevented.toLocaleString()}</p>
+            </div>
+          </div>
+          {data.myChapter.keyDecisions.length > 0 && (
+            <div className="pt-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500 mb-1">Defining Moments</p>
+              {data.myChapter.keyDecisions.map((d, i) => (
+                <p key={i} className="text-xs text-slate-400">{d.eventId} — {d.eventTitle} ({d.tier.replace("_", " ")}, {d.compositePct.toFixed(0)}%)</p>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {data?.finalResults && (
         <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">

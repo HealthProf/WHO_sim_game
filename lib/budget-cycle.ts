@@ -29,11 +29,12 @@ import {
 } from "./db/schema";
 import { and, eq } from "drizzle-orm";
 import { computeSimClock } from "./sim-clock";
-
-const CYCLE_INTERVAL_NARRATIVE_DAYS = 14;
-const DEFAULT_DISBURSEMENT_PCT = 0.12;
-const RESPONSE_WINDOW_SECONDS = 90;
-const DONATION_WINDOW_SECONDS = 90;
+import {
+  BUDGET_CYCLE_INTERVAL_NARRATIVE_DAYS as CYCLE_INTERVAL_NARRATIVE_DAYS,
+  BUDGET_DEFAULT_DISBURSEMENT_PCT as DEFAULT_DISBURSEMENT_PCT,
+  BUDGET_RESPONSE_WINDOW_SECONDS as RESPONSE_WINDOW_SECONDS,
+  BUDGET_DONATION_WINDOW_SECONDS as DONATION_WINDOW_SECONDS,
+} from "./config";
 
 export function defaultAmountForRegion(startingFund: number): number {
   return Math.round(startingFund * DEFAULT_DISBURSEMENT_PCT);
@@ -83,27 +84,29 @@ export async function processBudgetCycleTimers() {
 
 export async function pushDefaultDisbursement(cycleId: number, actorUserId: number) {
   const allRegions = await db.query.regions.findMany();
+  const allTeams = await db.query.teams.findMany();
+  const responseRows: (typeof budgetCycleResponses.$inferInsert)[] = [];
   for (const r of allRegions) {
     const amount = defaultAmountForRegion(r.startingFund);
     await disburseToRegion(r.id, amount, `Budget cycle: standard disbursement ($${amount.toLocaleString()})`);
-    const team = await db.query.teams.findFirst({ where: eq(teams.regionId, r.id) });
-    if (team) {
-      await db.insert(budgetCycleResponses).values({ budgetCycleId: cycleId, teamId: team.id, choice: "accept", amountDisbursed: amount });
-    }
+    const team = allTeams.find((t) => t.regionId === r.id);
+    if (team) responseRows.push({ budgetCycleId: cycleId, teamId: team.id, choice: "accept", amountDisbursed: amount });
   }
+  if (responseRows.length > 0) await db.insert(budgetCycleResponses).values(responseRows);
   await closeCycle(cycleId, "default");
   await announceGlobally(`Budget cycle disbursed: standard resupply pushed to all six regions.`);
   await db.insert(instructorActions).values({ instructorUserId: actorUserId, actionType: "budget_cycle_default", targetDesc: `Cycle ${cycleId}: standard disbursement to all regions` });
 }
 
 export async function pushCustomDisbursement(cycleId: number, amounts: Record<string, number>, actorUserId: number) {
+  const allTeams = await db.query.teams.findMany();
+  const responseRows: (typeof budgetCycleResponses.$inferInsert)[] = [];
   for (const [regionId, amount] of Object.entries(amounts)) {
     await disburseToRegion(regionId, amount, `Budget cycle: instructor-adjusted disbursement ($${amount.toLocaleString()})`);
-    const team = await db.query.teams.findFirst({ where: eq(teams.regionId, regionId) });
-    if (team) {
-      await db.insert(budgetCycleResponses).values({ budgetCycleId: cycleId, teamId: team.id, choice: "accept", amountDisbursed: amount });
-    }
+    const team = allTeams.find((t) => t.regionId === regionId);
+    if (team) responseRows.push({ budgetCycleId: cycleId, teamId: team.id, choice: "accept", amountDisbursed: amount });
   }
+  if (responseRows.length > 0) await db.insert(budgetCycleResponses).values(responseRows);
   await closeCycle(cycleId, "custom");
   await announceGlobally(`Budget cycle disbursed: instructor-adjusted amounts pushed to all six regions.`);
   await db.insert(instructorActions).values({ instructorUserId: actorUserId, actionType: "budget_cycle_custom", targetDesc: `Cycle ${cycleId}: custom disbursement` });
@@ -114,9 +117,9 @@ export async function startSnapVoteCycle(cycleId: number, actorUserId: number) {
   await db.update(budgetCycles).set({ mode: "snap_vote", status: "collecting_responses", closesAt }).where(eq(budgetCycles.id, cycleId));
   await announceGlobally(`Budget cycle open: regions have ${RESPONSE_WINDOW_SECONDS}s to accept the standard disbursement or request more.`);
   const allTeams = await db.query.teams.findMany();
-  for (const team of allTeams) {
-    await db.insert(teamNotifications).values({ teamId: team.id, kind: "budget_cycle", message: `Budget cycle: accept your standard disbursement, or request more (you have ${RESPONSE_WINDOW_SECONDS}s).` });
-  }
+  await db.insert(teamNotifications).values(
+    allTeams.map((team) => ({ teamId: team.id, kind: "budget_cycle", message: `Budget cycle: accept your standard disbursement, or request more (you have ${RESPONSE_WINDOW_SECONDS}s).` }))
+  );
   await db.insert(instructorActions).values({ instructorUserId: actorUserId, actionType: "budget_cycle_snap_vote_started", targetDesc: `Cycle ${cycleId}` });
 }
 
@@ -134,10 +137,9 @@ async function closeResponsePhase(cycleId: number) {
   const respondedTeamIds = new Set(responses.map((r) => r.teamId));
 
   // Non-responding teams are treated as accepting the default.
-  for (const team of allTeams) {
-    if (!respondedTeamIds.has(team.id)) {
-      await db.insert(budgetCycleResponses).values({ budgetCycleId: cycleId, teamId: team.id, choice: "accept" });
-    }
+  const nonResponders = allTeams.filter((team) => !respondedTeamIds.has(team.id));
+  if (nonResponders.length > 0) {
+    await db.insert(budgetCycleResponses).values(nonResponders.map((team) => ({ budgetCycleId: cycleId, teamId: team.id, choice: "accept" as const })));
   }
 
   const requesters = responses.filter((r) => r.choice === "request_more");
@@ -151,16 +153,18 @@ async function closeResponsePhase(cycleId: number) {
   // Someone requested more — open the donation phase for everyone else.
   const closesAt = new Date(Date.now() + DONATION_WINDOW_SECONDS * 1000);
   await db.update(budgetCycles).set({ status: "collecting_donations", closesAt }).where(eq(budgetCycles.id, cycleId));
-  const requesterRegions = await Promise.all(requesters.map(async (r) => (await db.query.teams.findFirst({ where: eq(teams.id, r.teamId) }))?.regionId));
-  await announceGlobally(`Budget cycle: ${requesterRegions.filter(Boolean).join(", ")} requested additional funding — other regions have ${DONATION_WINDOW_SECONDS}s to donate part of their disbursement.`);
-  for (const team of allTeams) {
-    if (!requesters.some((r) => r.teamId === team.id)) {
-      await db.insert(teamNotifications).values({
+  const requesterTeamIds = new Set(requesters.map((r) => r.teamId));
+  const requesterRegions = allTeams.filter((t) => requesterTeamIds.has(t.id)).map((t) => t.regionId);
+  await announceGlobally(`Budget cycle: ${requesterRegions.join(", ")} requested additional funding — other regions have ${DONATION_WINDOW_SECONDS}s to donate part of their disbursement.`);
+  const nonRequesters = allTeams.filter((team) => !requesterTeamIds.has(team.id));
+  if (nonRequesters.length > 0) {
+    await db.insert(teamNotifications).values(
+      nonRequesters.map((team) => ({
         teamId: team.id,
         kind: "budget_cycle",
-        message: `${requesterRegions.filter(Boolean).join(", ")} requested extra funding this cycle — donate part of your own disbursement if you want to help (${DONATION_WINDOW_SECONDS}s window).`,
-      });
-    }
+        message: `${requesterRegions.join(", ")} requested extra funding this cycle — donate part of your own disbursement if you want to help (${DONATION_WINDOW_SECONDS}s window).`,
+      }))
+    );
   }
 }
 
@@ -195,10 +199,13 @@ async function closeDonationPhaseAndDisburse(cycleId: number) {
   const donatedByTeam = new Map<number, number>();
   for (const d of donations) donatedByTeam.set(d.fromTeamId, (donatedByTeam.get(d.fromTeamId) ?? 0) + d.amount);
 
+  const allTeams = await db.query.teams.findMany();
+  const allRegions = await db.query.regions.findMany();
+
   for (const response of responses) {
-    const team = await db.query.teams.findFirst({ where: eq(teams.id, response.teamId) });
+    const team = allTeams.find((t) => t.id === response.teamId);
     if (!team) continue;
-    const region = await db.query.regions.findFirst({ where: eq(regions.id, team.regionId) });
+    const region = allRegions.find((r) => r.id === team.regionId);
     if (!region) continue;
     const base = defaultAmountForRegion(region.startingFund);
 
@@ -220,10 +227,12 @@ async function closeDonationPhaseAndDisburse(cycleId: number) {
 
 async function disburseAcceptedDefaults(cycleId: number) {
   const responses = await db.query.budgetCycleResponses.findMany({ where: eq(budgetCycleResponses.budgetCycleId, cycleId) });
+  const allTeams = await db.query.teams.findMany();
+  const allRegions = await db.query.regions.findMany();
   for (const response of responses) {
-    const team = await db.query.teams.findFirst({ where: eq(teams.id, response.teamId) });
+    const team = allTeams.find((t) => t.id === response.teamId);
     if (!team) continue;
-    const region = await db.query.regions.findFirst({ where: eq(regions.id, team.regionId) });
+    const region = allRegions.find((r) => r.id === team.regionId);
     if (!region) continue;
     const amount = defaultAmountForRegion(region.startingFund);
     await disburseToRegion(team.regionId, amount, `Budget cycle: standard disbursement ($${amount.toLocaleString()})`);

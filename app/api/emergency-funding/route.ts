@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { emergencyFundingRequests, emergencyFundingContributions, modelState, globalState, teams, teamNotifications } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { emergencyFundingRequests, emergencyFundingContributions, modelState, teams, teamNotifications } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
-import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/economy";
+import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
+import { tryDeductRegionField, tryDeductWhoHqField } from "@/lib/db-atomic";
 
 // GET: all emergency funding requests (open + recently closed) with their
 // contributions so far — visible to everyone, same transparency model as
@@ -14,21 +15,23 @@ export async function GET() {
 
   const requests = await db.query.emergencyFundingRequests.findMany({ orderBy: (t, { desc }) => [desc(t.createdAt)], limit: 20 });
   const allTeams = await db.query.teams.findMany();
-  const enriched = await Promise.all(
-    requests.map(async (r) => {
-      const contributions = await db.query.emergencyFundingContributions.findMany({ where: eq(emergencyFundingContributions.requestId, r.id) });
-      const totalContributed = contributions.reduce((sum, c) => sum + c.amount, 0);
-      return {
-        ...r,
-        requestingRegionId: allTeams.find((t) => t.id === r.requestingTeamId)?.regionId ?? "?",
-        totalContributed,
-        contributions: contributions.map((c) => ({
-          ...c,
-          regionId: c.isWhoHq ? "WHO HQ" : allTeams.find((t) => t.id === c.contributorTeamId)?.regionId ?? "?",
-        })),
-      };
-    })
-  );
+  const allContributions = requests.length
+    ? await db.query.emergencyFundingContributions.findMany({ where: inArray(emergencyFundingContributions.requestId, requests.map((r) => r.id)) })
+    : [];
+
+  const enriched = requests.map((r) => {
+    const contributions = allContributions.filter((c) => c.requestId === r.id);
+    const totalContributed = contributions.reduce((sum, c) => sum + c.amount, 0);
+    return {
+      ...r,
+      requestingRegionId: allTeams.find((t) => t.id === r.requestingTeamId)?.regionId ?? "?",
+      totalContributed,
+      contributions: contributions.map((c) => ({
+        ...c,
+        regionId: c.isWhoHq ? "WHO HQ" : allTeams.find((t) => t.id === c.contributorTeamId)?.regionId ?? "?",
+      })),
+    };
+  });
 
   return NextResponse.json({ requests: enriched });
 }
@@ -73,13 +76,15 @@ export async function POST(req: NextRequest) {
     .returning();
 
   const allTeams = await db.query.teams.findMany();
-  for (const t of allTeams) {
-    if (t.id === session!.user.teamId) continue;
-    await db.insert(teamNotifications).values({
-      teamId: t.id,
-      kind: "emergency_funding",
-      message: `${requestingTeam?.regionId} has requested $${amountRequested.toLocaleString()} in emergency funding: "${reason}." Visit Emergency Funding to contribute.`,
-    });
+  const otherTeams = allTeams.filter((t) => t.id !== session!.user.teamId);
+  if (otherTeams.length > 0) {
+    await db.insert(teamNotifications).values(
+      otherTeams.map((t) => ({
+        teamId: t.id,
+        kind: "emergency_funding",
+        message: `${requestingTeam?.regionId} has requested $${amountRequested.toLocaleString()} in emergency funding: "${reason}." Visit Emergency Funding to contribute.`,
+      }))
+    );
   }
 
   return NextResponse.json({ request });
@@ -107,22 +112,37 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Can't contribute to your own request" }, { status: 400 });
   }
 
-  const existingContribution = await db.query.emergencyFundingContributions.findFirst({
-    where: (t, { and, eq: eqOp }) => and(eqOp(t.requestId, requestId), isWhoHq ? eqOp(t.isWhoHq, true) : eqOp(t.contributorTeamId, session!.user.teamId!)),
-  });
-  if (existingContribution) return NextResponse.json({ error: "You've already contributed to this request." }, { status: 409 });
+  // Insert the contribution row first — the unique constraint on
+  // (requestId, contributorTeamId, isWhoHq) is what actually guarantees
+  // "at most one contribution per party," atomically, even under
+  // concurrent double-clicks. The fund deduction only runs after a
+  // successful insert, and is itself an atomic conditional update (see
+  // lib/db-atomic.ts); if it fails, the just-inserted row is removed so a
+  // failed contribution never leaves a phantom pledge behind.
+  let inserted;
+  try {
+    [inserted] = await db
+      .insert(emergencyFundingContributions)
+      .values({ requestId, contributorTeamId: isWhoHq ? null : session!.user.teamId, isWhoHq, amount })
+      .returning();
+  } catch {
+    return NextResponse.json({ error: "You've already contributed to this request." }, { status: 409 });
+  }
 
   if (isWhoHq) {
-    const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
-    if (!gs || gs.whoHqFund < amount) return NextResponse.json({ error: "WHO HQ doesn't have that much remaining." }, { status: 400 });
-    await db.update(globalState).set({ whoHqFund: gs.whoHqFund - amount, updatedAt: new Date() }).where(eq(globalState.id, 1));
-    await db.insert(emergencyFundingContributions).values({ requestId, contributorTeamId: null, isWhoHq: true, amount });
+    const deducted = await tryDeductWhoHqField("whoHqFund", amount);
+    if (!deducted) {
+      await db.delete(emergencyFundingContributions).where(eq(emergencyFundingContributions.id, inserted.id));
+      return NextResponse.json({ error: "WHO HQ doesn't have that much remaining." }, { status: 400 });
+    }
   } else {
     const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId!) });
-    const state = team ? await db.query.modelState.findFirst({ where: eq(modelState.regionId, team.regionId) }) : null;
-    if (!state || state.fundRemaining < amount) return NextResponse.json({ error: "You don't have that much available." }, { status: 400 });
-    await db.update(modelState).set({ fundRemaining: state.fundRemaining - amount, updatedAt: new Date() }).where(eq(modelState.regionId, team!.regionId));
-    await db.insert(emergencyFundingContributions).values({ requestId, contributorTeamId: session!.user.teamId, isWhoHq: false, amount });
+    if (!team) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+    const deducted = await tryDeductRegionField(team.regionId, "fundRemaining", amount);
+    if (!deducted) {
+      await db.delete(emergencyFundingContributions).where(eq(emergencyFundingContributions.id, inserted.id));
+      return NextResponse.json({ error: "You don't have that much available." }, { status: 400 });
+    }
   }
 
   return NextResponse.json({ ok: true });

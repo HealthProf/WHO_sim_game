@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
-
-const REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
+import { REGIONS } from "@/lib/regions";
 
 interface BudgetCycleData {
   cycle: { id: number; cycleNumber: number; status: string; mode: string | null; closesAt: string | null } | null;

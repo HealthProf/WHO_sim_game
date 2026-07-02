@@ -133,6 +133,15 @@ export const globalState = pgTable("global_state", {
   // events still carries a cost. lastDriftAppliedAt tracks the last time it
   // was applied so repeated polls don't double-apply it.
   lastDriftAppliedAt: timestamp("last_drift_applied_at"),
+  // Throttle guard for processDeadlines()'s opportunistic subsystem tick
+  // (lib/deadline.ts) — up to ~8 clients (6 team dashboards, the projector,
+  // the instructor console) can all poll within the same second, and
+  // without this every one of them would separately re-run snap-vote
+  // expiry, budget-cycle timers, and social-milestone checks. Claimed via a
+  // single atomic conditional UPDATE (same pattern as lib/db-atomic.ts),
+  // not a real lock, so at most one caller per throttle window does the
+  // work and the rest no-op.
+  lastTickAt: timestamp("last_tick_at"),
   // WHO HQ's own budget/stockpile (see lib/economy.ts) — deliberately larger
   // than any single region's starting fund and, unlike regions, never
   // resupplied by the periodic budget cycle. Depletes as it sells PPE/
@@ -144,6 +153,16 @@ export const globalState = pgTable("global_state", {
   // Narrative-day (see lib/sim-clock.ts) of the last budget cycle disbursement
   // — the next one is due 14 narrative days later. 0 means none has run yet.
   lastBudgetCycleNarrativeDay: real("last_budget_cycle_narrative_day").notNull().default(0),
+  // Item 9's "drama dial" — a single live-adjustable knob (0.5x-2x) the
+  // instructor can nudge mid-session, independent of fastModeMultiplier
+  // (which is a fixed session-setup pacing choice, not something meant to
+  // change live). Scales three things together: passive Rt drift rate
+  // (lib/model-engine.ts), WHO HQ marketplace price escalation
+  // (lib/economy.ts), and deadline window length (lib/deadline.ts, inverted
+  // — higher intensity means shorter windows). One control instead of three
+  // separate ones so a facilitator who senses the room coasting can turn up
+  // the pressure without hunting through multiple settings.
+  intensityMultiplier: real("intensity_multiplier").notNull().default(1.0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
@@ -333,6 +352,11 @@ export const coordinationMessages = pgTable("coordination_messages", {
   eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
   messageText: text("message_text").notNull(),
   sentAt: timestamp("sent_at").defaultNow().notNull(),
+  // Item 6's diplomatic back-channel: a private (toTeamId set) message has a
+  // small random chance of "leaking" to the public projector feed at send
+  // time — see lib/coordination-leak.ts. Broadcasts (toTeamId null) can
+  // never leak, they're already public.
+  leaked: boolean("leaked").notNull().default(false),
 });
 
 export const instructorActions = pgTable("instructor_actions", {
@@ -434,7 +458,7 @@ export const snapVoteResponses = pgTable(
 export const announcements = pgTable("announcements", {
   id: serial("id").primaryKey(),
   scope: announcementScopeEnum("scope").notNull(),
-  kind: text("kind").notNull(), // "event_dispatched" | "decision_resolved"
+  kind: text("kind").notNull(), // "event_dispatched" | "decision_resolved" | "dramatic_moment" | "interjection"
   eventId: text("event_id").references(() => events.id),
   targetTeamIds: jsonb("target_team_ids"), // number[] | null (null = all teams; scope="team" only)
   title: text("title").notNull(),

@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { globalState, eventDispatches, events } from "@/lib/db/schema";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, inArray } from "drizzle-orm";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { buildSummaryReport } from "@/lib/summary-report";
 import { getSnapVoteState } from "@/lib/snap-vote";
 import { getActiveGlobalAnnouncement } from "@/lib/announcements";
 import { computeFinalResults } from "@/lib/final-results";
+import { computeAllTeamChapters } from "@/lib/team-chapter";
+import { computeWorldHealth } from "@/lib/world-health";
 
 // Public-safe read-only endpoint for the projector display. No auth (route is
 // protected only by an unguessable URL token — see /display/[token]). While
@@ -49,10 +51,12 @@ export async function GET() {
 
   const rounds = gs?.simulationStatus === "completed" ? await buildSummaryReport() : null;
   const finalResults = gs?.simulationStatus === "completed" ? await computeFinalResults() : null;
+  const teamChapters = gs?.simulationStatus === "completed" ? await computeAllTeamChapters() : null;
   const globalAvgHappiness = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.populationHappinessIndex, 0) / allModelState.length) : 0;
   const globalAvgPublicTrust = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.publicTrustIndex, 0) / allModelState.length) : 0;
   const totalConfirmed = allModelState.reduce((s, m) => s + m.confirmedCases, 0);
   const totalDeaths = allModelState.reduce((s, m) => s + m.deaths, 0);
+  const worldHealth = computeWorldHealth({ avgPublicTrust: globalAvgPublicTrust, avgHappiness: globalAvgHappiness, escalationState: gs?.escalationState ?? "GREEN", globalRt });
   // Public display never reveals live vote breakdowns while a vote is open
   // (same herd-voting concern as the team-facing endpoint) — only the
   // question, countdown, and response count; the full tally appears once
@@ -67,12 +71,14 @@ export async function GET() {
   const openDispatches = await db.query.eventDispatches.findMany({
     where: and(eq(eventDispatches.status, "dispatched"), isNotNull(eventDispatches.deadlineAt)),
   });
+  const uniqueEventIds = [...new Set(openDispatches.map((d) => d.eventId))];
+  const dispatchEvents = uniqueEventIds.length > 0 ? await db.query.events.findMany({ where: inArray(events.id, uniqueEventIds) }) : [];
   const seenEventIds = new Set<string>();
   const activeDeadlines: { eventTitle: string; deadlineAt: Date }[] = [];
   for (const d of openDispatches.sort((a, b) => new Date(a.deadlineAt!).getTime() - new Date(b.deadlineAt!).getTime())) {
     if (seenEventIds.has(d.eventId)) continue;
     seenEventIds.add(d.eventId);
-    const event = await db.query.events.findFirst({ where: eq(events.id, d.eventId) });
+    const event = dispatchEvents.find((e) => e.id === d.eventId);
     if (event) activeDeadlines.push({ eventTitle: event.title, deadlineAt: d.deadlineAt! });
   }
 
@@ -97,10 +103,12 @@ export async function GET() {
     totalDeaths,
     globalAvgHappiness,
     globalAvgPublicTrust,
+    worldHealth,
     regions: publicRegionData,
     feedItems: feedItems.map((f) => ({ id: f.id, text: f.headlineText, createdAt: f.createdAt })),
     rounds,
     finalResults,
+    teamChapters,
     snapVote: snapVote.current,
     activeDeadlines,
     activeAnnouncement,

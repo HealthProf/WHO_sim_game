@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { marketRequests, modelState, globalState, teams, teamNotifications } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
-import { computeMarketPrice, POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/economy";
+import { computeMarketPrice } from "@/lib/economy";
+import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
 
 // GET: current adaptive WHO HQ pricing + stock, plus every pending/recent
 // request (visible to all teams, not just the requester — item 3's "other
@@ -18,8 +19,8 @@ export async function GET() {
   if (!gs) return NextResponse.json({ error: "Simulation not initialized" }, { status: 500 });
 
   const prices = {
-    PPE_DAYS: computeMarketPrice({ resourceType: "PPE_DAYS", escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock }),
-    ANTIVIRALS: computeMarketPrice({ resourceType: "ANTIVIRALS", escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock }),
+    PPE_DAYS: computeMarketPrice({ resourceType: "PPE_DAYS", escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock, intensityMultiplier: gs.intensityMultiplier }),
+    ANTIVIRALS: computeMarketPrice({ resourceType: "ANTIVIRALS", escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock, intensityMultiplier: gs.intensityMultiplier }),
   };
 
   const allTeams = await db.query.teams.findMany();
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
   const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
   if (!gs) return NextResponse.json({ error: "Simulation not initialized" }, { status: 500 });
 
-  const pricePerUnit = computeMarketPrice({ resourceType, escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock });
+  const pricePerUnit = computeMarketPrice({ resourceType, escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock, intensityMultiplier: gs.intensityMultiplier });
   const totalCost = Math.round(pricePerUnit * amount);
 
   const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
@@ -79,13 +80,15 @@ export async function POST(req: NextRequest) {
     .returning();
 
   const allTeams = await db.query.teams.findMany();
-  for (const t of allTeams) {
-    if (t.id === session!.user.teamId) continue;
-    await db.insert(teamNotifications).values({
-      teamId: t.id,
-      kind: "market",
-      message: `${team!.regionId} requested to buy ${amount.toLocaleString()} ${resourceType === "PPE_DAYS" ? "PPE-days" : "antiviral doses"} from WHO HQ — submit your own request in the next 30s if you want in on this batch.`,
-    });
+  const otherTeams = allTeams.filter((t) => t.id !== session!.user.teamId);
+  if (otherTeams.length > 0) {
+    await db.insert(teamNotifications).values(
+      otherTeams.map((t) => ({
+        teamId: t.id,
+        kind: "market",
+        message: `${team!.regionId} requested to buy ${amount.toLocaleString()} ${resourceType === "PPE_DAYS" ? "PPE-days" : "antiviral doses"} from WHO HQ — submit your own request in the next 30s if you want in on this batch.`,
+      }))
+    );
   }
 
   return NextResponse.json({ request });

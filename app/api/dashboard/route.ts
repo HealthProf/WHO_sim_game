@@ -6,6 +6,9 @@ import { requireSession } from "@/lib/api-helpers";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { getTeamAnnouncements } from "@/lib/announcements";
+import { projectForward } from "@/lib/projection";
+import { computeSimClock } from "@/lib/sim-clock";
+import { computeFinalResults } from "@/lib/final-results";
 
 // Polled every ~15s by team dashboards (see 07-open-questions.md Q4). Returns
 // the shared Global Situation Summary for every region, plus the requesting
@@ -56,6 +59,7 @@ export async function GET() {
         profileMarkdown: r.profileMarkdown,
         roleTitle: r.roleTitle,
         hqLocation: r.hqLocation,
+        projection: projectForward(s),
       };
     }
     if (session!.user.teamId) {
@@ -68,14 +72,27 @@ export async function GET() {
     }
   }
 
-  // Instructor sees every region's full private state.
-  const allRegionsFull = session!.user.role === "instructor" ? allModelState : null;
-
   // Global average social metrics (item 8) — an aggregate, not a per-region
   // breakdown, so it's safe to surface on shared/public views the same way
   // globalRt already is, without exposing any one region's private ledger.
   const avgPublicTrust = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.publicTrustIndex, 0) / allModelState.length) : 0;
   const avgHappiness = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.populationHappinessIndex, 0) / allModelState.length) : 0;
+
+  // Item 14's "counterfactual as a live ghost" — a deliberately blurred
+  // glimpse of the optimal-shadow comparison (see lib/final-results.ts),
+  // surfaced only once the session is mostly over. The point is motivational
+  // pressure, not information: the exact number stays legible-but-blurred
+  // (never a range, never rounded away) so it reads as "the real number
+  // exists and it's bad" rather than a vague hint, with the full breakdown
+  // reserved for the actual debrief.
+  let ghostPreview: { worldDeathsPrevented: number; worldInfectionsPrevented: number } | null = null;
+  if (gs && gs.simulationStatus === "running") {
+    const clock = computeSimClock(gs);
+    if (clock.gameDay / clock.totalGameDays >= 0.7) {
+      const finalResults = await computeFinalResults();
+      ghostPreview = { worldDeathsPrevented: finalResults.totalDeathsPrevented, worldInfectionsPrevented: finalResults.totalInfectionsPrevented };
+    }
+  }
 
   return NextResponse.json({
     globalState: gs,
@@ -84,8 +101,8 @@ export async function GET() {
     globalAvgHappiness: avgHappiness,
     sharedSummary,
     ownRegion,
-    allRegionsFull,
     notifications,
     announcements,
+    ghostPreview,
   });
 }

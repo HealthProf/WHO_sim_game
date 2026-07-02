@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { eventDispatches, decisions } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
 import { computeTeamHighlights } from "@/lib/summary-report";
 import { computeFinalResults } from "@/lib/final-results";
+import { computeAllTeamChapters } from "@/lib/team-chapter";
 
 // After-action debrief artifacts per simulation-docs/03-events.md EVT-014/
 // EVT-016 implementation notes and 05-product-requirements.md §10: model
@@ -23,13 +24,13 @@ export async function GET() {
 
   async function allocationsFor(eventId: string) {
     const dispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.eventId, eventId) });
-    const out: { regionId: string; allocation: Record<string, number> | null }[] = [];
-    for (const d of dispatches) {
-      const decision = await db.query.decisions.findFirst({ where: eq(decisions.eventDispatchId, d.id) });
+    const dispatchIds = dispatches.map((d) => d.id);
+    const decisionsForDispatches = dispatchIds.length > 0 ? await db.query.decisions.findMany({ where: inArray(decisions.eventDispatchId, dispatchIds) }) : [];
+    return dispatches.map((d) => {
+      const decision = decisionsForDispatches.find((dec) => dec.eventDispatchId === d.id);
       const team = allTeams.find((t) => t.id === d.targetTeamId);
-      out.push({ regionId: team?.regionId ?? "?", allocation: (decision?.resourceAllocationJson as Record<string, number>) ?? null });
-    }
-    return out;
+      return { regionId: team?.regionId ?? "?", allocation: (decision?.resourceAllocationJson as Record<string, number>) ?? null };
+    });
   }
 
   const evt006 = await allocationsFor("EVT-006");
@@ -58,6 +59,7 @@ export async function GET() {
   }
 
   const finalResults = await computeFinalResults();
+  const teamChapters = await computeAllTeamChapters();
 
   return NextResponse.json({
     modelStateHistory: history,
@@ -67,5 +69,6 @@ export async function GET() {
     teamHighlights,
     pledgeTotals,
     finalResults,
+    teamChapters,
   });
 }

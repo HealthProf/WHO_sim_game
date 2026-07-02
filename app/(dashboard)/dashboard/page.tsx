@@ -37,10 +37,16 @@ interface DashboardData {
     profileMarkdown: string;
     roleTitle: string;
     hqLocation: string;
+    projection: {
+      points: { narrativeDay: number; confirmedCases: number; deaths: number }[];
+      assumedRt: number;
+      narrative: string;
+    };
   } | null;
   notifications: { id: number; kind: string; message: string; createdAt: string }[];
   globalAvgHappiness: number;
   globalAvgPublicTrust: number;
+  ghostPreview: { worldDeathsPrevented: number; worldInfectionsPrevented: number } | null;
 }
 
 const escalationColor: Record<string, string> = {
@@ -105,6 +111,10 @@ export default function DashboardPage() {
         </section>
       )}
 
+      {data.ownRegion && <SituationProjection projection={data.ownRegion.projection} />}
+
+      {data.ghostPreview && <CounterfactualGhost ghostPreview={data.ghostPreview} />}
+
       <section>
         <h2 className="text-lg font-semibold mb-3">Global Situation Summary</h2>
         <div className="overflow-x-auto">
@@ -146,5 +156,50 @@ function Stat({ label, value }: { label: string; value: string | number }) {
       <p className="text-xs text-slate-500">{label}</p>
       <p className="text-base font-semibold">{value}</p>
     </div>
+  );
+}
+
+// Item 5: a private forward projection ("if nothing changes...") using the
+// live growth model held at the team's current Rt — never shown to other
+// regions, and never a hint about what to actually do about it.
+function SituationProjection({ projection }: { projection: { points: { narrativeDay: number; confirmedCases: number; deaths: number }[]; assumedRt: number; narrative: string } }) {
+  return (
+    <section className="bg-slate-900 border border-amber-900/60 rounded-xl p-6">
+      <h2 className="text-lg font-semibold mb-1">Situation Projection</h2>
+      <p className="text-sm text-slate-400 mb-4">{projection.narrative}</p>
+      <div className="grid grid-cols-3 gap-3">
+        {projection.points.map((p) => (
+          <div key={p.narrativeDay} className="bg-slate-800/50 rounded-lg p-3">
+            <p className="text-xs text-slate-500">{p.narrativeDay === 0 ? "Right now" : `In ${p.narrativeDay} days`}</p>
+            <p className="text-lg font-semibold mt-1">{p.confirmedCases.toLocaleString()} <span className="text-xs font-normal text-slate-500">confirmed</span></p>
+            {p.narrativeDay > 0 && <p className="text-sm text-red-400 mt-0.5">+{p.deaths.toLocaleString()} <span className="text-xs font-normal text-slate-500">projected deaths</span></p>}
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-slate-600 mt-3">Private to your region only. Assumes your current Rt ({projection.assumedRt.toFixed(2)}) holds steady — a real decision will move it.</p>
+    </section>
+  );
+}
+
+// Item 14: a deliberately blurred glimpse of the world-level optimal-shadow
+// comparison, surfaced only in the session's final stretch. The number is
+// real (not a rounded-off range) but rendered illegible by design — the
+// point is "a real number exists and it's worse than it should be," not
+// giving away the debrief early.
+function CounterfactualGhost({ ghostPreview }: { ghostPreview: { worldDeathsPrevented: number; worldInfectionsPrevented: number } }) {
+  return (
+    <section className="bg-slate-950 border border-slate-800 rounded-xl p-6 relative overflow-hidden">
+      <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">A Question for Later</p>
+      <p className="text-sm text-slate-400 mb-3">
+        Somewhere in this session&apos;s data is a number for how many deaths, worldwide, an ideal response would have
+        prevented by now. It will be fully revealed at the debrief.
+      </p>
+      <div className="flex items-baseline gap-3 select-none" aria-hidden>
+        <span className="text-4xl font-bold text-red-500" style={{ filter: "blur(6px)" }}>
+          {ghostPreview.worldDeathsPrevented.toLocaleString()}
+        </span>
+        <span className="text-sm text-slate-600">deaths preventable, world-wide, right now</span>
+      </div>
+    </section>
   );
 }

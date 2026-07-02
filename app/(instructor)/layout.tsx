@@ -15,7 +15,6 @@ export default function InstructorLayout({ children }: { children: React.ReactNo
         <nav className="flex items-center gap-4 text-sm">
           <Link href="/control" className="text-slate-300 hover:text-white">Command Center</Link>
           <Link href="/scoring" className="text-slate-300 hover:text-white">Scoring Inbox</Link>
-          <Link href="/model" className="text-slate-300 hover:text-white">Model Override</Link>
           <Link href="/debrief" className="text-slate-300 hover:text-white">Debrief</Link>
           <Link href="/log" className="text-slate-300 hover:text-white">Action Log</Link>
           <Link href="/guide" className="text-slate-300 hover:text-white">Guide</Link>
