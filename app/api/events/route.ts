@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { events, eventDispatches, teams, instructorActions, globalFeedItems } from "@/lib/db/schema";
+import { events, eventDispatches, instructorActions, globalFeedItems } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructor, requireSession } from "@/lib/api-helpers";
-import { canDispatch } from "@/lib/chain";
+import { canDispatch, computeAllChainStatus } from "@/lib/chain";
 import { computeDeadlineAt } from "@/lib/deadline";
 import { announceDispatch } from "@/lib/announcements";
 import { computeEventTargetHints } from "@/lib/event-targeting";
@@ -17,10 +17,7 @@ export async function GET() {
   const allEvents = await db.query.events.findMany();
   const allDispatches = await db.query.eventDispatches.findMany();
 
-  const chainStatus: Record<string, { ok: boolean; blockedBy: string[] }> = {};
-  for (const e of allEvents) {
-    chainStatus[e.id] = await canDispatch(e.id);
-  }
+  const chainStatus = await computeAllChainStatus(allEvents.map((e) => e.id));
 
   if (session!.user.role === "instructor") {
     const allTeams = await db.query.teams.findMany();
@@ -74,21 +71,22 @@ export async function POST(req: NextRequest) {
     targetIds = allTeams.map((t) => t.id);
   }
 
-  const created = [];
-  for (const teamId of targetIds) {
-    const [row] = await db
-      .insert(eventDispatches)
-      .values({
-        eventId,
-        targetTeamId: teamId,
-        dispatchedAt,
-        deadlineAt,
-        status: "dispatched",
-        dispatchedByUserId: Number(session!.user.id),
-      })
-      .returning();
-    created.push(row);
-  }
+  const created =
+    targetIds.length > 0
+      ? await db
+          .insert(eventDispatches)
+          .values(
+            targetIds.map((teamId) => ({
+              eventId,
+              targetTeamId: teamId,
+              dispatchedAt,
+              deadlineAt,
+              status: "dispatched" as const,
+              dispatchedByUserId: Number(session!.user.id),
+            }))
+          )
+          .returning()
+      : [];
 
   const audienceDesc = targetIds.length >= allTeams.length ? "all teams (global)" : `${targetIds.map((id) => allTeams.find((t) => t.id === id)?.regionId).join(", ")}`;
   await db.insert(instructorActions).values({

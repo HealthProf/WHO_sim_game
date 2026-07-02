@@ -31,3 +31,29 @@ export async function canDispatch(eventId: string): Promise<{ ok: boolean; block
   const blockedBy = await getUnresolvedPrerequisites(eventId);
   return { ok: blockedBy.length === 0, blockedBy };
 }
+
+// Batched form of canDispatch for the Control/events list, which needs
+// every event's chain status on every poll — computed from 2 total queries
+// (every chain link, every dispatch) instead of canDispatch's 2 queries
+// PER event.
+export async function computeAllChainStatus(eventIds: string[]): Promise<Record<string, { ok: boolean; blockedBy: string[] }>> {
+  const allLinks = await db.query.eventChainLinks.findMany();
+  const allDispatches = await db.query.eventDispatches.findMany();
+
+  const result: Record<string, { ok: boolean; blockedBy: string[] }> = {};
+  for (const eventId of eventIds) {
+    const links = allLinks.filter((l) => l.nextEventId === eventId);
+    const blockedBy: string[] = [];
+    for (const link of links) {
+      const dispatchesForPrev = allDispatches.filter((d) => d.eventId === link.prevEventId);
+      if (dispatchesForPrev.length === 0) {
+        blockedBy.push(link.prevEventId);
+        continue;
+      }
+      const allResolved = dispatchesForPrev.every((d) => d.status === "scored" || d.status === "closed");
+      if (!allResolved) blockedBy.push(link.prevEventId);
+    }
+    result[eventId] = { ok: blockedBy.length === 0, blockedBy };
+  }
+  return result;
+}

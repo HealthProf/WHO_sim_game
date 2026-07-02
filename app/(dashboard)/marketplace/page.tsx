@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
+import { REGIONS } from "@/lib/regions";
 
 interface MarketData {
   prices: { PPE_DAYS: number; ANTIVIRALS: number };
@@ -27,7 +28,6 @@ interface DashboardData {
   ownRegion: { regionId: string } | null;
 }
 
-const REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
 const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE (days)", ANTIVIRALS: "Antivirals (doses)" };
 
 export default function MarketplacePage() {

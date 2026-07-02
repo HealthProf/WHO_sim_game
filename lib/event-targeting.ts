@@ -13,8 +13,6 @@
 // region for the other adaptive events so the Control page can show a
 // consistent "currently qualifies" hint across all of them.
 import { db } from "./db";
-import { eq } from "drizzle-orm";
-import { teams } from "./db/schema";
 
 // Events whose trigger names one fixed region outright in prose — no live
 // computation needed, just surfaced here so the UI can show every adaptive
@@ -30,20 +28,32 @@ export async function computeEventTargetHints(): Promise<Record<string, string[]
 
   // EVT-009: "fires only if 2+ regions scored Inadequate/Critical on EVT-004"
   // — the qualifying audience is literally those regions once that's true.
+  // Fetched as three batched queries (dispatches, then all their decisions,
+  // then all those decisions' scores) rather than one round-trip per
+  // dispatch, since there are only ever up to 6 EVT-004 dispatches but this
+  // function runs on every Control page poll.
   const evt004Dispatches = await db.query.eventDispatches.findMany({
     where: (t, { eq: eqOp }) => eqOp(t.eventId, "EVT-004"),
   });
+  const dispatchIds = evt004Dispatches.map((d) => d.id).filter((id): id is number => id != null);
+  const allTeams = dispatchIds.length > 0 ? await db.query.teams.findMany() : [];
+  const decisionsForDispatches =
+    dispatchIds.length > 0 ? await db.query.decisions.findMany({ where: (t, { inArray }) => inArray(t.eventDispatchId, dispatchIds) }) : [];
+  const decisionIds = decisionsForDispatches.map((d) => d.id);
+  const scoresForDecisions =
+    decisionIds.length > 0 ? await db.query.scores.findMany({ where: (t, { inArray }) => inArray(t.decisionId, decisionIds) }) : [];
+
   const evt004Poor: string[] = [];
   for (const d of evt004Dispatches) {
     if (!d.targetTeamId) continue;
-    const decision = await db.query.decisions.findFirst({
-      where: (t, { eq: eqOp }) => eqOp(t.eventDispatchId, d.id),
-      orderBy: (t, { desc }) => [desc(t.submittedAt)],
-    });
+    // Latest decision per dispatch (a team may have resubmitted before
+    // scoring — see the option-cost refund flow in app/api/decisions).
+    const decisionsForThisDispatch = decisionsForDispatches.filter((dec) => dec.eventDispatchId === d.id);
+    const decision = decisionsForThisDispatch.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
     if (!decision) continue;
-    const score = await db.query.scores.findFirst({ where: (t, { eq: eqOp }) => eqOp(t.decisionId, decision.id) });
+    const score = scoresForDecisions.find((s) => s.decisionId === decision.id);
     if (score && (score.tier === "INADEQUATE" || score.tier === "CRITICAL_FAILURE")) {
-      const team = await db.query.teams.findFirst({ where: eq(teams.id, d.targetTeamId) });
+      const team = allTeams.find((t) => t.id === d.targetTeamId);
       if (team) evt004Poor.push(team.regionId);
     }
   }

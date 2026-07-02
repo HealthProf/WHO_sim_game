@@ -44,3 +44,16 @@ body {
   animation-timing-function: linear;
   animation-iteration-count: infinite;
 }
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in-slow {
+  animation: fadeIn 1.5s ease-in;
+}

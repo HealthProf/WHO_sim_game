@@ -72,13 +72,13 @@ export async function closeSnapVote(voteId: number) {
   await db.update(snapVotes).set({ status: "closed", resultSummary: summary }).where(eq(snapVotes.id, voteId));
 
   await db.insert(globalFeedItems).values({ headlineText: `EMERGENCY COMMITTEE RESULT — "${vote.question}": ${summary}` });
-  for (const team of allTeams) {
-    await db.insert(teamNotifications).values({
+  await db.insert(teamNotifications).values(
+    allTeams.map((team) => ({
       teamId: team.id,
       kind: "snap_vote",
       message: `Emergency Committee vote closed — "${vote.question}": ${summary}`,
-    });
-  }
+    }))
+  );
 
   return { vote, tally, summary };
 }
@@ -199,13 +199,13 @@ export async function createSnapVote(opts: {
     headlineText: `EMERGENCY COMMITTEE CALLED: "${opts.question}" — all regions must respond`,
   });
   const allTeams = await db.query.teams.findMany();
-  for (const team of allTeams) {
-    await db.insert(teamNotifications).values({
+  await db.insert(teamNotifications).values(
+    allTeams.map((team) => ({
       teamId: team.id,
       kind: "snap_vote",
       message: `Emergency Committee called: "${opts.question}" — respond now.`,
-    });
-  }
+    }))
+  );
 
   return vote;
 }

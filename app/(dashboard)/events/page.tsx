@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
@@ -79,7 +80,13 @@ export default function EventsPage() {
 }
 
 function Countdown({ deadlineAt, gameDaysPerRealMinute }: { deadlineAt: string; gameDaysPerRealMinute: number }) {
-  const remaining = new Date(deadlineAt).getTime() - Date.now();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const remaining = new Date(deadlineAt).getTime() - now;
   const expired = remaining <= 0;
   const minutes = Math.max(0, Math.floor(remaining / 60000));
   const seconds = Math.max(0, Math.floor((remaining % 60000) / 1000));

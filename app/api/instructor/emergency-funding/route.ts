@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { emergencyFundingRequests, emergencyFundingContributions, modelState, globalState, teams, teamNotifications, globalFeedItems, modelStateHistory, instructorActions } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireInstructor } from "@/lib/api-helpers";
+import { creditRegionField } from "@/lib/db-atomic";
 
 // GET: WHO HQ's own (non-resupplied) fund balance plus every open emergency
 // funding request, for the instructor's Control page panel.
@@ -16,19 +17,20 @@ export async function GET() {
     orderBy: (t, { asc }) => [asc(t.createdAt)],
   });
   const allTeams = await db.query.teams.findMany();
-  const enriched = await Promise.all(
-    openRequests.map(async (r) => {
-      const contributions = await db.query.emergencyFundingContributions.findMany({ where: eq(emergencyFundingContributions.requestId, r.id) });
-      const totalContributed = contributions.reduce((sum, c) => sum + c.amount, 0);
-      const whoHqContributed = contributions.some((c) => c.isWhoHq);
-      return {
-        ...r,
-        requestingRegionId: allTeams.find((t) => t.id === r.requestingTeamId)?.regionId ?? "?",
-        totalContributed,
-        whoHqContributed,
-      };
-    })
-  );
+  const allContributions = openRequests.length
+    ? await db.query.emergencyFundingContributions.findMany({ where: inArray(emergencyFundingContributions.requestId, openRequests.map((r) => r.id)) })
+    : [];
+  const enriched = openRequests.map((r) => {
+    const contributions = allContributions.filter((c) => c.requestId === r.id);
+    const totalContributed = contributions.reduce((sum, c) => sum + c.amount, 0);
+    const whoHqContributed = contributions.some((c) => c.isWhoHq);
+    return {
+      ...r,
+      requestingRegionId: allTeams.find((t) => t.id === r.requestingTeamId)?.regionId ?? "?",
+      totalContributed,
+      whoHqContributed,
+    };
+  });
 
   return NextResponse.json({ whoHqFund: gs?.whoHqFund ?? 0, requests: enriched });
 }
@@ -47,26 +49,28 @@ export async function PATCH(req: NextRequest) {
   const request = await db.query.emergencyFundingRequests.findFirst({ where: eq(emergencyFundingRequests.id, requestId) });
   if (!request || request.status !== "open") return NextResponse.json({ error: "Request not found or already closed" }, { status: 404 });
 
-  const contributions = await db.query.emergencyFundingContributions.findMany({ where: eq(emergencyFundingContributions.requestId, requestId) });
-  const totalContributed = contributions.reduce((sum, c) => sum + c.amount, 0);
-
   const requestingTeam = await db.query.teams.findFirst({ where: eq(teams.id, request.requestingTeamId) });
   if (!requestingTeam) return NextResponse.json({ error: "Region not found" }, { status: 404 });
 
-  const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, requestingTeam.regionId) });
-  if (state) {
-    await db.update(modelState).set({ fundRemaining: state.fundRemaining + totalContributed, updatedAt: new Date() }).where(eq(modelState.regionId, requestingTeam.regionId));
-  }
-  await db.update(emergencyFundingRequests).set({ status: "closed", closedAt: new Date() }).where(eq(emergencyFundingRequests.id, requestId));
+  // Claim the request first (guarded by status='open') so two concurrent
+  // "close" clicks can't both credit the region.
+  const claimed = await db
+    .update(emergencyFundingRequests)
+    .set({ status: "closed", closedAt: new Date() })
+    .where(and(eq(emergencyFundingRequests.id, requestId), eq(emergencyFundingRequests.status, "open")))
+    .returning();
+  if (claimed.length === 0) return NextResponse.json({ error: "Request was already closed" }, { status: 409 });
+
+  const contributions = await db.query.emergencyFundingContributions.findMany({ where: eq(emergencyFundingContributions.requestId, requestId) });
+  const totalContributed = contributions.reduce((sum, c) => sum + c.amount, 0);
+  await creditRegionField(requestingTeam.regionId, "fundRemaining", totalContributed);
 
   const headline = `Emergency funding closed: ${requestingTeam.regionId} requested $${request.amountRequested.toLocaleString()}, received $${totalContributed.toLocaleString()} from ${contributions.length} contributor${contributions.length === 1 ? "" : "s"}.`;
   const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, requestingTeam.regionId) });
   if (updated) await db.insert(modelStateHistory).values({ regionId: requestingTeam.regionId, day: updated.day, snapshotJson: updated, reason: headline });
   await db.insert(globalFeedItems).values({ headlineText: headline });
   const allTeams = await db.query.teams.findMany();
-  for (const t of allTeams) {
-    await db.insert(teamNotifications).values({ teamId: t.id, kind: "emergency_funding", message: headline });
-  }
+  await db.insert(teamNotifications).values(allTeams.map((t) => ({ teamId: t.id, kind: "emergency_funding", message: headline })));
   await db.insert(instructorActions).values({ instructorUserId: Number(session!.user.id), actionType: "emergency_funding_closed", targetDesc: headline });
 
   return NextResponse.json({ ok: true, totalContributed });

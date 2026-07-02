@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { regionTradeOffers, modelState, teams, teamNotifications, modelStateHistory } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
+import { tryDeductRegionField, creditRegionField } from "@/lib/db-atomic";
 
 // GET: trade offers involving the requesting team, either side (visible to
 // everyone for transparency, same as coordination/pledges).
@@ -97,27 +98,34 @@ export async function PATCH(req: NextRequest) {
   const sellerTeam = await db.query.teams.findFirst({ where: eq(teams.id, offer.toTeamId) });
   if (!buyerTeam || !sellerTeam) return NextResponse.json({ error: "Region not found" }, { status: 404 });
 
-  const buyerState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, buyerTeam.regionId) });
-  const sellerState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, sellerTeam.regionId) });
-  if (!buyerState || !sellerState) return NextResponse.json({ error: "State not found" }, { status: 500 });
-
   const resourceField = offer.resourceType === "PPE_DAYS" ? "ppeDaysRemaining" : "antiviralsRemaining";
-  if (sellerState[resourceField] < offer.amount) {
+
+  // Claim the offer first (guarded by status='pending' in the WHERE
+  // clause) so two concurrent accept clicks can't both succeed — then each
+  // balance change is an atomic conditional update, with the earlier step
+  // compensated back out if a later one fails (see lib/db-atomic.ts).
+  const claimed = await db
+    .update(regionTradeOffers)
+    .set({ status: "accepted", resolvedAt: new Date() })
+    .where(and(eq(regionTradeOffers.id, offerId), eq(regionTradeOffers.status, "pending")))
+    .returning();
+  if (claimed.length === 0) return NextResponse.json({ error: "Offer was already resolved" }, { status: 409 });
+
+  const sellerDeducted = await tryDeductRegionField(sellerTeam.regionId, resourceField, offer.amount);
+  if (!sellerDeducted) {
+    await db.update(regionTradeOffers).set({ status: "rejected" }).where(eq(regionTradeOffers.id, offerId));
     return NextResponse.json({ error: `You no longer have ${offer.amount.toLocaleString()} to sell.` }, { status: 400 });
   }
-  if (buyerState.fundRemaining < offer.totalPrice) {
+
+  const buyerDeducted = await tryDeductRegionField(buyerTeam.regionId, "fundRemaining", offer.totalPrice);
+  if (!buyerDeducted) {
+    await creditRegionField(sellerTeam.regionId, resourceField, offer.amount); // compensate the seller deduction above
+    await db.update(regionTradeOffers).set({ status: "rejected" }).where(eq(regionTradeOffers.id, offerId));
     return NextResponse.json({ error: `${buyerTeam.regionId} no longer has enough funds for this trade.` }, { status: 400 });
   }
 
-  await db
-    .update(modelState)
-    .set({ fundRemaining: buyerState.fundRemaining - offer.totalPrice, [resourceField]: buyerState[resourceField] + offer.amount, updatedAt: new Date() } as never)
-    .where(eq(modelState.regionId, buyerTeam.regionId));
-  await db
-    .update(modelState)
-    .set({ fundRemaining: sellerState.fundRemaining + offer.totalPrice, [resourceField]: sellerState[resourceField] - offer.amount, updatedAt: new Date() } as never)
-    .where(eq(modelState.regionId, sellerTeam.regionId));
-  await db.update(regionTradeOffers).set({ status: "accepted", resolvedAt: new Date() }).where(eq(regionTradeOffers.id, offerId));
+  await creditRegionField(buyerTeam.regionId, resourceField, offer.amount);
+  await creditRegionField(sellerTeam.regionId, "fundRemaining", offer.totalPrice);
 
   const reason = `Trade: ${buyerTeam.regionId} bought ${offer.amount.toLocaleString()} ${offer.resourceType === "PPE_DAYS" ? "PPE-days" : "antiviral doses"} from ${sellerTeam.regionId} for $${offer.totalPrice.toLocaleString()}`;
   const [updatedBuyer, updatedSeller] = await Promise.all([

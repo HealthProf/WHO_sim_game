@@ -8,19 +8,10 @@ import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
 import { KeyTerms } from "@/components/key-terms";
 import { AdvisoryBoard } from "@/components/advisory-board";
+import type { StructuredOption as FullStructuredOption, OptionCost } from "@/lib/db/seed-data/events";
+import { REGIONS } from "@/lib/regions";
 
-interface OptionCost {
-  fund?: number;
-  ppeDays?: number;
-  antivirals?: number;
-}
-
-interface StructuredOption {
-  label: string;
-  text: string;
-  cost?: OptionCost;
-  impactDesc: string;
-}
+type StructuredOption = Pick<FullStructuredOption, "label" | "text" | "cost" | "impactDesc">;
 
 interface EventFull {
   id: string;
@@ -67,7 +58,6 @@ function affordabilityIssue(cost: OptionCost | undefined, resources: OwnRegionRe
   return null;
 }
 
-const REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
 
 export default function EventDetailPage() {
   const params = useParams();

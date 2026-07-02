@@ -28,7 +28,7 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  const instructorOnly = ["/control", "/scoring", "/model", "/debrief", "/log", "/guide"];
+  const instructorOnly = ["/control", "/scoring", "/debrief", "/log", "/guide"];
   if (instructorOnly.some((p) => pathname.startsWith(p)) && role !== "instructor") {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }

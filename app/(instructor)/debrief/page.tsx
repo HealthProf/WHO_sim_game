@@ -6,6 +6,8 @@ import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import { QueryError } from "@/components/query-error";
 import { regionColors } from "@/lib/who-region-map";
 import type { SummaryRound } from "@/lib/summary-report";
+import type { FinalResults } from "@/lib/final-results";
+import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
 
 interface TeamHighlightEntry {
   eventId: string;
@@ -14,25 +16,7 @@ interface TeamHighlightEntry {
   compositePct: number;
 }
 
-interface RegionFinalResult {
-  regionId: string;
-  actualConfirmed: number;
-  actualDeaths: number;
-  optimalConfirmed: number;
-  optimalDeaths: number;
-  infectionsPrevented: number;
-  deathsPrevented: number;
-}
-
-interface FinalResults {
-  regions: RegionFinalResult[];
-  totalActualConfirmed: number;
-  totalActualDeaths: number;
-  totalOptimalConfirmed: number;
-  totalOptimalDeaths: number;
-  totalInfectionsPrevented: number;
-  totalDeathsPrevented: number;
-}
+type TeamChapter = Pick<FullTeamChapter, "regionId" | "headline" | "narrative" | "tierCounts" | "totalDecisions" | "actualDeaths" | "deathsPrevented">;
 
 interface DebriefData {
   modelStateHistory: { id: number; regionId: string; day: number; reason: string; createdAt: string; snapshotJson: { rt: number; cfrMultiplier: number } }[];
@@ -42,6 +26,7 @@ interface DebriefData {
   teamHighlights: { regionId: string; strongest: TeamHighlightEntry[]; weakest: TeamHighlightEntry[] }[];
   pledgeTotals: Record<string, { given: number; received: number }>;
   finalResults: FinalResults;
+  teamChapters: TeamChapter[];
 }
 
 export default function DebriefPage() {
@@ -116,6 +101,23 @@ export default function DebriefPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <section>
+        <h3 className="font-medium mb-3">Chapters of History</h3>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {data.teamChapters.map((c) => (
+            <div key={c.regionId} className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-5 space-y-2">
+              <p className="text-lg font-bold text-white">{c.headline}</p>
+              <p className="text-xs text-slate-300">{c.narrative}</p>
+              <div className="flex gap-4 text-xs text-slate-400 pt-1">
+                <span>{c.totalDecisions} decisions</span>
+                <span className="text-emerald-400">{c.tierCounts.OPTIMAL ?? 0} optimal</span>
+                <span className="text-red-400">{c.deathsPrevented.toLocaleString()} deaths preventable</span>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 

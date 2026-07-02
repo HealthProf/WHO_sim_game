@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  regions,
   modelState,
   modelStateOptimal,
   modelStateHistory,
@@ -117,10 +116,12 @@ export async function POST() {
       pausedAccumulatedMs: 0,
       pausedAt: null,
       lastDriftAppliedAt: null,
+      lastTickAt: null,
       whoHqFund: 500_000_000,
       whoHqPpeStock: 2000,
       whoHqAntiviralsStock: 200_000,
       lastBudgetCycleNarrativeDay: 0,
+      intensityMultiplier: 1.0,
       updatedAt: new Date(),
     })
     .where(eq(globalState.id, 1));

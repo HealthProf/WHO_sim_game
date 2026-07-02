@@ -5,8 +5,8 @@
 // being run as a ~60 minute compressed test session).
 
 import { db } from "./db";
-import { eventDispatches, events, decisions, scores, users, globalState } from "./db/schema";
-import { and, eq, isNull, lte } from "drizzle-orm";
+import { eventDispatches, events, decisions, scores, users, globalState, modelState } from "./db/schema";
+import { and, eq, isNull, lte, lt, or, inArray } from "drizzle-orm";
 import { computeCompositePct, defaultScoresForTier } from "./scoring";
 import { applyModelDelta, applyOptimalShadowDelta, applyPassiveDrift } from "./model-engine";
 import { pushConsequence } from "./consequences";
@@ -14,6 +14,8 @@ import { closeExpiredSnapVotes } from "./snap-vote";
 import { maybeAnnounceResolution, announceDecisionRevealed } from "./announcements";
 import { processBudgetCycleTimers } from "./budget-cycle";
 import { checkSocialMilestones } from "./social-thresholds";
+import { maybeStakeholderReact } from "./stakeholders";
+import { TICK_THROTTLE_SECONDS } from "./config";
 
 export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
@@ -21,33 +23,44 @@ export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Pr
 
   const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
   const multiplier = gs?.fastModeMultiplier ?? 1;
-  const windowMinutes = event.deadlineWindowHours * 60 * multiplier;
+  const intensity = gs?.intensityMultiplier && gs.intensityMultiplier > 0 ? gs.intensityMultiplier : 1.0;
+  const windowMinutes = (event.deadlineWindowHours * 60 * multiplier) / intensity;
   return new Date(dispatchedAt.getTime() + windowMinutes * 60_000);
 }
 
-export async function computeReminderAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
-  const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-  if (!event || event.deadlineType !== "SOFT" || event.reminderAtHours == null) return null;
-
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
-  const multiplier = gs?.fastModeMultiplier ?? 1;
-  const reminderMinutes = event.reminderAtHours * 60 * multiplier;
-  return new Date(dispatchedAt.getTime() + reminderMinutes * 60_000);
-}
-
-// Called by the cron route on every tick. Marks SOFT reminders sent and
-// auto-applies each event's specified no-response fallback tier to any
-// dispatch whose deadline has passed with no submission.
+// Called opportunistically by every dashboard/display/control-page poll
+// (see the note in app/api/dashboard/route.ts) rather than solely by a
+// cron route, so this same function also carries every other "opportunistic
+// side effect while the sim is running" subsystem — passive drift, snap
+// vote expiry, budget cycle timers, and social milestones — alongside its
+// own deadline-reminder/auto-fallback work below.
+//
+// Up to ~8 clients can poll within the same second, so the whole tick is
+// claimed first via a single atomic conditional UPDATE (lastTickAt, throttled
+// to once per TICK_THROTTLE_SECONDS) — callers that lose the race skip
+// straight to a no-op return rather than re-running every subsystem's own
+// queries redundantly. This is a throttle, not a lock: it bounds how often
+// the work runs, it doesn't serialize concurrent callers against each other.
 export async function processDeadlines() {
   const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
   if (!gs || gs.simulationStatus !== "running") {
     return { remindersSent: 0, autoApplied: 0, skipped: "simulation not running" };
   }
 
-  await applyPassiveDrift(gs).catch(() => {});
-  await closeExpiredSnapVotes().catch(() => {});
-  await processBudgetCycleTimers().catch(() => {});
-  await checkSocialMilestones().catch(() => {});
+  const cutoff = new Date(Date.now() - TICK_THROTTLE_SECONDS * 1000);
+  const claimed = await db
+    .update(globalState)
+    .set({ lastTickAt: new Date() })
+    .where(and(eq(globalState.id, 1), or(isNull(globalState.lastTickAt), lt(globalState.lastTickAt, cutoff))))
+    .returning();
+  if (claimed.length === 0) {
+    return { remindersSent: 0, autoApplied: 0, skipped: "ticked recently" };
+  }
+
+  await applyPassiveDrift(gs).catch((e) => console.error("[tick] applyPassiveDrift failed:", e));
+  await closeExpiredSnapVotes().catch((e) => console.error("[tick] closeExpiredSnapVotes failed:", e));
+  await processBudgetCycleTimers().catch((e) => console.error("[tick] processBudgetCycleTimers failed:", e));
+  await checkSocialMilestones().catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
 
   const now = new Date();
   let remindersSent = 0;
@@ -56,12 +69,22 @@ export async function processDeadlines() {
   const dueReminders = await db.query.eventDispatches.findMany({
     where: and(eq(eventDispatches.status, "dispatched"), isNull(eventDispatches.reminderSentAt)),
   });
+  const reminderEventIds = [...new Set(dueReminders.map((d) => d.eventId))];
+  const reminderEvents =
+    reminderEventIds.length > 0 ? await db.query.events.findMany({ where: (t, { inArray }) => inArray(t.id, reminderEventIds) }) : [];
+  const multiplier = gs.fastModeMultiplier ?? 1;
+  const intensity = gs.intensityMultiplier && gs.intensityMultiplier > 0 ? gs.intensityMultiplier : 1.0;
+  const remindedDispatchIds: number[] = [];
   for (const d of dueReminders) {
-    const reminderAt = await computeReminderAt(d.eventId, d.dispatchedAt);
-    if (reminderAt && reminderAt <= now) {
-      await db.update(eventDispatches).set({ reminderSentAt: now }).where(eq(eventDispatches.id, d.id));
-      remindersSent++;
-    }
+    const event = reminderEvents.find((e) => e.id === d.eventId);
+    if (!event || event.deadlineType !== "SOFT" || event.reminderAtHours == null) continue;
+    const reminderMinutes = (event.reminderAtHours * 60 * multiplier) / intensity;
+    const reminderAt = new Date(d.dispatchedAt.getTime() + reminderMinutes * 60_000);
+    if (reminderAt <= now) remindedDispatchIds.push(d.id);
+  }
+  if (remindedDispatchIds.length > 0) {
+    await db.update(eventDispatches).set({ reminderSentAt: now }).where(inArray(eventDispatches.id, remindedDispatchIds));
+    remindersSent = remindedDispatchIds.length;
   }
 
   const expiredCandidates = await db.query.eventDispatches.findMany({
@@ -70,15 +93,21 @@ export async function processDeadlines() {
 
   const systemUser = await db.query.users.findFirst({ where: eq(users.role, "instructor") });
 
+  const expiredDispatchIds = expiredCandidates.map((d) => d.id);
+  const existingDecisionsForExpired =
+    expiredDispatchIds.length > 0 ? await db.query.decisions.findMany({ where: inArray(decisions.eventDispatchId, expiredDispatchIds) }) : [];
+  const expiredEventIds = [...new Set(expiredCandidates.map((d) => d.eventId))];
+  const expiredEvents = expiredEventIds.length > 0 ? await db.query.events.findMany({ where: inArray(events.id, expiredEventIds) }) : [];
+  const expiredTeamIds = [...new Set(expiredCandidates.map((d) => d.targetTeamId).filter((id): id is number => id != null))];
+  const expiredTeams = expiredTeamIds.length > 0 ? await db.query.teams.findMany({ where: (t, { inArray: ia }) => ia(t.id, expiredTeamIds) }) : [];
+
   for (const dispatch of expiredCandidates) {
     if (!dispatch.deadlineAt || !dispatch.targetTeamId) continue;
 
-    const existingDecision = await db.query.decisions.findFirst({
-      where: eq(decisions.eventDispatchId, dispatch.id),
-    });
+    const existingDecision = existingDecisionsForExpired.find((d) => d.eventDispatchId === dispatch.id);
     if (existingDecision) continue; // team submitted in time; scoring inbox will handle it
 
-    const event = await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) });
+    const event = expiredEvents.find((e) => e.id === dispatch.eventId);
     if (!event || !systemUser) continue;
 
     const [decision] = await db
@@ -113,7 +142,7 @@ export async function processDeadlines() {
 
     const deltaJson = (event.modelDeltaJson as Record<string, unknown[]>) ?? {};
     const deltas = deltaJson[tier] ?? [];
-    const region = await regionForTeam(dispatch.targetTeamId);
+    const region = expiredTeams.find((t) => t.id === dispatch.targetTeamId)?.regionId ?? null;
     if (region) {
       await applyModelDelta({
         deltas: deltas as never,
@@ -121,6 +150,7 @@ export async function processDeadlines() {
         reason: `${event.id} deadline expired, no response: ${tier} auto-applied`,
       });
       await applyOptimalShadowDelta((deltaJson.OPTIMAL as never) ?? [], region);
+      const afterState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region) });
       await pushConsequence({
         event,
         dispatchId: dispatch.id,
@@ -129,6 +159,7 @@ export async function processDeadlines() {
         tier,
         deltas: deltas as never,
         actorUserId: systemUser.id,
+        afterState: afterState ?? undefined,
       });
       await announceDecisionRevealed({
         eventId: event.id,
@@ -138,6 +169,7 @@ export async function processDeadlines() {
         structuredChoice: null,
         tier,
       });
+      await maybeStakeholderReact(dispatch.targetTeamId, tier);
     }
 
     await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));
@@ -146,10 +178,4 @@ export async function processDeadlines() {
   }
 
   return { remindersSent, autoApplied };
-}
-
-async function regionForTeam(teamId: number): Promise<string | null> {
-  const { teams } = await import("./db/schema");
-  const team = await db.query.teams.findFirst({ where: eq(teams.id, teamId) });
-  return team?.regionId ?? null;
 }

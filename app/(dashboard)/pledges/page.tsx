@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
+import { REGIONS } from "@/lib/regions";
 
 interface Pledge {
   id: number;
@@ -21,7 +22,6 @@ const RESOURCE_OPTIONS = [
   { value: "HCW_SURGE_PCT", label: "HCW surge capacity (%)" },
 ];
 
-const REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
 
 interface DashboardData {
   ownRegion: { regionId: string } | null;

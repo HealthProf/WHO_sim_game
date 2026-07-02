@@ -27,8 +27,25 @@ import { db } from "./db";
 import { announcements, announcementAcks, teamNotifications } from "./db/schema";
 import { and, eq } from "drizzle-orm";
 import type { Tier } from "./db/seed-data/events";
+import {
+  ANNOUNCEMENT_AUTO_DISMISS_SECONDS as GLOBAL_AUTO_DISMISS_SECONDS,
+  DRAMATIC_MOMENT_AUTO_DISMISS_SECONDS,
+} from "./config";
 
-const GLOBAL_AUTO_DISMISS_SECONDS = 10;
+// Item 2's "scripted midpoint gut-punch" — a small set of events written as
+// the session's emotionally significant beats (see EVT-011's narrative:
+// "this is meant to be the simulation's most emotionally significant
+// moment") get a distinct full-screen projector takeover instead of the
+// routine 10s dispatch banner. Deliberately just a set of IDs, not a field
+// on the event itself — staging a moment is a facilitation/production
+// choice, not a property of the event content.
+const DRAMATIC_MOMENT_EVENT_IDS = new Set(["EVT-011"]);
+const DRAMATIC_MOMENT_COPY: Record<string, { title: string; message: string }> = {
+  "EVT-011": {
+    title: "A System at Its Limit",
+    message: "AFRO's healthcare system has reached saturation. Bed occupancy exceeds 95%, with zero reserve capacity. What every region does next will be remembered.",
+  },
+};
 
 export async function announceDispatch(opts: { eventId: string; eventTitle: string; targetTeamIds: number[] }) {
   const { eventId, eventTitle, targetTeamIds } = opts;
@@ -41,15 +58,28 @@ export async function announceDispatch(opts: { eventId: string; eventTitle: stri
     audienceDesc = regionIds.join(", ");
   }
 
-  await db.insert(announcements).values({
-    scope: "global_display",
-    kind: "event_dispatched",
-    eventId,
-    targetTeamIds: null,
-    title: "New Event Dispatched",
-    message: `"${eventTitle}" has just been dispatched to ${audienceDesc} — teams, check your Events page.`,
-    autoDismissSeconds: GLOBAL_AUTO_DISMISS_SECONDS,
-  });
+  if (DRAMATIC_MOMENT_EVENT_IDS.has(eventId)) {
+    const copy = DRAMATIC_MOMENT_COPY[eventId] ?? { title: eventTitle, message: `"${eventTitle}" has just been dispatched.` };
+    await db.insert(announcements).values({
+      scope: "global_display",
+      kind: "dramatic_moment",
+      eventId,
+      targetTeamIds: null,
+      title: copy.title,
+      message: copy.message,
+      autoDismissSeconds: DRAMATIC_MOMENT_AUTO_DISMISS_SECONDS,
+    });
+  } else {
+    await db.insert(announcements).values({
+      scope: "global_display",
+      kind: "event_dispatched",
+      eventId,
+      targetTeamIds: null,
+      title: "New Event Dispatched",
+      message: `"${eventTitle}" has just been dispatched to ${audienceDesc} — teams, check your Events page.`,
+      autoDismissSeconds: GLOBAL_AUTO_DISMISS_SECONDS,
+    });
+  }
 
   await db.insert(announcements).values({
     scope: "team",
@@ -68,7 +98,7 @@ export async function announceDispatch(opts: { eventId: string; eventTitle: stri
 // six regions, (b) every targeted dispatch is now scored/closed, and (c)
 // this hasn't already been announced.
 export async function maybeAnnounceResolution(eventId: string) {
-  const { eventDispatches, decisions, scores, events } = await import("./db/schema");
+  const { eventDispatches, events } = await import("./db/schema");
 
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
   if (!event) return;
@@ -85,6 +115,11 @@ export async function maybeAnnounceResolution(eventId: string) {
   });
   if (alreadyAnnounced) return;
 
+  const dispatchIds = dispatches.map((d) => d.id);
+  const decisionsForDispatches = await db.query.decisions.findMany({ where: (t, { inArray }) => inArray(t.eventDispatchId, dispatchIds) });
+  const decisionIds = decisionsForDispatches.map((d) => d.id);
+  const scoresForDecisions = decisionIds.length > 0 ? await db.query.scores.findMany({ where: (t, { inArray }) => inArray(t.decisionId, decisionIds) }) : [];
+
   const outcomeParts: string[] = [];
   for (const d of dispatches) {
     const team = allTeams.find((t) => t.id === d.targetTeamId);
@@ -92,11 +127,10 @@ export async function maybeAnnounceResolution(eventId: string) {
     // refund flow in app/api/decisions/route.ts) — only the latest
     // submission is ever the one actually scored, so pick that one rather
     // than whichever row happened to be inserted first.
-    const decision = await db.query.decisions.findFirst({
-      where: eq(decisions.eventDispatchId, d.id),
-      orderBy: (t, { desc }) => [desc(t.submittedAt)],
-    });
-    const score = decision ? await db.query.scores.findFirst({ where: eq(scores.decisionId, decision.id) }) : null;
+    const decision = decisionsForDispatches
+      .filter((dec) => dec.eventDispatchId === d.id)
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
+    const score = decision ? scoresForDecisions.find((s) => s.decisionId === decision.id) : null;
     if (team && score) outcomeParts.push(`${team.regionId}: ${score.tier.replace("_", " ")}`);
   }
   const summary = `${event.title} — final decision: ${outcomeParts.join(", ")}.`;
@@ -182,12 +216,8 @@ export async function announceDecisionRevealed(opts: {
   const message = `${regionId} ${choiceDesc} on "${eventTitle}" — scored ${tier.replace("_", " ")}.`;
 
   const allTeams = await db.query.teams.findMany();
-  for (const team of allTeams) {
-    if (team.id === submittingTeamId) continue;
-    await db.insert(teamNotifications).values({
-      teamId: team.id,
-      kind: "decision_revealed",
-      message,
-    });
+  const otherTeams = allTeams.filter((t) => t.id !== submittingTeamId);
+  if (otherTeams.length > 0) {
+    await db.insert(teamNotifications).values(otherTeams.map((t) => ({ teamId: t.id, kind: "decision_revealed", message })));
   }
 }

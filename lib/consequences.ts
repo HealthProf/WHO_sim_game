@@ -15,6 +15,7 @@ import { db } from "./db";
 import { eventDispatches, globalFeedItems, instructorActions, teamNotifications } from "./db/schema";
 import { eq } from "drizzle-orm";
 import { isSignificantDelta } from "./model-engine";
+import { pickVignette } from "./vignettes";
 import type { ModelDelta, Tier } from "./db/seed-data/events";
 
 const TIER_KEY: Record<Tier, "optimal" | "adequate" | "inadequate" | "critical"> = {
@@ -24,10 +25,25 @@ const TIER_KEY: Record<Tier, "optimal" | "adequate" | "inadequate" | "critical">
   CRITICAL_FAILURE: "critical",
 };
 
-export function buildConsequenceCard(event: { title: string; consequencesJson: unknown }, regionId: string, tier: Tier): string {
+interface AfterState {
+  cfrMultiplier: number;
+  hcwSurgePct: number;
+  publicTrustIndex: number;
+  populationHappinessIndex: number;
+  hospitalCapacityPct: number;
+}
+
+export function buildConsequenceCard(
+  event: { title: string; consequencesJson: unknown },
+  regionId: string,
+  tier: Tier,
+  afterState?: AfterState
+): string {
   const consequences = event.consequencesJson as Record<"optimal" | "adequate" | "inadequate" | "critical", string>;
   const prose = consequences[TIER_KEY[tier]];
-  return `${regionId} — ${event.title} (${tier.replace("_", " ")}): ${prose}`;
+  const base = `${regionId} — ${event.title} (${tier.replace("_", " ")}): ${prose}`;
+  const vignette = afterState ? pickVignette(afterState, regionId) : null;
+  return vignette ? `${base} ${vignette}` : base;
 }
 
 // Called right after applyModelDelta() for a freshly-scored decision (from
@@ -48,10 +64,11 @@ export async function pushConsequence(opts: {
   tier: Tier;
   deltas: ModelDelta[];
   actorUserId: number;
+  afterState?: AfterState;
 }) {
-  const { event, dispatchId, teamId, regionId, tier, deltas, actorUserId } = opts;
+  const { event, dispatchId, teamId, regionId, tier, deltas, actorUserId, afterState } = opts;
 
-  const cardText = buildConsequenceCard(event, regionId, tier);
+  const cardText = buildConsequenceCard(event, regionId, tier, afterState);
   await db.insert(teamNotifications).values({
     teamId,
     eventDispatchId: dispatchId,

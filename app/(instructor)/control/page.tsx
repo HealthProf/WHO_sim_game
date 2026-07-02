@@ -10,9 +10,11 @@ import { BudgetCyclePanel } from "@/components/budget-cycle-panel";
 import { MarketApprovalPanel } from "@/components/market-approval-panel";
 import { EmergencyFundingPanel } from "@/components/emergency-funding-panel";
 import { DeadlineCountdown } from "@/components/deadline-countdown";
+import { DirectorTimeline } from "@/components/director-timeline";
+import { TempoDial } from "@/components/tempo-dial";
+import { InterjectionPanel } from "@/components/interjection-panel";
 import Link from "next/link";
-
-const ALL_REGIONS = ["AFRO", "AMRO", "EMRO", "EURO", "SEARO", "WPRO"];
+import { REGIONS as ALL_REGIONS } from "@/lib/regions";
 
 interface EventFull {
   id: string;
@@ -50,7 +52,17 @@ interface EventsData {
 }
 
 interface DashboardData {
-  globalState: { simulationStatus: string; currentDay: number; escalationState: string; totalGameDays: number };
+  globalState: {
+    simulationStatus: string;
+    currentDay: number;
+    escalationState: string;
+    totalGameDays: number;
+    simulationStartedAt: string | null;
+    pausedAccumulatedMs: number;
+    pausedAt: string | null;
+    gameDaysPerRealMinute: number;
+    intensityMultiplier: number;
+  };
 }
 
 interface InboxItem {
@@ -129,7 +141,7 @@ export default function ControlPage() {
 
   function openPicker(eventId: string, suggested: string[] | null) {
     setPickerOpenFor(eventId);
-    setSelectedRegions(suggested ?? ALL_REGIONS);
+    setSelectedRegions(suggested ?? [...ALL_REGIONS]);
   }
 
   return (
@@ -170,6 +182,10 @@ export default function ControlPage() {
           )}
         </div>
       </section>
+
+      <DirectorTimeline state={dash.globalState} events={data.events} dispatches={data.dispatches} />
+      <TempoDial intensityMultiplier={dash.globalState.intensityMultiplier} />
+      <InterjectionPanel />
 
       {/* Needs your attention */}
       <section className={`rounded-xl p-5 border ${inboxCount > 0 ? "bg-amber-950/40 border-amber-700" : "bg-slate-900 border-slate-800"}`}>
@@ -344,7 +360,7 @@ export default function ControlPage() {
                             ))}
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => setSelectedRegions(ALL_REGIONS)} className="text-xs text-blue-400 hover:text-blue-300">
+                            <button onClick={() => setSelectedRegions([...ALL_REGIONS])} className="text-xs text-blue-400 hover:text-blue-300">
                               Select all
                             </button>
                             <button onClick={() => setSelectedRegions([])} className="text-xs text-blue-400 hover:text-blue-300">

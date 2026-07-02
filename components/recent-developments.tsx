@@ -14,6 +14,9 @@ export function RecentDevelopments({ notifications }: { notifications: { id: num
     budget_cycle: "Budget Cycle",
     emergency_funding: "Emergency Funding",
     decision_revealed: "Decision Revealed",
+    stakeholder: "Stakeholder",
+    interjection: "Facilitator",
+    leak: "Leak",
   };
   const kindColor: Record<string, string> = {
     consequence: "text-blue-400",
@@ -24,6 +27,9 @@ export function RecentDevelopments({ notifications }: { notifications: { id: num
     budget_cycle: "text-purple-400",
     emergency_funding: "text-purple-400",
     decision_revealed: "text-cyan-400",
+    stakeholder: "text-pink-400",
+    interjection: "text-orange-400",
+    leak: "text-red-500",
   };
 
   return (

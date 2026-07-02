@@ -38,8 +38,8 @@ async function recordAward(regionId: string, metric: string, tier: string) {
 
 async function notifyAll(message: string, alsoPublic: boolean) {
   const allTeams = await db.query.teams.findMany();
-  for (const t of allTeams) {
-    await db.insert(teamNotifications).values({ teamId: t.id, kind: "consequence", message });
+  if (allTeams.length > 0) {
+    await db.insert(teamNotifications).values(allTeams.map((t) => ({ teamId: t.id, kind: "consequence", message })));
   }
   if (alsoPublic) {
     await db.insert(globalFeedItems).values({ headlineText: message });

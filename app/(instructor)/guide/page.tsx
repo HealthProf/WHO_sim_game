@@ -68,7 +68,6 @@ export default function GuidePage() {
       <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
         <h2 className="text-lg font-semibold text-slate-100">Other Controls Worth Knowing About</h2>
         <ul className="list-disc list-inside space-y-2">
-          <li><b className="text-slate-100">Model Override</b> — directly edit any region&apos;s live numbers if you need to correct something or nudge the scenario; every override requires a short reason and is logged.</li>
           <li><b className="text-slate-100">Action Log</b> — a full audit trail of every dispatch, score, override, and status change you&apos;ve made, with timestamps.</li>
           <li><b className="text-slate-100">Deadlines enforce themselves</b> — HARD/SOFT deadlines auto-apply their fallback consequence tier when time runs out, even if you&apos;re not looking at the screen at that moment.</li>
           <li><b className="text-slate-100">Passive drift</b> — regional Rt creeps upward slowly on its own whenever the sim is running and no fresh containment decision has landed for a while, so idle time between events isn&apos;t free.</li>
@@ -229,7 +228,7 @@ export default function GuidePage() {
           Adaptive events whose trigger condition names a region that can only be known from current game state
           (e.g. &quot;any region whose political tension exceeds 70&quot;) now show an amber &quot;Currently qualifies&quot; badge
           in the Event Queue, computed live and pre-filled into the region picker when you hit Dispatch — you no
-          longer have to cross-reference the Model Override page yourself to figure out who actually triggered it.
+          longer have to eyeball each region&apos;s live numbers yourself to figure out who actually triggered it.
         </p>
       </section>
 

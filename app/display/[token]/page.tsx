@@ -6,6 +6,8 @@ import { SimClock } from "@/components/sim-clock";
 import type { GlobalClockFields } from "@/lib/sim-clock";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import type { SummaryRound } from "@/lib/summary-report";
+import type { FinalResults } from "@/lib/final-results";
+import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
 
 interface DisplaySnapVote {
   question: string;
@@ -17,31 +19,14 @@ interface DisplaySnapVote {
 
 interface DisplayAnnouncement {
   id: number;
+  kind: string;
   title: string;
   message: string;
   autoDismissSeconds: number | null;
   createdAt: string;
 }
 
-interface RegionFinalResult {
-  regionId: string;
-  actualConfirmed: number;
-  actualDeaths: number;
-  optimalConfirmed: number;
-  optimalDeaths: number;
-  infectionsPrevented: number;
-  deathsPrevented: number;
-}
-
-interface FinalResults {
-  regions: RegionFinalResult[];
-  totalActualConfirmed: number;
-  totalActualDeaths: number;
-  totalOptimalConfirmed: number;
-  totalOptimalDeaths: number;
-  totalInfectionsPrevented: number;
-  totalDeathsPrevented: number;
-}
+type TeamChapter = Pick<FullTeamChapter, "regionId" | "headline" | "narrative" | "tierCounts" | "deathsPrevented">;
 
 interface DisplayData extends GlobalClockFields {
   currentDay: number;
@@ -60,6 +45,8 @@ interface DisplayData extends GlobalClockFields {
   globalAvgHappiness: number;
   globalAvgPublicTrust: number;
   finalResults: FinalResults | null;
+  teamChapters: TeamChapter[] | null;
+  worldHealth: { index: number; label: string };
 }
 
 const escalationBg: Record<string, string> = {
@@ -151,11 +138,11 @@ export default function PublicDisplayPage() {
   // Data is stale if the last successful poll was more than ~40s ago
   // (four missed cycles) — surface it rather than silently showing old
   // numbers forever if the connection has actually dropped.
-  const isStale = lastSuccessAt !== null && Date.now() - lastSuccessAt > 40000;
+  const isStale = lastSuccessAt !== null && now - lastSuccessAt > 40000;
 
   const staleBanner = isStale && (
     <div className="shrink-0 bg-red-900 text-white text-center py-1.5 text-sm font-medium">
-      Connection to the server may be lost — last updated {Math.round((Date.now() - lastSuccessAt!) / 1000)}s ago, still retrying
+      Connection to the server may be lost — last updated {Math.round((now - lastSuccessAt!) / 1000)}s ago, still retrying
     </div>
   );
 
@@ -188,6 +175,19 @@ export default function PublicDisplayPage() {
               </div>
             </section>
           )}
+          {data.teamChapters && data.teamChapters.length > 0 && (
+            <section className="space-y-4">
+              <h2 className="text-2xl font-bold">Chapters of History</h2>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {data.teamChapters.map((c) => (
+                  <div key={c.regionId} className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-5 space-y-2">
+                    <p className="text-xl font-bold text-white">{c.headline}</p>
+                    <p className="text-sm text-slate-300">{c.narrative}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <SummaryReportViewer rounds={data.rounds} large />
         </div>
       </div>
@@ -211,6 +211,25 @@ export default function PublicDisplayPage() {
           <span>Media Pressure {data.mediaPressureIndex}</span>
         </div>
       </header>
+
+      {/* Item 12's "single world health bar" — one shared composite number
+          (see lib/world-health.ts) the whole room watches together, instead
+          of six regions' worth of stats competing for attention. Color
+          bands green->amber->red across the fill, with the index and its
+          descriptor as a direct label rather than color alone. */}
+      <div className="shrink-0 bg-slate-900 border-b border-slate-800 px-8 py-3 flex items-center gap-4">
+        <span className="text-xs uppercase tracking-widest text-slate-400 shrink-0">World Health</span>
+        <div className="flex-1 h-4 bg-slate-800 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-1000 ${
+              data.worldHealth.index >= 55 ? "bg-emerald-500" : data.worldHealth.index >= 35 ? "bg-amber-500" : "bg-red-600"
+            }`}
+            style={{ width: `${Math.max(3, data.worldHealth.index)}%` }}
+          />
+        </div>
+        <span className="text-lg font-bold tabular-nums shrink-0">{data.worldHealth.index}/100</span>
+        <span className="text-sm text-slate-400 shrink-0 w-32">{data.worldHealth.label}</span>
+      </div>
 
       {data.snapVote && (
         <div className="shrink-0 bg-red-800 px-8 py-4 flex items-center justify-between gap-6">
@@ -245,14 +264,26 @@ export default function PublicDisplayPage() {
 
       {data.activeAnnouncement &&
         announcementSeen?.id === data.activeAnnouncement.id &&
-        now - announcementSeen.seenAt < (data.activeAnnouncement.autoDismissSeconds ?? 10) * 1000 && (
+        now - announcementSeen.seenAt < (data.activeAnnouncement.autoDismissSeconds ?? 10) * 1000 &&
+        (data.activeAnnouncement.kind === "dramatic_moment" ? (
+          // Item 2's scripted midpoint moment: a full black takeover, not
+          // an overlay — no map, no feed, nothing competing for attention.
+          // Text fades in slowly rather than popping, so the room has a
+          // beat of silence before it can read anything.
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black px-16">
+            <div className="max-w-5xl w-full text-center animate-fade-in-slow">
+              <p className="text-sm uppercase tracking-[0.3em] text-red-500 font-semibold mb-6">{data.activeAnnouncement.title}</p>
+              <p className="text-4xl xl:text-6xl font-bold text-white leading-snug">{data.activeAnnouncement.message}</p>
+            </div>
+          </div>
+        ) : (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-12 pointer-events-none">
             <div className="max-w-4xl w-full rounded-2xl border-4 border-blue-500 bg-blue-950 p-10 text-center shadow-2xl">
               <p className="text-lg uppercase tracking-widest text-blue-300 font-semibold mb-3">{data.activeAnnouncement.title}</p>
               <p className="text-3xl xl:text-4xl font-bold text-white leading-snug">{data.activeAnnouncement.message}</p>
             </div>
           </div>
-        )}
+        ))}
 
       <div className="flex-1 min-h-0 flex gap-0">
         {/* Left: real-time key metrics — stat tiles plus a bar per region for
