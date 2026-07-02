@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { marketRequests, modelState, globalState, teams, teamNotifications } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
-import { computeMarketPrice } from "@/lib/economy";
+import { computeMarketPrice, POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/economy";
 
 // GET: current adaptive WHO HQ pricing + stock, plus every pending/recent
 // request (visible to all teams, not just the requester — item 3's "other
@@ -63,6 +63,12 @@ export async function POST(req: NextRequest) {
   const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
   const state = team ? await db.query.modelState.findFirst({ where: eq(modelState.regionId, team.regionId) }) : null;
   if (!state) return NextResponse.json({ error: "Region not found" }, { status: 404 });
+  if (state.politicalTensionIndex >= POLITICAL_TENSION_LOCKOUT_THRESHOLD) {
+    return NextResponse.json(
+      { error: `Cooperation with WHO HQ is currently ruptured (political tension ${state.politicalTensionIndex}/100) — resolve EVT-025 before buying from WHO HQ.` },
+      { status: 403 }
+    );
+  }
   if (state.fundRemaining < totalCost) {
     return NextResponse.json({ error: `This would cost $${totalCost.toLocaleString()} — you only have $${state.fundRemaining.toLocaleString()} available.` }, { status: 400 });
   }

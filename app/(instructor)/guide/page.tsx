@@ -210,6 +210,61 @@ export default function GuidePage() {
         </p>
       </section>
 
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Epidemic Growth Model (Recalibrated)</h2>
+        <p>
+          Confirmed cases and deaths now grow using an actual epidemiological growth identity tied to each
+          region&apos;s live Rt (roughly a 5-day serial interval — Rt above 3 doubles case counts every 2-3 narrative
+          days), instead of the earlier flat rate that barely responded to Rt at all. Growth is logistic, not
+          unbounded: it tapers as confirmed cases approach a per-region ceiling scaled by real population and that
+          region&apos;s current surveillance capacity, so a weak-surveillance region always undercounts relative to a
+          well-instrumented one at the same true infection level. An Rt held below 1 lets new-case growth taper
+          toward zero — a region can now actually plateau, not just slow down.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Live Dispatch Target Hints</h2>
+        <p>
+          Adaptive events whose trigger condition names a region that can only be known from current game state
+          (e.g. &quot;any region whose political tension exceeds 70&quot;) now show an amber &quot;Currently qualifies&quot; badge
+          in the Event Queue, computed live and pre-filled into the region picker when you hit Dispatch — you no
+          longer have to cross-reference the Model Override page yourself to figure out who actually triggered it.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Post-Scoring Reveal</h2>
+        <p>
+          Every scored decision — not just the dramatic ones — now posts a plain &quot;REGION chose OPTION, scored
+          TIER&quot; line to every other region&apos;s dashboard (Recent Developments), regardless of event scope. This is
+          separate from the existing restricted-event &quot;Final Decision&quot; popup (which still fires as a bigger
+          moment once a whole restricted group like EVT-002 finishes deciding) — the new mechanic is the lightweight,
+          always-on version, so a targeted region&apos;s choice actually lands on everyone once it&apos;s judged, not just
+          the instructor and the deciding team.
+        </p>
+      </section>
+
+      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-100">Social-Metric Consequence Arcs</h2>
+        <p>
+          Public trust, population happiness, and political tension now carry real stakes. Each has a 3-stage
+          bad-direction arc — Warning, Escalation, Crisis — that fires as a real dispatched event (EVT-017 through
+          EVT-025) once a region crosses that stage&apos;s threshold, with its own decision prompt, costed options, and
+          consequences (up to real Rt/CFR/HCW-capacity damage at the Crisis stage). Use the live target hint on each
+          to see who currently qualifies. A region whose political tension ruptures past 90 (EVT-025) is
+          mechanically locked out of the WHO HQ marketplace and emergency funding until it comes back down, not just
+          narratively — the API actually rejects those requests.
+        </p>
+        <p>
+          The good-direction mirror is automatic, not a dispatched event: sustained high trust/happiness or
+          sustained low political tension (both per-region and world-average) triggers a one-time reward — a fund
+          bonus, an Rt/HCW/surveillance boost, or for the world-level versions, a WHO HQ fund or stockpile top-up —
+          the moment the threshold is crossed, with a plain notification explaining why. Each milestone can only
+          fire once per region (or once globally) for the whole session.
+        </p>
+      </section>
+
       <Link
         href="/control"
         className="inline-block rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-5 py-2.5"

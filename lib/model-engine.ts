@@ -228,9 +228,51 @@ const BASE_CFR = 0.008; // 0.8% base CFR per 01-scenario.md, before the regional
 // modelDelta — general public morale erodes just from the crisis dragging on.
 const HAPPINESS_ESCALATION_DRAIN: Record<string, number> = { GREEN: 0, AMBER: 0.15, RED: 0.4 };
 
-function computeEpidemicGrowth(before: { rt: number; cfrMultiplier: number; confirmedCases: number; estimatedTrueCasesLow: number; estimatedTrueCasesHigh: number }, elapsedMinutes: number) {
-  const growthRatePerMinute = clamp(0.002 + before.rt * 0.006, 0, 0.05);
-  const newConfirmed = Math.max(1, Math.round(before.confirmedCases * growthRatePerMinute * elapsedMinutes));
+// Epidemic growth model (recalibrated — the original linear `0.002 + Rt*0.006`
+// term, capped at 5%/min, implied daily growth rates roughly 15-20x slower
+// than a real Rt of that size would produce, and floored growth at a fixed
+// positive rate even when Rt dropped below 1, so a well-contained outbreak
+// could never actually plateau). This version ties growth directly to a
+// standard continuous-time epi identity — over one serial interval, case
+// counts multiply by Rt exactly (dN/dt = N * ln(Rt) / serialInterval) — so
+// Rt now has the effect a facilitator would actually expect: Rt just above 1
+// is a slow burn, Rt above 3 roughly doubles cases every 2-3 days, and Rt
+// below 1 lets new-case growth taper to zero (cumulative confirmed count
+// still never decreases, same as real surveillance reporting).
+//
+// Growth is logistic, not unbounded exponential: it tapers as confirmedCases
+// approaches a per-region ceiling, since "confirmed" cases are bounded by
+// testing/reporting capacity long before true infections would be. The
+// ceiling scales with each region's real population and its *current*
+// surveillanceIndex (a region with poor surveillance chronically
+// undercounts even mid-crisis — see estimatedTrueCases for the much larger
+// band of infections that were never confirmed).
+const SERIAL_INTERVAL_DAYS = 5; // generic respiratory-pathogen assumption, mid-range of COVID/flu estimates
+const BASE_CONFIRMED_CEILING_PCT = 0.02; // 2% of population, at "average" (5/10) surveillance capacity
+const REGION_POPULATION: Record<string, number> = {
+  AFRO: 1_100_000_000,
+  AMRO: 1_000_000_000,
+  EMRO: 679_000_000,
+  EURO: 930_000_000,
+  SEARO: 2_000_000_000,
+  WPRO: 1_900_000_000,
+};
+
+function confirmedCaseCeiling(regionId: string, surveillanceIndex: number): number {
+  const population = REGION_POPULATION[regionId] ?? 1_000_000_000;
+  const detectionMultiplier = clamp(surveillanceIndex / 5, 0.4, 2.0);
+  return population * BASE_CONFIRMED_CEILING_PCT * detectionMultiplier;
+}
+
+function computeEpidemicGrowth(
+  before: { rt: number; cfrMultiplier: number; confirmedCases: number; estimatedTrueCasesLow: number; estimatedTrueCasesHigh: number },
+  elapsedNarrativeDays: number,
+  ceiling: number
+) {
+  const rPerDay = Math.log(Math.max(before.rt, 0.01)) / SERIAL_INTERVAL_DAYS;
+  const logisticHeadroom = ceiling > 0 ? clamp(1 - before.confirmedCases / ceiling, 0, 1) : 1;
+  const newConfirmedRaw = rPerDay * before.confirmedCases * logisticHeadroom * elapsedNarrativeDays;
+  const newConfirmed = clamp(Math.round(newConfirmedRaw), 0, Math.max(0, ceiling - before.confirmedCases));
   const trueCaseGrowthFactor = before.confirmedCases > 0 ? (before.confirmedCases + newConfirmed) / before.confirmedCases : 1;
   const newDeaths = Math.max(0, Math.round(newConfirmed * BASE_CFR * before.cfrMultiplier));
   return {
@@ -241,7 +283,13 @@ function computeEpidemicGrowth(before: { rt: number; cfrMultiplier: number; conf
   };
 }
 
-export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDriftAppliedAt: Date | null; simulationStartedAt: Date | null; escalationState?: string }) {
+export async function applyPassiveDrift(gs?: {
+  simulationStatus: string;
+  lastDriftAppliedAt: Date | null;
+  simulationStartedAt: Date | null;
+  escalationState?: string;
+  gameDaysPerRealMinute?: number;
+}) {
   const state = gs ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }));
   if (!state || state.simulationStatus !== "running") return;
 
@@ -253,6 +301,8 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
   const rtDelta = DRIFT_RATE_PER_MINUTE * elapsedMinutes;
   const escalationState = state.escalationState ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }))?.escalationState ?? "GREEN";
   const happinessDrain = HAPPINESS_ESCALATION_DRAIN[escalationState] ?? 0;
+  const gameDaysPerRealMinute = state.gameDaysPerRealMinute && state.gameDaysPerRealMinute > 0 ? state.gameDaysPerRealMinute : 1.5;
+  const elapsedNarrativeDays = elapsedMinutes * gameDaysPerRealMinute;
 
   const allRegions = await db.query.regions.findMany();
   for (const region of allRegions) {
@@ -261,7 +311,8 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
 
     await applyFieldDelta(region.id, "rt", rtDelta);
 
-    const growth = computeEpidemicGrowth(before, elapsedMinutes);
+    const ceiling = confirmedCaseCeiling(region.id, before.surveillanceIndex);
+    const growth = computeEpidemicGrowth(before, elapsedNarrativeDays, ceiling);
     const happinessLoss = Math.round(happinessDrain * elapsedMinutes + growth.newDeaths * 0.05);
 
     await db
@@ -292,7 +343,11 @@ export async function applyPassiveDrift(gs?: { simulationStatus: string; lastDri
     const shadow = await db.query.modelStateOptimal.findFirst({ where: eq(modelStateOptimal.regionId, region.id) });
     if (shadow) {
       const shadowRt = clamp(shadow.rt + rtDelta, 0, 10);
-      const shadowGrowth = computeEpidemicGrowth({ ...shadow, rt: shadow.rt }, elapsedMinutes);
+      // No surveillanceIndex on the shadow table — reuse the real region's
+      // current value (surveillance capacity is regional infrastructure,
+      // not something an idealized counterfactual would differ on) and thus
+      // the same ceiling computed above for the real trajectory.
+      const shadowGrowth = computeEpidemicGrowth({ ...shadow, rt: shadow.rt }, elapsedNarrativeDays, ceiling);
       const shadowHappinessLoss = Math.round(happinessDrain * elapsedMinutes + shadowGrowth.newDeaths * 0.05);
       await db
         .update(modelStateOptimal)

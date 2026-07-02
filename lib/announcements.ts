@@ -12,10 +12,21 @@
 //    room learns the outcome of a decision only a few regions actually
 //    made. Global display gets a 10s auto-dismiss banner; every team
 //    (not just the ones who decided) gets a persistent popup.
+//
+// A third, lighter mechanism lives at the bottom of this file:
+// announceDecisionRevealed() fires on EVERY scored decision, for every
+// event regardless of scope/audience, and posts to teamNotifications (the
+// dashboard's "Recent Developments" list) rather than a modal — a routine
+// decision from a region you weren't watching shouldn't interrupt anyone,
+// but it should still be visible to everyone once it's scored, so the
+// tension from who-got-targeted-with-what (see lib/event-targeting.ts) and
+// who-chose-what actually lands on the rest of the room instead of staying
+// invisible outside the deciding region and the instructor.
 
 import { db } from "./db";
-import { announcements, announcementAcks } from "./db/schema";
+import { announcements, announcementAcks, teamNotifications } from "./db/schema";
 import { and, eq } from "drizzle-orm";
+import type { Tier } from "./db/seed-data/events";
 
 const GLOBAL_AUTO_DISMISS_SECONDS = 10;
 
@@ -146,4 +157,37 @@ export async function getTeamAnnouncements(teamId: number) {
 
 export async function ackAnnouncement(announcementId: number, teamId: number) {
   await db.insert(announcementAcks).values({ announcementId, teamId }).onConflictDoNothing();
+}
+
+// Called right after every scored decision (instructor scoring inbox and
+// the deadline-expiry auto-fallback), for every event unconditionally —
+// unlike maybeAnnounceResolution above, this doesn't wait for a whole
+// restricted-audience group to finish or check how many regions the event
+// went to. Every other region gets a plain "REGION chose OPTION — TIER"
+// line (option label + tier only, never the submitted rationale text —
+// that stays private to the deciding team, same boundary the public
+// display already enforces). The deciding team doesn't get this — they
+// already got their own richer consequence card from pushConsequence().
+export async function announceDecisionRevealed(opts: {
+  eventId: string;
+  eventTitle: string;
+  regionId: string;
+  submittingTeamId: number;
+  structuredChoice: string | null;
+  tier: Tier;
+}) {
+  const { eventTitle, regionId, submittingTeamId, structuredChoice, tier } = opts;
+
+  const choiceDesc = structuredChoice ? `chose ${structuredChoice}` : "submitted its decision";
+  const message = `${regionId} ${choiceDesc} on "${eventTitle}" — scored ${tier.replace("_", " ")}.`;
+
+  const allTeams = await db.query.teams.findMany();
+  for (const team of allTeams) {
+    if (team.id === submittingTeamId) continue;
+    await db.insert(teamNotifications).values({
+      teamId: team.id,
+      kind: "decision_revealed",
+      message,
+    });
+  }
 }

@@ -8,6 +8,12 @@
 const BASE_PRICE_PER_PPE_DAY = 2_000; // $ per PPE-day-equivalent unit
 const BASE_PRICE_PER_ANTIVIRAL = 150; // $ per dose
 
+// A region whose political tension has ruptured cooperation with WHO HQ
+// (EVT-025) is locked out of the WHO HQ marketplace and emergency-funding
+// requests until tension comes back down — enforced in app/api/market and
+// app/api/emergency-funding, not just narrated in the event text.
+export const POLITICAL_TENSION_LOCKOUT_THRESHOLD = 90;
+
 const ESCALATION_MULTIPLIER: Record<string, number> = { GREEN: 1, AMBER: 1.3, RED: 1.75 };
 
 // Scarcity multiplier: price climbs as WHO HQ's own stock depletes relative

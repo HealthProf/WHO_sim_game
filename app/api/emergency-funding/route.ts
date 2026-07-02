@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { emergencyFundingRequests, emergencyFundingContributions, modelState, globalState, teams, teamNotifications } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireSession } from "@/lib/api-helpers";
+import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/economy";
 
 // GET: all emergency funding requests (open + recently closed) with their
 // contributions so far — visible to everyone, same transparency model as
@@ -57,12 +58,20 @@ export async function POST(req: NextRequest) {
   });
   if (existingOpen) return NextResponse.json({ error: "Your region already has an open emergency funding request." }, { status: 409 });
 
+  const requestingTeam = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
+  const requesterState = requestingTeam ? await db.query.modelState.findFirst({ where: eq(modelState.regionId, requestingTeam.regionId) }) : null;
+  if (requesterState && requesterState.politicalTensionIndex >= POLITICAL_TENSION_LOCKOUT_THRESHOLD) {
+    return NextResponse.json(
+      { error: `Cooperation with WHO HQ is currently ruptured (political tension ${requesterState.politicalTensionIndex}/100) — resolve EVT-025 before requesting emergency funding.` },
+      { status: 403 }
+    );
+  }
+
   const [request] = await db
     .insert(emergencyFundingRequests)
     .values({ requestingTeamId: session!.user.teamId, amountRequested, reason })
     .returning();
 
-  const requestingTeam = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
   const allTeams = await db.query.teams.findMany();
   for (const t of allTeams) {
     if (t.id === session!.user.teamId) continue;

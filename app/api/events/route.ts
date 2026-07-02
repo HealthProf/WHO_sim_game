@@ -6,6 +6,7 @@ import { requireInstructor, requireSession } from "@/lib/api-helpers";
 import { canDispatch } from "@/lib/chain";
 import { computeDeadlineAt } from "@/lib/deadline";
 import { announceDispatch } from "@/lib/announcements";
+import { computeEventTargetHints } from "@/lib/event-targeting";
 
 // GET: list all events with dispatch/chain status. Instructors see everything;
 // students see only dispatches targeted at their team (or global broadcasts).
@@ -23,11 +24,13 @@ export async function GET() {
 
   if (session!.user.role === "instructor") {
     const allTeams = await db.query.teams.findMany();
+    const targetHints = await computeEventTargetHints();
     return NextResponse.json({
       events: allEvents,
       dispatches: allDispatches,
       chainStatus,
       teams: allTeams.map((t) => ({ id: t.id, regionId: t.regionId })),
+      targetHints,
     });
   }
 
