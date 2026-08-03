@@ -1,19 +1,123 @@
-# Operation Veiled Horizon — WHO Pandemic Simulation
+# Operation Veiled Horizon — WHO Pandemic Response Simulation
 
-A multi-user web app that runs the *Operation Veiled Horizon* WHO pandemic
-simulation. Six teams (one per WHO region) and one instructor respond to a
-scripted/adaptive event queue; the instructor scores each submission across
-three weighted dimensions, which drives a live, shared model of the
-outbreak. Full pedagogical design (scenario, scoring rubric, event script)
-lives in `simulation-docs/`.
+A live, multi-team simulation for teaching global health policy: six student
+teams each run one WHO regional office, an instructor plays events at them
+in real time, and every decision feeds a shared epidemic model everyone can
+see change. Built for a university global health course as a replacement
+for a version that used to run inside Gmail, Sheets, and Apps Script.
 
-**This README has two versions.** If you're setting this up for a class and
-don't have a programming background, start with **Part 1**. If you're
-comfortable with a terminal, npm, and deploying web apps, skip to **Part 2**.
+## Demo
+
+Live app: [who-sim-game.vercel.app](https://who-sim-game.vercel.app)
+
+Login is per-region, not per-student (see [Design decisions](#design-decisions)
+below) — there's no public signup. Instructor and team demo access
+available on request.
+
+## Screenshots
+
+*Not yet captured — see note at the end of this README for exactly what to
+shoot and where to put it.*
+
+## What it does / how it teaches
+
+- **Teams face scripted and adaptive events, not multiple-choice quizzes.**
+  Sixteen core events plus chained follow-ups fire over a compressed
+  session; each requires a structured decision *and* a written rationale.
+  Consequence-driven play sticks better than recall — a team lives with the
+  outbreak trajectory their call produced instead of just checking whether
+  they picked the "right" answer.
+- **Scoring is 40% evidence, 30% political realism, 30% equity** — not
+  "correct/incorrect." Global health decisions are genuinely
+  multi-objective, and the rubric forces the instructor (and the team,
+  once they see the score) to reason about tradeoffs the same way a real
+  regional office would.
+- **The epidemic model is shared and reactive, not scripted.** Every scored
+  decision nudges Rt, case-fatality multiplier, public trust, and
+  population happiness for the affected region(s), and those numbers
+  compound. Watching a bad week actually raise Rt is more convincing than
+  being told it would.
+- **A counterfactual "Optimal" shadow simulation runs alongside the real
+  one**, applying what the best-tier response *would* have done to a
+  parallel copy of the model state. The debrief can then show a team
+  exactly how far their actual outcome diverged from the idealized one —
+  turning the after-action review into something more specific than "good
+  job" or "do better."
+- **Regions are asymmetric on purpose** (different starting resources,
+  CFR multipliers, surveillance index) and the game rewards
+  inter-regional coordination — a shared coordination log and a private
+  diplomatic back-channel (with a chance of public leaks) exist because
+  the pedagogical intent is "one institution responding together," not six
+  teams competing.
+- **Deadlines are real pressure, not UX polish.** Hard deadlines
+  auto-apply a consequence at expiry; soft deadlines warn first. Global
+  health crises are time-bound, and a rubric score alone doesn't teach
+  that — a countdown does.
+
+## Design decisions
+
+- **No `db.transaction()`, ever — atomic single-statement updates instead.**
+  Production runs on Neon's HTTP driver (chosen to avoid serverless
+  functions exhausting a `pg.Pool`'s TCP connections), and that driver
+  throws at runtime on `.transaction()` — it type-checks fine against a
+  local Postgres, then breaks in prod. Every balance mutation (fund, PPE,
+  antivirals) is instead a single `UPDATE ... WHERE balance >= amount
+  RETURNING *`, which Postgres guarantees is row-atomic regardless of
+  driver. Multi-row transfers (a trade between two regions) debit first and
+  credit second, so a crash mid-transfer destroys value instead of
+  duplicating it — the less exploitable failure mode in a resource game.
+- **No real cron for a 60-minute session.** Vercel's free tier only allows
+  daily cron jobs, far too coarse for deadline enforcement that needs to
+  fire every 10-15 seconds. Instead, `processDeadlines()` runs
+  opportunistically inside the existing dashboard/display polling that's
+  already happening as long as one screen is open, throttled server-side
+  so concurrent pollers don't all re-trigger it. It's a scrappier answer
+  than a real scheduler, but it fits the actual constraint (free tier,
+  short session) instead of asking for a paid plan to solve a problem that
+  doesn't need one.
+- **Shared per-region logins, not per-student accounts.** Six fixed
+  usernames plus one instructor account, reseeded with the same
+  credentials every time. A real LMS-integrated identity system would be
+  the "correct" answer for a production course tool; for a ~60-minute
+  live session where a team huddles around one laptop, it's overhead this
+  prototype doesn't need. That tradeoff is called out explicitly in the
+  code rather than left implicit.
+- **A separate compressed "narrative clock" from the deadline clock.**
+  `lib/sim-clock.ts` maps real elapsed minutes onto a ~90-day in-game
+  narrative arc (pure math, no DB read, so it ticks identically on server
+  and client) — deliberately decoupled from `fastModeMultiplier`, which
+  only compresses individual event deadline windows. Conflating the two
+  would either make the day counter jump unreadably or make deadlines
+  track the wrong clock.
+
+## Stack
+
+Next.js (App Router) + Drizzle ORM + Postgres (Neon) + NextAuth v5
+(credentials) + TanStack Query + Tailwind, deployed on Vercel.
+
+## Status
+
+Prototype. It runs end-to-end (login, event dispatch, scoring, live model
+updates, debrief) but hasn't been run with real students in a course yet.
+
+## About me
+
+Education leader building AI-powered learning systems at Northern Arizona
+University · [github.com/HealthProf](https://github.com/HealthProf) ·
+[linkedin.com/in/health-prof](https://www.linkedin.com/in/health-prof)
 
 ---
 
-# Part 1 — Setup Guide for Instructors (No Coding Experience Needed)
+## Setup Guide
+
+The sections below are the practical instructions for standing this up —
+for a course instructor, a collaborator, or future me.
+
+**This guide has two versions.** If you're setting this up for a class and
+don't have a programming background, start with **Part 1**. If you're
+comfortable with a terminal, npm, and deploying web apps, skip to **Part 2**.
+
+### Part 1 — Setup Guide for Instructors (No Coding Experience Needed)
 
 Everything below is done by clicking around in a web browser — you will not
 need to install anything or open a terminal. You're doing three things:
@@ -24,7 +128,7 @@ login passwords (one button click, through GitHub).
 Budget about 20 minutes for the one-time setup. You only do this once per
 semester (or once, ever, if you just re-reset the database between classes).
 
-## Step 1: Create two free accounts
+#### Step 1: Create two free accounts
 
 1. **GitHub** — go to github.com/signup and create an account, if you don't
    already have one.
@@ -32,7 +136,7 @@ semester (or once, ever, if you just re-reset the database between classes).
    GitHub"**. This links the two accounts together, which makes everything
    below simpler.
 
-## Step 2: Get your own copy of the project
+#### Step 2: Get your own copy of the project
 
 1. Open the project's GitHub page (the link you were given — `github.com/HealthProf/WHO_sim_game`).
 2. Click the **Fork** button near the top right of the page, then click
@@ -40,7 +144,7 @@ semester (or once, ever, if you just re-reset the database between classes).
    your GitHub account, which you can deploy and reset freely without
    touching the original.
 
-## Step 3: Put it online with Vercel
+#### Step 3: Put it online with Vercel
 
 1. Go to vercel.com/new.
 2. Find your forked repository in the list and click **Import** next to it.
@@ -50,7 +154,7 @@ semester (or once, ever, if you just re-reset the database between classes).
    first add the database in the next step, so the app has somewhere to
    store the game.
 
-## Step 4: Add a database
+#### Step 4: Add a database
 
 1. Still on the Configure Project screen (or, if you already deployed,
    go to your Project → the **Storage** tab), click **Create Database**.
@@ -63,7 +167,7 @@ semester (or once, ever, if you just re-reset the database between classes).
    named it something else instead (e.g. `POSTGRES_URL`), click **Add New**,
    name it `DATABASE_URL`, and paste in the same value.
 
-## Step 5: Add one more required setting
+#### Step 5: Add one more required setting
 
 Still on **Project → Settings → Environment Variables**, click **Add New**
 and create one more entry:
@@ -76,7 +180,7 @@ and create one more entry:
 
 Leave everything else at its default.
 
-## Step 6: Deploy
+#### Step 6: Deploy
 
 Go to your Project's **Deployments** tab and trigger a deploy (click
 **Redeploy** if one already ran, so it picks up the settings you just
@@ -86,7 +190,7 @@ Your site's address is shown on the Project's **Overview** page, something
 like `your-project-name.vercel.app`. Bookmark it — this is the page
 everyone (you and every team) will log into.
 
-## Step 7: Load the game content and get the class logins
+#### Step 7: Load the game content and get the class logins
 
 The app needs its database populated with the simulation's events and the
 login accounts for each region. This is one button click on GitHub — no
@@ -116,7 +220,7 @@ terminal needed.
 You can re-run this workflow any time you want to reset the game back to
 its starting state before a new class — it's always safe to run.
 
-## Step 8: Try it out before your class
+#### Step 8: Try it out before your class
 
 1. Visit your site's address from Step 6 and log in as `instructor`.
 2. Open a **private/incognito browser window** and log in there as one
@@ -126,7 +230,7 @@ its starting state before a new class — it's always safe to run.
    Simulation**, then dispatch the first event and try submitting a
    response as the team to make sure everything flows end to end.
 
-## Running an actual class session
+#### Running an actual class session
 
 - You (the instructor) log in, go to the **Command Center**, and click
   **Start Simulation** when you're ready to begin.
@@ -143,7 +247,7 @@ its starting state before a new class — it's always safe to run.
 - Nothing needs to be "saved" — everything the app does is stored in the
   database automatically as the session runs.
 
-## Resetting between classes
+#### Resetting between classes
 
 Just re-run **Database setup / reset** from the GitHub Actions tab again
 (Step 7). It restores the six regions to their starting conditions and
@@ -151,7 +255,7 @@ reloads the full event script — it does **not** change your Vercel
 deployment or any of the settings you configured above, so you only ever
 have to do Steps 1–6 once.
 
-## If something goes wrong
+#### If something goes wrong
 
 - **Nobody can log in / "invalid credentials" for everyone:** the database
   was likely never seeded (Step 7), or the `DATABASE_URL` value in Vercel
@@ -168,18 +272,9 @@ have to do Steps 1–6 once.
   (`lib/db/seed-data/credentials.ts`) and asking a developer to help, or
   following Part 2's local setup to do it yourself.
 
----
+### Part 2 — Quick Reference for Developers
 
-# Part 2 — Quick Reference for Developers
-
-## Stack
-
-Next.js (App Router) + Drizzle ORM + Postgres + NextAuth v5 (credentials) +
-TanStack Query, deployed on Vercel with Neon Postgres. Deadline enforcement
-piggybacks on the polling traffic dashboards already generate (see the Cron
-note below) rather than relying on a real cron job.
-
-## Local Setup
+#### Local Setup
 
 ```bash
 npm install
@@ -189,7 +284,7 @@ npm run db:seed        # seed regions/events + print login credentials
 npm run dev
 ```
 
-## Deploying to Vercel
+#### Deploying to Vercel
 
 1. Push this repo to GitHub, import it into Vercel.
 2. Add a Postgres database (Vercel's Neon integration is the easiest path) and
@@ -206,7 +301,7 @@ npm run dev
    workflow, which needs a `DATABASE_URL` repository secret set separately
    from the Vercel env var).
 
-### Note on deadline enforcement (Hobby vs. Pro plans)
+#### Note on deadline enforcement (Hobby vs. Pro plans)
 
 Vercel's free Hobby plan only allows cron jobs that run once a day, which is
 too coarse for a compressed ~60 minute session. Rather than require a paid
@@ -222,11 +317,12 @@ primary mechanism. If you're on a Pro plan and want tighter enforcement even
 when no one has a page open, you can change its schedule to `* * * * *`
 (every minute) yourself.
 
-## Login Administration
+#### Login Administration
 
 Every region shares **one login for the whole team** (see the design
-discussion on shared-per-region logins vs. individual student accounts —
-this prototype uses shared logins for a fast-paced compressed test session).
+discussion above on shared-per-region logins vs. individual student
+accounts — this prototype uses shared logins for a fast-paced compressed
+test session).
 
 - **Usernames are fixed**: `afro`, `amro`, `emro`, `euro`, `searo`, `wpro`, and
   `instructor`. No email addresses are used anywhere in this prototype.
@@ -245,7 +341,7 @@ this prototype uses shared logins for a fast-paced compressed test session).
   npm run db:set-password -- afro your-chosen-password
   ```
 
-## Running a Compressed (~60 Minute) Test Session
+#### Running a Compressed (~60 Minute) Test Session
 
 `global_state.fast_mode_multiplier` (seeded to `1/60`) compresses every
 event's stated deadline window (in hours) into real minutes — a "2-hour HARD
@@ -257,7 +353,7 @@ or too slow overall. The blackout window (10pm–6am Phoenix) is disabled by
 default (`respect_blackout_window = false`) since it's irrelevant for a
 single live session.
 
-## Public Display Screen
+#### Public Display Screen
 
 Open `/display/<any-token>` on the projector — no login required, and the
 route only ever reads public-safe aggregate data (see `app/api/display/route.ts`
@@ -265,7 +361,7 @@ for exactly what is and isn't exposed). Push events to it from the
 instructor's Control panel via "Push to Global Display," which is a distinct,
 deliberate action from dispatching an event to teams.
 
-## What's Implemented vs. What's a Stretch Goal
+#### What's Implemented vs. What's a Stretch Goal
 
 Implemented: all 16 core events plus a set of social-consequence and
 adaptive-trigger events, seeded with chain dependencies and fast-mode
