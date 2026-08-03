@@ -14,11 +14,6 @@ Login is per-region, not per-student (see [Design decisions](#design-decisions)
 below) — there's no public signup. Instructor and team demo access
 available on request.
 
-## Screenshots
-
-*Not yet captured — see note at the end of this README for exactly what to
-shoot and where to put it.*
-
 ## What it does / how it teaches
 
 - **Teams face scripted and adaptive events, not multiple-choice quizzes.**
