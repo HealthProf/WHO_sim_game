@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { regionColors } from "@/lib/who-region-map";
 import { SimClock } from "@/components/sim-clock";
 import type { GlobalClockFields } from "@/lib/sim-clock";
@@ -56,6 +57,8 @@ const escalationBg: Record<string, string> = {
 };
 
 export default function PublicDisplayPage() {
+  const params = useParams<{ token: string }>();
+  const token = params.token;
   const [data, setData] = useState<DisplayData | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
@@ -99,7 +102,7 @@ export default function PublicDisplayPage() {
     let active = true;
     async function poll() {
       try {
-        const res = await fetch("/api/display", { cache: "no-store" });
+        const res = await fetch(`/api/display?token=${encodeURIComponent(token)}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const json = await res.json();
         if (!active) return;
@@ -115,13 +118,14 @@ export default function PublicDisplayPage() {
         setLastError(err instanceof Error ? err.message : "Failed to reach the server");
       }
     }
+    if (!token) return;
     poll();
     const interval = setInterval(poll, 4000);
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [token]);
 
   // Never gets permanently stuck: if we have no data yet and the last
   // attempt failed, show a visible error with an automatic retry countdown

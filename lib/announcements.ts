@@ -24,8 +24,8 @@
 // invisible outside the deciding region and the instructor.
 
 import { db } from "./db";
-import { announcements, announcementAcks, teamNotifications } from "./db/schema";
-import { and, eq } from "drizzle-orm";
+import { announcements, announcementAcks, teamNotifications, teams, eventDispatches, events, decisions, scores } from "./db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Tier } from "./db/seed-data/events";
 import {
   ANNOUNCEMENT_AUTO_DISMISS_SECONDS as GLOBAL_AUTO_DISMISS_SECONDS,
@@ -47,9 +47,9 @@ const DRAMATIC_MOMENT_COPY: Record<string, { title: string; message: string }> =
   },
 };
 
-export async function announceDispatch(opts: { eventId: string; eventTitle: string; targetTeamIds: number[] }) {
-  const { eventId, eventTitle, targetTeamIds } = opts;
-  const allTeams = await db.query.teams.findMany();
+export async function announceDispatch(opts: { sessionId: string; eventId: string; eventTitle: string; targetTeamIds: number[] }) {
+  const { sessionId, eventId, eventTitle, targetTeamIds } = opts;
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   const isAllTeams = targetTeamIds.length >= allTeams.length;
 
   let audienceDesc = "all regions";
@@ -61,6 +61,7 @@ export async function announceDispatch(opts: { eventId: string; eventTitle: stri
   if (DRAMATIC_MOMENT_EVENT_IDS.has(eventId)) {
     const copy = DRAMATIC_MOMENT_COPY[eventId] ?? { title: eventTitle, message: `"${eventTitle}" has just been dispatched.` };
     await db.insert(announcements).values({
+      sessionId,
       scope: "global_display",
       kind: "dramatic_moment",
       eventId,
@@ -71,6 +72,7 @@ export async function announceDispatch(opts: { eventId: string; eventTitle: stri
     });
   } else {
     await db.insert(announcements).values({
+      sessionId,
       scope: "global_display",
       kind: "event_dispatched",
       eventId,
@@ -82,6 +84,7 @@ export async function announceDispatch(opts: { eventId: string; eventTitle: stri
   }
 
   await db.insert(announcements).values({
+    sessionId,
     scope: "team",
     kind: "event_dispatched",
     eventId,
@@ -97,28 +100,37 @@ export async function announceDispatch(opts: { eventId: string; eventTitle: stri
 // belongs to. No-ops unless (a) the event was targeted at fewer than all
 // six regions, (b) every targeted dispatch is now scored/closed, and (c)
 // this hasn't already been announced.
-export async function maybeAnnounceResolution(eventId: string) {
-  const { eventDispatches, events } = await import("./db/schema");
-
+export async function maybeAnnounceResolution(sessionId: string, eventId: string) {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
   if (!event) return;
 
-  const dispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.eventId, eventId) });
-  const allTeams = await db.query.teams.findMany();
+  const dispatches = await db.query.eventDispatches.findMany({
+    where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.eventId, eventId)),
+  });
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   if (dispatches.length === 0 || dispatches.length >= allTeams.length) return; // only region-restricted events
 
   const allResolved = dispatches.every((d) => d.status === "scored" || d.status === "closed");
   if (!allResolved) return;
 
   const alreadyAnnounced = await db.query.announcements.findFirst({
-    where: and(eq(announcements.eventId, eventId), eq(announcements.kind, "decision_resolved"), eq(announcements.scope, "global_display")),
+    where: and(
+      eq(announcements.sessionId, sessionId),
+      eq(announcements.eventId, eventId),
+      eq(announcements.kind, "decision_resolved"),
+      eq(announcements.scope, "global_display")
+    ),
   });
   if (alreadyAnnounced) return;
 
   const dispatchIds = dispatches.map((d) => d.id);
-  const decisionsForDispatches = await db.query.decisions.findMany({ where: (t, { inArray }) => inArray(t.eventDispatchId, dispatchIds) });
+  const decisionsForDispatches =
+    dispatchIds.length > 0
+      ? await db.query.decisions.findMany({ where: and(eq(decisions.sessionId, sessionId), inArray(decisions.eventDispatchId, dispatchIds)) })
+      : [];
   const decisionIds = decisionsForDispatches.map((d) => d.id);
-  const scoresForDecisions = decisionIds.length > 0 ? await db.query.scores.findMany({ where: (t, { inArray }) => inArray(t.decisionId, decisionIds) }) : [];
+  const scoresForDecisions =
+    decisionIds.length > 0 ? await db.query.scores.findMany({ where: and(eq(scores.sessionId, sessionId), inArray(scores.decisionId, decisionIds)) }) : [];
 
   const outcomeParts: string[] = [];
   for (const d of dispatches) {
@@ -136,6 +148,7 @@ export async function maybeAnnounceResolution(eventId: string) {
   const summary = `${event.title} — final decision: ${outcomeParts.join(", ")}.`;
 
   await db.insert(announcements).values({
+    sessionId,
     scope: "global_display",
     kind: "decision_resolved",
     eventId,
@@ -146,6 +159,7 @@ export async function maybeAnnounceResolution(eventId: string) {
   });
 
   await db.insert(announcements).values({
+    sessionId,
     scope: "team",
     kind: "decision_resolved",
     eventId,
@@ -163,9 +177,9 @@ export async function maybeAnnounceResolution(eventId: string) {
 // client tracks its own "first seen" timestamp per announcement id and
 // displays it for exactly autoDismissSeconds from there, so returning a
 // slightly-stale announcement here never makes it visually overstay.
-export async function getActiveGlobalAnnouncement() {
+export async function getActiveGlobalAnnouncement(sessionId: string) {
   const recent = await db.query.announcements.findFirst({
-    where: eq(announcements.scope, "global_display"),
+    where: and(eq(announcements.sessionId, sessionId), eq(announcements.scope, "global_display")),
     orderBy: (t, { desc }) => [desc(t.createdAt)],
   });
   if (!recent) return null;
@@ -173,12 +187,14 @@ export async function getActiveGlobalAnnouncement() {
   return ageMs <= 60_000 ? recent : null;
 }
 
-export async function getTeamAnnouncements(teamId: number) {
-  const acked = await db.query.announcementAcks.findMany({ where: eq(announcementAcks.teamId, teamId) });
+export async function getTeamAnnouncements(sessionId: string, teamId: number) {
+  const acked = await db.query.announcementAcks.findMany({
+    where: and(eq(announcementAcks.sessionId, sessionId), eq(announcementAcks.teamId, teamId)),
+  });
   const ackedIds = new Set(acked.map((a) => a.announcementId));
 
   const candidates = await db.query.announcements.findMany({
-    where: eq(announcements.scope, "team"),
+    where: and(eq(announcements.sessionId, sessionId), eq(announcements.scope, "team")),
     orderBy: (t, { asc }) => [asc(t.createdAt)],
   });
 
@@ -189,8 +205,8 @@ export async function getTeamAnnouncements(teamId: number) {
   });
 }
 
-export async function ackAnnouncement(announcementId: number, teamId: number) {
-  await db.insert(announcementAcks).values({ announcementId, teamId }).onConflictDoNothing();
+export async function ackAnnouncement(sessionId: string, announcementId: number, teamId: number) {
+  await db.insert(announcementAcks).values({ sessionId, announcementId, teamId }).onConflictDoNothing();
 }
 
 // Called right after every scored decision (instructor scoring inbox and
@@ -203,6 +219,7 @@ export async function ackAnnouncement(announcementId: number, teamId: number) {
 // display already enforces). The deciding team doesn't get this — they
 // already got their own richer consequence card from pushConsequence().
 export async function announceDecisionRevealed(opts: {
+  sessionId: string;
   eventId: string;
   eventTitle: string;
   regionId: string;
@@ -210,14 +227,14 @@ export async function announceDecisionRevealed(opts: {
   structuredChoice: string | null;
   tier: Tier;
 }) {
-  const { eventTitle, regionId, submittingTeamId, structuredChoice, tier } = opts;
+  const { sessionId, eventTitle, regionId, submittingTeamId, structuredChoice, tier } = opts;
 
   const choiceDesc = structuredChoice ? `chose ${structuredChoice}` : "submitted its decision";
   const message = `${regionId} ${choiceDesc} on "${eventTitle}" — scored ${tier.replace("_", " ")}.`;
 
-  const allTeams = await db.query.teams.findMany();
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   const otherTeams = allTeams.filter((t) => t.id !== submittingTeamId);
   if (otherTeams.length > 0) {
-    await db.insert(teamNotifications).values(otherTeams.map((t) => ({ teamId: t.id, kind: "decision_revealed", message })));
+    await db.insert(teamNotifications).values(otherTeams.map((t) => ({ sessionId, teamId: t.id, kind: "decision_revealed", message })));
   }
 }

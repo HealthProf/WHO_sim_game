@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { globalState, teamNotifications } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { sessionState, modelState, teamNotifications } from "@/lib/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { requireActor } from "@/lib/session-context";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { getTeamAnnouncements } from "@/lib/announcements";
@@ -22,15 +22,16 @@ import { computeFinalResults } from "@/lib/final-results";
 // dashboards/the projector display already generate every ~10-15s covers the
 // same need without requiring a paid plan.
 export async function GET() {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  await processDeadlines().catch(() => {});
+  await processDeadlines(sessionId).catch(() => {});
 
   const allRegions = await db.query.regions.findMany();
-  const allModelState = await db.query.modelState.findMany();
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
-  const globalRt = await computeGlobalRt();
+  const allModelState = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  const globalRt = await computeGlobalRt(sessionId);
 
   const sharedSummary = allRegions.map((r) => {
     const s = allModelState.find((m) => m.regionId === r.id)!;
@@ -50,9 +51,9 @@ export async function GET() {
   let ownRegion = null;
   let notifications: { id: number; kind: string; message: string; createdAt: Date }[] = [];
   let announcements: Awaited<ReturnType<typeof getTeamAnnouncements>> = [];
-  if (session!.user.role === "student" && session!.user.regionId) {
-    const s = allModelState.find((m) => m.regionId === session!.user.regionId);
-    const r = allRegions.find((r) => r.id === session!.user.regionId);
+  if (actor!.role === "student" && actor!.regionId) {
+    const s = allModelState.find((m) => m.regionId === actor!.regionId);
+    const r = allRegions.find((r) => r.id === actor!.regionId);
     if (s && r) {
       ownRegion = {
         ...s,
@@ -62,13 +63,13 @@ export async function GET() {
         projection: projectForward(s),
       };
     }
-    if (session!.user.teamId) {
+    if (actor!.teamId) {
       notifications = await db.query.teamNotifications.findMany({
-        where: eq(teamNotifications.teamId, session!.user.teamId),
+        where: and(eq(teamNotifications.sessionId, sessionId), eq(teamNotifications.teamId, actor!.teamId)),
         orderBy: [desc(teamNotifications.createdAt)],
         limit: 8,
       });
-      announcements = await getTeamAnnouncements(session!.user.teamId);
+      announcements = await getTeamAnnouncements(sessionId, actor!.teamId);
     }
   }
 
@@ -89,7 +90,7 @@ export async function GET() {
   if (gs && gs.simulationStatus === "running") {
     const clock = computeSimClock(gs);
     if (clock.gameDay / clock.totalGameDays >= 0.7) {
-      const finalResults = await computeFinalResults();
+      const finalResults = await computeFinalResults(sessionId);
       ghostPreview = { worldDeathsPrevented: finalResults.totalDeathsPrevented, worldInfectionsPrevented: finalResults.totalInfectionsPrevented };
     }
   }
@@ -104,5 +105,6 @@ export async function GET() {
     notifications,
     announcements,
     ghostPreview,
+    actor,
   });
 }

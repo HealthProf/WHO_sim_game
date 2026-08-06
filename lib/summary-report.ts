@@ -7,6 +7,8 @@
 // point of the after-action debrief).
 
 import { db } from "./db";
+import { eventDispatches, decisions, scores, teams } from "./db/schema";
+import { eq } from "drizzle-orm";
 
 export interface SummaryRoundEntry {
   regionId: string;
@@ -28,12 +30,12 @@ export interface SummaryRound {
   entries: SummaryRoundEntry[];
 }
 
-export async function buildSummaryReport(): Promise<SummaryRound[]> {
+export async function buildSummaryReport(sessionId: string): Promise<SummaryRound[]> {
   const allEvents = await db.query.events.findMany({ orderBy: (t, { asc }) => [asc(t.day)] });
-  const allDispatches = await db.query.eventDispatches.findMany();
-  const allDecisions = await db.query.decisions.findMany();
-  const allScores = await db.query.scores.findMany();
-  const allTeams = await db.query.teams.findMany();
+  const allDispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.sessionId, sessionId) });
+  const allDecisions = await db.query.decisions.findMany({ where: eq(decisions.sessionId, sessionId) });
+  const allScores = await db.query.scores.findMany({ where: eq(scores.sessionId, sessionId) });
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
 
   const rounds: SummaryRound[] = [];
 
@@ -97,11 +99,11 @@ export interface TeamHighlights {
 // review" artifact called for in simulation-docs/03-events.md's EVT-014
 // implementation note, structured around the composite score each decision
 // actually received (not just its tier), so ties resolve sensibly.
-export async function computeTeamHighlights(): Promise<TeamHighlights[]> {
-  const allTeams = await db.query.teams.findMany();
-  const allDispatches = await db.query.eventDispatches.findMany();
-  const allDecisions = await db.query.decisions.findMany();
-  const allScores = await db.query.scores.findMany();
+export async function computeTeamHighlights(sessionId: string): Promise<TeamHighlights[]> {
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
+  const allDispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.sessionId, sessionId) });
+  const allDecisions = await db.query.decisions.findMany({ where: eq(decisions.sessionId, sessionId) });
+  const allScores = await db.query.scores.findMany({ where: eq(scores.sessionId, sessionId) });
   const allEvents = await db.query.events.findMany();
 
   return allTeams.map((team) => {

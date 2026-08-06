@@ -1,11 +1,12 @@
 // HARD/SOFT/NONE deadline enforcement per simulation-docs/05-product-requirements.md
-// §9. Runs from the Vercel Cron route so it works whether or not a human is
-// watching. Deadline windows are compressed by global_state.fastModeMultiplier
-// (see simulation-docs/07-open-questions.md Q3/Q4 discussion — this app is
-// being run as a ~60 minute compressed test session).
+// §9. Runs opportunistically from every dashboard/display poll and from the
+// daily Vercel cron. Deadline windows are compressed by
+// sessionState.fastModeMultiplier (see simulation-docs/07-open-questions.md
+// Q3/Q4 discussion — this app is being run as a ~60 minute compressed test
+// session).
 
 import { db } from "./db";
-import { eventDispatches, events, decisions, scores, users, globalState, modelState } from "./db/schema";
+import { eventDispatches, events, decisions, scores, gameSessions, sessionState, modelState, teams } from "./db/schema";
 import { and, eq, isNull, lte, lt, or, inArray } from "drizzle-orm";
 import { computeCompositePct, defaultScoresForTier } from "./scoring";
 import { applyModelDelta, applyOptimalShadowDelta, applyPassiveDrift } from "./model-engine";
@@ -17,11 +18,11 @@ import { checkSocialMilestones } from "./social-thresholds";
 import { maybeStakeholderReact } from "./stakeholders";
 import { TICK_THROTTLE_SECONDS } from "./config";
 
-export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Promise<Date | null> {
+export async function computeDeadlineAt(sessionId: string, eventId: string, dispatchedAt: Date): Promise<Date | null> {
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
   if (!event || event.deadlineType === "NONE" || event.deadlineWindowHours == null) return null;
 
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   const multiplier = gs?.fastModeMultiplier ?? 1;
   const intensity = gs?.intensityMultiplier && gs.intensityMultiplier > 0 ? gs.intensityMultiplier : 1.0;
   const windowMinutes = (event.deadlineWindowHours * 60 * multiplier) / intensity;
@@ -41,37 +42,44 @@ export async function computeDeadlineAt(eventId: string, dispatchedAt: Date): Pr
 // straight to a no-op return rather than re-running every subsystem's own
 // queries redundantly. This is a throttle, not a lock: it bounds how often
 // the work runs, it doesn't serialize concurrent callers against each other.
-export async function processDeadlines() {
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
+// Scoped per session (via sessionState.sessionId) so concurrent sessions
+// tick independently — one session's throttle never blocks another's.
+export async function processDeadlines(sessionId: string) {
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs || gs.simulationStatus !== "running") {
     return { remindersSent: 0, autoApplied: 0, skipped: "simulation not running" };
   }
 
   const cutoff = new Date(Date.now() - TICK_THROTTLE_SECONDS * 1000);
   const claimed = await db
-    .update(globalState)
+    .update(sessionState)
     .set({ lastTickAt: new Date() })
-    .where(and(eq(globalState.id, 1), or(isNull(globalState.lastTickAt), lt(globalState.lastTickAt, cutoff))))
+    .where(
+      and(
+        eq(sessionState.sessionId, sessionId),
+        or(isNull(sessionState.lastTickAt), lt(sessionState.lastTickAt, cutoff))
+      )
+    )
     .returning();
   if (claimed.length === 0) {
     return { remindersSent: 0, autoApplied: 0, skipped: "ticked recently" };
   }
 
-  await applyPassiveDrift(gs).catch((e) => console.error("[tick] applyPassiveDrift failed:", e));
-  await closeExpiredSnapVotes().catch((e) => console.error("[tick] closeExpiredSnapVotes failed:", e));
-  await processBudgetCycleTimers().catch((e) => console.error("[tick] processBudgetCycleTimers failed:", e));
-  await checkSocialMilestones().catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
+  await applyPassiveDrift(sessionId, gs).catch((e) => console.error("[tick] applyPassiveDrift failed:", e));
+  await closeExpiredSnapVotes(sessionId).catch((e) => console.error("[tick] closeExpiredSnapVotes failed:", e));
+  await processBudgetCycleTimers(sessionId).catch((e) => console.error("[tick] processBudgetCycleTimers failed:", e));
+  await checkSocialMilestones(sessionId).catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
 
   const now = new Date();
   let remindersSent = 0;
   let autoApplied = 0;
 
   const dueReminders = await db.query.eventDispatches.findMany({
-    where: and(eq(eventDispatches.status, "dispatched"), isNull(eventDispatches.reminderSentAt)),
+    where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.status, "dispatched"), isNull(eventDispatches.reminderSentAt)),
   });
   const reminderEventIds = [...new Set(dueReminders.map((d) => d.eventId))];
   const reminderEvents =
-    reminderEventIds.length > 0 ? await db.query.events.findMany({ where: (t, { inArray }) => inArray(t.id, reminderEventIds) }) : [];
+    reminderEventIds.length > 0 ? await db.query.events.findMany({ where: (t, { inArray: ia }) => ia(t.id, reminderEventIds) }) : [];
   const multiplier = gs.fastModeMultiplier ?? 1;
   const intensity = gs.intensityMultiplier && gs.intensityMultiplier > 0 ? gs.intensityMultiplier : 1.0;
   const remindedDispatchIds: number[] = [];
@@ -88,18 +96,28 @@ export async function processDeadlines() {
   }
 
   const expiredCandidates = await db.query.eventDispatches.findMany({
-    where: and(eq(eventDispatches.status, "dispatched"), lte(eventDispatches.deadlineAt, now)),
+    where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.status, "dispatched"), lte(eventDispatches.deadlineAt, now)),
   });
 
-  const systemUser = await db.query.users.findFirst({ where: eq(users.role, "instructor") });
+  // The session owner stands in as "who to attribute automatic instructor-
+  // side actions to" (instructorActions.instructorUserId stays a non-null
+  // users.id FK — see lib/consequences.ts) — replaces the old
+  // `eq(users.role, "instructor")` lookup, which picked an arbitrary
+  // instructor once multiple public accounts existed.
+  const owningSession = await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, sessionId) });
 
   const expiredDispatchIds = expiredCandidates.map((d) => d.id);
   const existingDecisionsForExpired =
-    expiredDispatchIds.length > 0 ? await db.query.decisions.findMany({ where: inArray(decisions.eventDispatchId, expiredDispatchIds) }) : [];
+    expiredDispatchIds.length > 0
+      ? await db.query.decisions.findMany({ where: and(eq(decisions.sessionId, sessionId), inArray(decisions.eventDispatchId, expiredDispatchIds)) })
+      : [];
   const expiredEventIds = [...new Set(expiredCandidates.map((d) => d.eventId))];
   const expiredEvents = expiredEventIds.length > 0 ? await db.query.events.findMany({ where: inArray(events.id, expiredEventIds) }) : [];
   const expiredTeamIds = [...new Set(expiredCandidates.map((d) => d.targetTeamId).filter((id): id is number => id != null))];
-  const expiredTeams = expiredTeamIds.length > 0 ? await db.query.teams.findMany({ where: (t, { inArray: ia }) => ia(t.id, expiredTeamIds) }) : [];
+  const expiredTeams =
+    expiredTeamIds.length > 0
+      ? await db.query.teams.findMany({ where: and(eq(teams.sessionId, sessionId), inArray(teams.id, expiredTeamIds)) })
+      : [];
 
   for (const dispatch of expiredCandidates) {
     if (!dispatch.deadlineAt || !dispatch.targetTeamId) continue;
@@ -108,14 +126,16 @@ export async function processDeadlines() {
     if (existingDecision) continue; // team submitted in time; scoring inbox will handle it
 
     const event = expiredEvents.find((e) => e.id === dispatch.eventId);
-    if (!event || !systemUser) continue;
+    if (!event || !owningSession) continue;
 
     const [decision] = await db
       .insert(decisions)
       .values({
+        sessionId,
         eventDispatchId: dispatch.id,
         teamId: dispatch.targetTeamId,
-        submittedByUserId: systemUser.id,
+        submittedByUserId: null,
+        actorKind: "system",
         structuredChoice: null,
         rationaleText: "(No submission received before deadline — fallback tier auto-applied.)",
       })
@@ -126,6 +146,7 @@ export async function processDeadlines() {
     const compositePct = computeCompositePct(dims);
 
     await db.insert(scores).values({
+      sessionId,
       decisionId: decision.id,
       evidenceScore: dims.evidenceScore,
       politicalScore: dims.politicalScore,
@@ -137,7 +158,7 @@ export async function processDeadlines() {
       suggestedTier: tier,
       fastPathed: true,
       overrideReason: "Auto-applied at deadline expiry: no submission received.",
-      scoredByUserId: systemUser.id,
+      scoredByUserId: owningSession.ownerUserId,
     });
 
     const deltaJson = (event.modelDeltaJson as Record<string, unknown[]>) ?? {};
@@ -145,23 +166,28 @@ export async function processDeadlines() {
     const region = expiredTeams.find((t) => t.id === dispatch.targetTeamId)?.regionId ?? null;
     if (region) {
       await applyModelDelta({
+        sessionId,
         deltas: deltas as never,
         submittingRegionId: region,
         reason: `${event.id} deadline expired, no response: ${tier} auto-applied`,
       });
-      await applyOptimalShadowDelta((deltaJson.OPTIMAL as never) ?? [], region);
-      const afterState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region) });
+      await applyOptimalShadowDelta(sessionId, (deltaJson.OPTIMAL as never) ?? [], region);
+      const afterState = await db.query.modelState.findFirst({
+        where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, region)),
+      });
       await pushConsequence({
+        sessionId,
         event,
         dispatchId: dispatch.id,
         teamId: dispatch.targetTeamId,
         regionId: region,
         tier,
         deltas: deltas as never,
-        actorUserId: systemUser.id,
+        actorUserId: owningSession.ownerUserId,
         afterState: afterState ?? undefined,
       });
       await announceDecisionRevealed({
+        sessionId,
         eventId: event.id,
         eventTitle: event.title,
         regionId: region,
@@ -169,11 +195,11 @@ export async function processDeadlines() {
         structuredChoice: null,
         tier,
       });
-      await maybeStakeholderReact(dispatch.targetTeamId, tier);
+      await maybeStakeholderReact(sessionId, dispatch.targetTeamId, tier);
     }
 
     await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));
-    await maybeAnnounceResolution(event.id);
+    await maybeAnnounceResolution(sessionId, event.id);
     autoApplied++;
   }
 

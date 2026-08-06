@@ -8,6 +8,8 @@
 // rather than random.
 
 import { db } from "./db";
+import { teams, eventDispatches, decisions, scores } from "./db/schema";
+import { eq } from "drizzle-orm";
 import { computeFinalResults } from "./final-results";
 import type { Tier } from "./db/seed-data/events";
 
@@ -55,13 +57,13 @@ function pickHeadline(regionId: string, tierCounts: Record<Tier, number>, total:
   };
 }
 
-export async function computeAllTeamChapters(): Promise<TeamChapter[]> {
-  const allTeams = await db.query.teams.findMany();
-  const allDispatches = await db.query.eventDispatches.findMany();
-  const allDecisions = await db.query.decisions.findMany();
-  const allScores = await db.query.scores.findMany();
+export async function computeAllTeamChapters(sessionId: string): Promise<TeamChapter[]> {
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
+  const allDispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.sessionId, sessionId) });
+  const allDecisions = await db.query.decisions.findMany({ where: eq(decisions.sessionId, sessionId) });
+  const allScores = await db.query.scores.findMany({ where: eq(scores.sessionId, sessionId) });
   const allEvents = await db.query.events.findMany();
-  const finalResults = await computeFinalResults();
+  const finalResults = await computeFinalResults(sessionId);
 
   return allTeams.map((team) => {
     const tierCounts: Record<Tier, number> = { OPTIMAL: 0, ADEQUATE: 0, INADEQUATE: 0, CRITICAL_FAILURE: 0 };

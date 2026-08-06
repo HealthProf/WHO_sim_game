@@ -5,6 +5,8 @@
 // applyOptimalShadowDelta in lib/model-engine.ts).
 
 import { db } from "./db";
+import { modelState, modelStateOptimal } from "./db/schema";
+import { eq } from "drizzle-orm";
 
 export interface RegionFinalResult {
   regionId: string;
@@ -26,9 +28,9 @@ export interface FinalResults {
   totalDeathsPrevented: number;
 }
 
-export async function computeFinalResults(): Promise<FinalResults> {
-  const actual = await db.query.modelState.findMany();
-  const optimal = await db.query.modelStateOptimal.findMany();
+export async function computeFinalResults(sessionId: string): Promise<FinalResults> {
+  const actual = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
+  const optimal = await db.query.modelStateOptimal.findMany({ where: eq(modelStateOptimal.sessionId, sessionId) });
 
   const regionResults: RegionFinalResult[] = actual.map((a) => {
     const o = optimal.find((x) => x.regionId === a.regionId);

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { eventDispatches, decisions } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
-import { requireInstructor } from "@/lib/api-helpers";
+import { eventDispatches, decisions, teams, modelStateHistory, scores, resourcePledges } from "@/lib/db/schema";
+import { and, eq, inArray, asc } from "drizzle-orm";
+import { requireInstructorActor } from "@/lib/session-context";
 import { computeTeamHighlights } from "@/lib/summary-report";
 import { computeFinalResults } from "@/lib/final-results";
 import { computeAllTeamChapters } from "@/lib/team-chapter";
@@ -13,19 +13,22 @@ import { computeAllTeamChapters } from "@/lib/team-chapter";
 // snapshot), and the EVT-006-vs-EVT-012 allocation comparison as a
 // first-class artifact.
 export async function GET() {
-  const { error } = await requireInstructor();
+  const { actor, error } = await requireInstructorActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
   const history = await db.query.modelStateHistory.findMany({
-    orderBy: (t, { asc }) => [asc(t.createdAt)],
+    where: eq(modelStateHistory.sessionId, sessionId),
+    orderBy: asc(modelStateHistory.createdAt),
   });
 
-  const allTeams = await db.query.teams.findMany();
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
 
   async function allocationsFor(eventId: string) {
-    const dispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.eventId, eventId) });
+    const dispatches = await db.query.eventDispatches.findMany({ where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.eventId, eventId)) });
     const dispatchIds = dispatches.map((d) => d.id);
-    const decisionsForDispatches = dispatchIds.length > 0 ? await db.query.decisions.findMany({ where: inArray(decisions.eventDispatchId, dispatchIds) }) : [];
+    const decisionsForDispatches =
+      dispatchIds.length > 0 ? await db.query.decisions.findMany({ where: and(eq(decisions.sessionId, sessionId), inArray(decisions.eventDispatchId, dispatchIds)) }) : [];
     return dispatches.map((d) => {
       const decision = decisionsForDispatches.find((dec) => dec.eventDispatchId === d.id);
       const team = allTeams.find((t) => t.id === d.targetTeamId);
@@ -36,8 +39,8 @@ export async function GET() {
   const evt006 = await allocationsFor("EVT-006");
   const evt012 = await allocationsFor("EVT-012");
 
-  const allScores = await db.query.scores.findMany();
-  const allDecisions = await db.query.decisions.findMany();
+  const allScores = await db.query.scores.findMany({ where: eq(scores.sessionId, sessionId) });
+  const allDecisions = await db.query.decisions.findMany({ where: eq(decisions.sessionId, sessionId) });
   const mostConsequential = allScores
     .filter((s) => s.tier === "CRITICAL_FAILURE" || s.tier === "OPTIMAL")
     .map((s) => {
@@ -46,9 +49,9 @@ export async function GET() {
     })
     .slice(0, 10);
 
-  const teamHighlights = await computeTeamHighlights();
+  const teamHighlights = await computeTeamHighlights(sessionId);
 
-  const allPledges = await db.query.resourcePledges.findMany();
+  const allPledges = await db.query.resourcePledges.findMany({ where: eq(resourcePledges.sessionId, sessionId) });
   const pledgeTotals: Record<string, { given: number; received: number }> = {};
   for (const t of allTeams) pledgeTotals[t.regionId] = { given: 0, received: 0 };
   for (const p of allPledges) {
@@ -58,8 +61,8 @@ export async function GET() {
     if (toRegion) pledgeTotals[toRegion].received += 1;
   }
 
-  const finalResults = await computeFinalResults();
-  const teamChapters = await computeAllTeamChapters();
+  const finalResults = await computeFinalResults(sessionId);
+  const teamChapters = await computeAllTeamChapters(sessionId);
 
   return NextResponse.json({
     modelStateHistory: history,

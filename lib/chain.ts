@@ -7,15 +7,17 @@
 
 import { db } from "./db";
 import { eventChainLinks, eventDispatches } from "./db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-export async function getUnresolvedPrerequisites(eventId: string): Promise<string[]> {
+export async function getUnresolvedPrerequisites(sessionId: string, eventId: string): Promise<string[]> {
   const links = await db.query.eventChainLinks.findMany({ where: eq(eventChainLinks.nextEventId, eventId) });
   if (links.length === 0) return [];
 
   const unresolved: string[] = [];
   for (const link of links) {
-    const dispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.eventId, link.prevEventId) });
+    const dispatches = await db.query.eventDispatches.findMany({
+      where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.eventId, link.prevEventId)),
+    });
     if (dispatches.length === 0) {
       // prerequisite has never even been dispatched
       unresolved.push(link.prevEventId);
@@ -27,8 +29,8 @@ export async function getUnresolvedPrerequisites(eventId: string): Promise<strin
   return unresolved;
 }
 
-export async function canDispatch(eventId: string): Promise<{ ok: boolean; blockedBy: string[] }> {
-  const blockedBy = await getUnresolvedPrerequisites(eventId);
+export async function canDispatch(sessionId: string, eventId: string): Promise<{ ok: boolean; blockedBy: string[] }> {
+  const blockedBy = await getUnresolvedPrerequisites(sessionId, eventId);
   return { ok: blockedBy.length === 0, blockedBy };
 }
 
@@ -36,9 +38,9 @@ export async function canDispatch(eventId: string): Promise<{ ok: boolean; block
 // every event's chain status on every poll — computed from 2 total queries
 // (every chain link, every dispatch) instead of canDispatch's 2 queries
 // PER event.
-export async function computeAllChainStatus(eventIds: string[]): Promise<Record<string, { ok: boolean; blockedBy: string[] }>> {
+export async function computeAllChainStatus(sessionId: string, eventIds: string[]): Promise<Record<string, { ok: boolean; blockedBy: string[] }>> {
   const allLinks = await db.query.eventChainLinks.findMany();
-  const allDispatches = await db.query.eventDispatches.findMany();
+  const allDispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.sessionId, sessionId) });
 
   const result: Record<string, { ok: boolean; blockedBy: string[] }> = {};
   for (const eventId of eventIds) {

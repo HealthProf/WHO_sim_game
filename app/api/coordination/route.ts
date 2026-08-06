@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { coordinationMessages, teams, globalFeedItems, teamNotifications } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { coordinationMessages, teams, eventDispatches, globalFeedItems, teamNotifications } from "@/lib/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { COORDINATION_LEAK_CHANCE as LEAK_CHANCE } from "@/lib/config";
 
 // Coordination mechanism (05-product-requirements.md §6): broadcasts
@@ -19,57 +19,72 @@ import { COORDINATION_LEAK_CHANCE as LEAK_CHANCE } from "@/lib/config";
 // shape what a team is actually willing to put in writing.
 
 export async function GET() {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  const allMessages = await db.query.coordinationMessages.findMany({ orderBy: (t, { desc }) => [desc(t.sentAt)] });
+  const allMessages = await db.query.coordinationMessages.findMany({
+    where: eq(coordinationMessages.sessionId, sessionId),
+    orderBy: desc(coordinationMessages.sentAt),
+  });
 
-  if (session!.user.role === "instructor") {
+  if (actor!.role === "instructor") {
     return NextResponse.json({ messages: allMessages });
   }
 
-  const myTeamId = session!.user.teamId;
+  const myTeamId = actor!.teamId;
   const visible = allMessages.filter((m) => m.toTeamId === null || m.fromTeamId === myTeamId || m.toTeamId === myTeamId || m.leaked);
   return NextResponse.json({ messages: visible });
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (!session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can post coordination messages" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const toRegionId = (body.toRegionId as string | null | undefined) ?? null;
   const messageText = (body.messageText as string)?.trim();
   if (!messageText) return NextResponse.json({ error: "Message text is required" }, { status: 400 });
-  if (toRegionId === session!.user.regionId) {
+  if (toRegionId === actor!.regionId) {
     return NextResponse.json({ error: "Can't send a private channel message to your own region" }, { status: 400 });
   }
-  const toTeam = toRegionId ? await db.query.teams.findFirst({ where: eq(teams.regionId, toRegionId) }) : null;
+  const toTeam = toRegionId
+    ? await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.regionId, toRegionId)) })
+    : null;
   if (toRegionId && !toTeam) return NextResponse.json({ error: "Region not found" }, { status: 404 });
   const toTeamId = toTeam?.id ?? null;
+
+  // The dispatch, if provided, must belong to this session — a client-
+  // supplied eventDispatchId from another session must not be linkable.
+  const eventDispatchId = body.eventDispatchId ? Number(body.eventDispatchId) : null;
+  if (eventDispatchId != null) {
+    const dispatch = await db.query.eventDispatches.findFirst({
+      where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, eventDispatchId)),
+    });
+    if (!dispatch) return NextResponse.json({ error: "Dispatch not found" }, { status: 404 });
+  }
 
   const willLeak = toTeamId !== null && Math.random() < LEAK_CHANCE;
 
   const [message] = await db
     .insert(coordinationMessages)
     .values({
-      fromTeamId: session!.user.teamId,
+      sessionId,
+      fromTeamId: actor!.teamId!,
       toTeamId,
-      eventDispatchId: body.eventDispatchId ?? null,
+      eventDispatchId,
       messageText,
       leaked: willLeak,
     })
     .returning();
 
   if (willLeak) {
-    const headline = `LEAK: a private channel between ${session!.user.regionId} and ${toTeam?.regionId ?? "?"} was compromised — "${messageText}"`;
-    await db.insert(globalFeedItems).values({ headlineText: headline });
-    const notifyTeamIds = [session!.user.teamId, toTeamId].filter((id): id is number => id !== null);
+    const headline = `LEAK: a private channel between ${actor!.regionId} and ${toTeam?.regionId ?? "?"} was compromised — "${messageText}"`;
+    await db.insert(globalFeedItems).values({ sessionId, headlineText: headline });
+    const notifyTeamIds = [actor!.teamId, toTeamId].filter((id): id is number => id !== null);
     if (notifyTeamIds.length > 0) {
-      await db.insert(teamNotifications).values(notifyTeamIds.map((teamId) => ({ teamId, kind: "leak", message: headline })));
+      await db.insert(teamNotifications).values(notifyTeamIds.map((teamId) => ({ sessionId, teamId, kind: "leak", message: headline })));
     }
   }
 

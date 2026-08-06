@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/api-helpers";
+import { db } from "@/lib/db";
+import { announcements } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
+import { requireTeamActor } from "@/lib/session-context";
 import { ackAnnouncement } from "@/lib/announcements";
 
 // POST: a team dismisses one of its persistent popups (see
 // lib/announcements.ts — team-scope announcements require an explicit close,
 // unlike the transient global-display ones).
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (!session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can dismiss announcements" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const announcementId = Number(body.announcementId);
-  await ackAnnouncement(announcementId, session!.user.teamId);
+
+  const announcement = await db.query.announcements.findFirst({
+    where: and(eq(announcements.sessionId, sessionId), eq(announcements.id, announcementId)),
+  });
+  if (!announcement) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await ackAnnouncement(sessionId, announcementId, actor!.teamId!);
 
   return NextResponse.json({ ok: true });
 }

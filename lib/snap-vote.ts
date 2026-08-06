@@ -11,7 +11,7 @@
 // modelDelta authoring for every possible question an instructor might ask.
 
 import { db } from "./db";
-import { snapVotes, snapVoteResponses, teamNotifications, globalFeedItems } from "./db/schema";
+import { snapVotes, snapVoteResponses, teamNotifications, globalFeedItems, teams } from "./db/schema";
 import { and, eq, lte } from "drizzle-orm";
 import { applyModelDelta } from "./model-engine";
 
@@ -21,19 +21,21 @@ export interface SnapVoteTally {
   totalTeams: number;
 }
 
-export async function tallyForVote(voteId: number): Promise<SnapVoteTally> {
-  const responses = await db.query.snapVoteResponses.findMany({ where: eq(snapVoteResponses.snapVoteId, voteId) });
-  const allTeams = await db.query.teams.findMany();
+export async function tallyForVote(sessionId: string, voteId: number): Promise<SnapVoteTally> {
+  const responses = await db.query.snapVoteResponses.findMany({
+    where: and(eq(snapVoteResponses.sessionId, sessionId), eq(snapVoteResponses.snapVoteId, voteId)),
+  });
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   const optionCounts: Record<string, number> = {};
   for (const r of responses) optionCounts[r.choice] = (optionCounts[r.choice] ?? 0) + 1;
   return { optionCounts, respondedTeamIds: responses.map((r) => r.teamId), totalTeams: allTeams.length };
 }
 
-export async function closeSnapVote(voteId: number) {
-  const vote = await db.query.snapVotes.findFirst({ where: eq(snapVotes.id, voteId) });
+export async function closeSnapVote(sessionId: string, voteId: number) {
+  const vote = await db.query.snapVotes.findFirst({ where: and(eq(snapVotes.sessionId, sessionId), eq(snapVotes.id, voteId)) });
   if (!vote || vote.status === "closed") return null;
 
-  const tally = await tallyForVote(voteId);
+  const tally = await tallyForVote(sessionId, voteId);
   const respondedCount = tally.respondedTeamIds.length;
   const counts = Object.values(tally.optionCounts);
   const topCount = counts.length > 0 ? Math.max(...counts) : 0;
@@ -53,15 +55,17 @@ export async function closeSnapVote(voteId: number) {
   }
 
   await applyModelDelta({
+    sessionId,
     deltas: [{ field: "mediaPressureIndex", region: "GLOBAL", delta: mediaDelta }],
     submittingRegionId: "AFRO", // ignored — mediaPressureIndex deltas are global regardless of submitting region
     reason: `Snap vote closed: "${vote.question}" — ${summary}`,
   });
 
-  const allTeams = await db.query.teams.findMany();
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   for (const team of allTeams) {
     if (!tally.respondedTeamIds.includes(team.id)) {
       await applyModelDelta({
+        sessionId,
         deltas: [{ field: "politicalTensionIndex", region: "SELF", delta: 5 }],
         submittingRegionId: team.regionId,
         reason: `Snap vote closed: did not participate in "${vote.question}"`,
@@ -71,9 +75,10 @@ export async function closeSnapVote(voteId: number) {
 
   await db.update(snapVotes).set({ status: "closed", resultSummary: summary }).where(eq(snapVotes.id, voteId));
 
-  await db.insert(globalFeedItems).values({ headlineText: `EMERGENCY COMMITTEE RESULT — "${vote.question}": ${summary}` });
+  await db.insert(globalFeedItems).values({ sessionId, headlineText: `EMERGENCY COMMITTEE RESULT — "${vote.question}": ${summary}` });
   await db.insert(teamNotifications).values(
     allTeams.map((team) => ({
+      sessionId,
       teamId: team.id,
       kind: "snap_vote",
       message: `Emergency Committee vote closed — "${vote.question}": ${summary}`,
@@ -86,13 +91,13 @@ export async function closeSnapVote(voteId: number) {
 // Called opportunistically from lib/deadline.ts's processDeadlines() (same
 // poll-driven pattern as deadline enforcement) so an open vote whose timer
 // expired gets tallied even if the instructor doesn't click "Close & Tally."
-export async function closeExpiredSnapVotes() {
+export async function closeExpiredSnapVotes(sessionId: string) {
   const now = new Date();
   const expired = await db.query.snapVotes.findMany({
-    where: and(eq(snapVotes.status, "open"), lte(snapVotes.closesAt, now)),
+    where: and(eq(snapVotes.sessionId, sessionId), eq(snapVotes.status, "open"), lte(snapVotes.closesAt, now)),
   });
   for (const v of expired) {
-    await closeSnapVote(v.id);
+    await closeSnapVote(sessionId, v.id);
   }
 }
 
@@ -114,24 +119,27 @@ export interface SnapVoteView {
 // breakdown) so they can't herd-vote off what other regions are doing —
 // the full breakdown is revealed once the vote closes. The instructor
 // always sees the live breakdown.
-export async function getSnapVoteState(opts: { forInstructor: boolean; teamId?: number | null }): Promise<{
+export async function getSnapVoteState(
+  sessionId: string,
+  opts: { forInstructor: boolean; teamId?: number | null }
+): Promise<{
   current: SnapVoteView | null;
   history: SnapVoteView[];
 }> {
-  const open = await db.query.snapVotes.findFirst({ where: eq(snapVotes.status, "open") });
+  const open = await db.query.snapVotes.findFirst({ where: and(eq(snapVotes.sessionId, sessionId), eq(snapVotes.status, "open")) });
   const recentClosed = await db.query.snapVotes.findMany({
-    where: eq(snapVotes.status, "closed"),
+    where: and(eq(snapVotes.sessionId, sessionId), eq(snapVotes.status, "closed")),
     orderBy: (t, { desc }) => [desc(t.createdAt)],
     limit: 5,
   });
 
   let current: SnapVoteView | null = null;
   if (open) {
-    const tally = await tallyForVote(open.id);
+    const tally = await tallyForVote(sessionId, open.id);
     let myChoice: string | null | undefined = undefined;
     if (opts.teamId) {
       const mine = await db.query.snapVoteResponses.findFirst({
-        where: and(eq(snapVoteResponses.snapVoteId, open.id), eq(snapVoteResponses.teamId, opts.teamId)),
+        where: and(eq(snapVoteResponses.sessionId, sessionId), eq(snapVoteResponses.snapVoteId, open.id), eq(snapVoteResponses.teamId, opts.teamId)),
       });
       myChoice = mine?.choice ?? null;
     }
@@ -152,7 +160,7 @@ export async function getSnapVoteState(opts: { forInstructor: boolean; teamId?: 
 
   const history = await Promise.all(
     recentClosed.map(async (v): Promise<SnapVoteView> => {
-      const tally = await tallyForVote(v.id);
+      const tally = await tallyForVote(sessionId, v.id);
       return {
         id: v.id,
         question: v.question,
@@ -172,22 +180,25 @@ export async function getSnapVoteState(opts: { forInstructor: boolean; teamId?: 
 }
 
 export async function createSnapVote(opts: {
+  sessionId: string;
   question: string;
   options: string[];
   durationSeconds: number;
   createdByUserId: number;
 }) {
+  const { sessionId } = opts;
   // Only one open vote at a time — supersede (close without a real tally
   // effect beyond what's already accrued) any still-open vote first.
-  const existingOpen = await db.query.snapVotes.findFirst({ where: eq(snapVotes.status, "open") });
+  const existingOpen = await db.query.snapVotes.findFirst({ where: and(eq(snapVotes.sessionId, sessionId), eq(snapVotes.status, "open")) });
   if (existingOpen) {
-    await closeSnapVote(existingOpen.id);
+    await closeSnapVote(sessionId, existingOpen.id);
   }
 
   const closesAt = new Date(Date.now() + opts.durationSeconds * 1000);
   const [vote] = await db
     .insert(snapVotes)
     .values({
+      sessionId,
       question: opts.question,
       optionsJson: opts.options,
       createdByUserId: opts.createdByUserId,
@@ -196,11 +207,13 @@ export async function createSnapVote(opts: {
     .returning();
 
   await db.insert(globalFeedItems).values({
+    sessionId,
     headlineText: `EMERGENCY COMMITTEE CALLED: "${opts.question}" — all regions must respond`,
   });
-  const allTeams = await db.query.teams.findMany();
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   await db.insert(teamNotifications).values(
     allTeams.map((team) => ({
+      sessionId,
       teamId: team.id,
       kind: "snap_vote",
       message: `Emergency Committee called: "${opts.question}" — respond now.`,

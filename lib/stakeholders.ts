@@ -63,7 +63,7 @@ const REACTIONS: Record<"OPTIMAL" | "CRITICAL_FAILURE", Record<StakeholderId, st
 
 const STAKEHOLDER_IDS = Object.keys(STAKEHOLDERS) as StakeholderId[];
 
-export async function maybeStakeholderReact(teamId: number, tier: Tier) {
+export async function maybeStakeholderReact(sessionId: string, teamId: number, tier: Tier) {
   if (tier !== "OPTIMAL" && tier !== "CRITICAL_FAILURE") return;
 
   const stakeholderId = STAKEHOLDER_IDS[Math.floor(Math.random() * STAKEHOLDER_IDS.length)];
@@ -72,6 +72,7 @@ export async function maybeStakeholderReact(teamId: number, tier: Tier) {
   const quote = lines[Math.floor(Math.random() * lines.length)];
 
   await db.insert(teamNotifications).values({
+    sessionId,
     teamId,
     kind: "stakeholder",
     message: `${stakeholder.name} (${stakeholder.role}): "${quote}"`,

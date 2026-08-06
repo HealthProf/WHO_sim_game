@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { decisions, eventDispatches, events, scores, teams, modelState } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
-import { requireInstructor } from "@/lib/api-helpers";
+import { and, eq, inArray } from "drizzle-orm";
+import { requireInstructorActor } from "@/lib/session-context";
 import { computeCalibrationAdjustment, computeCompositePct, defaultScoresForTier, tierForCompositePct, type Tier } from "@/lib/scoring";
 import { applyModelDelta, applyOptimalShadowDelta, clamp } from "@/lib/model-engine";
 import { pushConsequence } from "@/lib/consequences";
@@ -16,19 +16,20 @@ import type { ModelDelta } from "@/lib/db/seed-data/events";
 // decision also carries a `suggestedTier` (from its structured choice) so
 // the UI can offer a one-click "Accept Suggested" fast path.
 export async function GET() {
-  const { error } = await requireInstructor();
+  const { actor, error } = await requireInstructorActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  const allDecisions = await db.query.decisions.findMany();
-  const scoredIds = new Set((await db.query.scores.findMany()).map((s) => s.decisionId));
+  const allDecisions = await db.query.decisions.findMany({ where: eq(decisions.sessionId, sessionId) });
+  const scoredIds = new Set((await db.query.scores.findMany({ where: eq(scores.sessionId, sessionId) })).map((s) => s.decisionId));
   const unscored = allDecisions.filter((d) => !scoredIds.has(d.id));
 
   const dispatchIds = [...new Set(unscored.map((d) => d.eventDispatchId).filter((id): id is number => id != null))];
-  const allDispatches = dispatchIds.length > 0 ? await db.query.eventDispatches.findMany({ where: inArray(eventDispatches.id, dispatchIds) }) : [];
+  const allDispatches = dispatchIds.length > 0 ? await db.query.eventDispatches.findMany({ where: and(eq(eventDispatches.sessionId, sessionId), inArray(eventDispatches.id, dispatchIds)) }) : [];
   const eventIds = [...new Set(allDispatches.map((d) => d.eventId))];
   const allEvents = eventIds.length > 0 ? await db.query.events.findMany({ where: inArray(events.id, eventIds) }) : [];
   const teamIds = [...new Set(unscored.map((d) => d.teamId))];
-  const allTeams = teamIds.length > 0 ? await db.query.teams.findMany({ where: inArray(teams.id, teamIds) }) : [];
+  const allTeams = teamIds.length > 0 ? await db.query.teams.findMany({ where: and(eq(teams.sessionId, sessionId), inArray(teams.id, teamIds)) }) : [];
 
   const enriched = unscored.map((d) => {
     const dispatch = allDispatches.find((disp) => disp.id === d.eventDispatchId) ?? null;
@@ -66,12 +67,12 @@ export async function GET() {
 // (full manual scoring, always available) or `acceptSuggested: true` for the
 // one-click fast path on non-mandatory-review submissions.
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireInstructor();
+  const { actor, error } = await requireInstructorActor();
   if (error) return error;
 
   const body = await req.json();
   try {
-    const score = await scoreDecision(body, Number(session!.user.id));
+    const score = await scoreDecision(actor!.sessionId, body, actor!.userId!);
     return NextResponse.json({ score });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function scoreDecision(
+  sessionId: string,
   body: {
     decisionId: number;
     acceptSuggested?: boolean;
@@ -91,10 +93,10 @@ export async function scoreDecision(
 ) {
   const decisionId = body.decisionId;
 
-  const decision = await db.query.decisions.findFirst({ where: eq(decisions.id, decisionId) });
+  const decision = await db.query.decisions.findFirst({ where: and(eq(decisions.sessionId, sessionId), eq(decisions.id, decisionId)) });
   if (!decision) throw new Error("Decision not found");
 
-  const dispatch = await db.query.eventDispatches.findFirst({ where: eq(eventDispatches.id, decision.eventDispatchId) });
+  const dispatch = await db.query.eventDispatches.findFirst({ where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, decision.eventDispatchId)) });
   const event = dispatch ? await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) }) : null;
   if (!dispatch || !event) throw new Error("Event not found");
 
@@ -130,6 +132,7 @@ export async function scoreDecision(
   const [score] = await db
     .insert(scores)
     .values({
+      sessionId,
       decisionId,
       evidenceScore,
       politicalScore,
@@ -146,11 +149,12 @@ export async function scoreDecision(
     })
     .returning();
 
-  const team = await db.query.teams.findFirst({ where: eq(teams.id, decision.teamId) });
+  const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, decision.teamId)) });
   if (team) {
     const deltaJson = (event.modelDeltaJson as Record<string, ModelDelta[]>) ?? {};
     const deltas = deltaJson[tier] ?? [];
     await applyModelDelta({
+      sessionId,
       deltas,
       submittingRegionId: team.regionId,
       reason: `${event.id} scored: ${tier}`,
@@ -158,9 +162,10 @@ export async function scoreDecision(
     // Mirror the OPTIMAL-tier delta onto the counterfactual shadow
     // simulation regardless of what tier actually happened — see
     // simulation-docs and lib/model-engine.ts for why (debrief item 7).
-    await applyOptimalShadowDelta(deltaJson.OPTIMAL ?? [], team.regionId);
-    const afterState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, team.regionId) });
+    await applyOptimalShadowDelta(sessionId, deltaJson.OPTIMAL ?? [], team.regionId);
+    const afterState = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, team.regionId)) });
     await pushConsequence({
+      sessionId,
       event,
       dispatchId: dispatch.id,
       teamId: team.id,
@@ -171,6 +176,7 @@ export async function scoreDecision(
       afterState: afterState ?? undefined,
     });
     await announceDecisionRevealed({
+      sessionId,
       eventId: event.id,
       eventTitle: event.title,
       regionId: team.regionId,
@@ -178,11 +184,11 @@ export async function scoreDecision(
       structuredChoice: decision.structuredChoice,
       tier,
     });
-    await maybeStakeholderReact(team.id, tier);
+    await maybeStakeholderReact(sessionId, team.id, tier);
   }
 
   await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));
-  await maybeAnnounceResolution(event.id);
+  await maybeAnnounceResolution(sessionId, event.id);
 
   return score;
 }

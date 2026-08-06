@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { emergencyFundingRequests, emergencyFundingContributions, modelState, teams, teamNotifications } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { and, eq, inArray, desc } from "drizzle-orm";
+import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
 import { tryDeductRegionField, tryDeductWhoHqField } from "@/lib/db-atomic";
 
@@ -10,13 +10,20 @@ import { tryDeductRegionField, tryDeductWhoHqField } from "@/lib/db-atomic";
 // contributions so far — visible to everyone, same transparency model as
 // pledges/coordination.
 export async function GET() {
-  const { error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  const requests = await db.query.emergencyFundingRequests.findMany({ orderBy: (t, { desc }) => [desc(t.createdAt)], limit: 20 });
-  const allTeams = await db.query.teams.findMany();
+  const requests = await db.query.emergencyFundingRequests.findMany({
+    where: eq(emergencyFundingRequests.sessionId, sessionId),
+    orderBy: desc(emergencyFundingRequests.createdAt),
+    limit: 20,
+  });
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   const allContributions = requests.length
-    ? await db.query.emergencyFundingContributions.findMany({ where: inArray(emergencyFundingContributions.requestId, requests.map((r) => r.id)) })
+    ? await db.query.emergencyFundingContributions.findMany({
+        where: and(eq(emergencyFundingContributions.sessionId, sessionId), inArray(emergencyFundingContributions.requestId, requests.map((r) => r.id))),
+      })
     : [];
 
   const enriched = requests.map((r) => {
@@ -42,11 +49,9 @@ export async function GET() {
 // paced rather than a hard timer, since the ask amount and urgency vary a
 // lot more than a routine market purchase.
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (session!.user.role !== "student" || !session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can open an emergency funding request" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const amountRequested = Math.round(Number(body.amountRequested));
@@ -57,12 +62,14 @@ export async function POST(req: NextRequest) {
   if (!reason) return NextResponse.json({ error: "A reason is required" }, { status: 400 });
 
   const existingOpen = await db.query.emergencyFundingRequests.findFirst({
-    where: (t, { and, eq: eqOp }) => and(eqOp(t.requestingTeamId, session!.user.teamId!), eqOp(t.status, "open")),
+    where: and(eq(emergencyFundingRequests.sessionId, sessionId), eq(emergencyFundingRequests.requestingTeamId, actor!.teamId!), eq(emergencyFundingRequests.status, "open")),
   });
   if (existingOpen) return NextResponse.json({ error: "Your region already has an open emergency funding request." }, { status: 409 });
 
-  const requestingTeam = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
-  const requesterState = requestingTeam ? await db.query.modelState.findFirst({ where: eq(modelState.regionId, requestingTeam.regionId) }) : null;
+  const requestingTeam = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, actor!.teamId!)) });
+  const requesterState = requestingTeam
+    ? await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, requestingTeam.regionId)) })
+    : null;
   if (requesterState && requesterState.politicalTensionIndex >= POLITICAL_TENSION_LOCKOUT_THRESHOLD) {
     return NextResponse.json(
       { error: `Cooperation with WHO HQ is currently ruptured (political tension ${requesterState.politicalTensionIndex}/100) — resolve EVT-025 before requesting emergency funding.` },
@@ -72,14 +79,15 @@ export async function POST(req: NextRequest) {
 
   const [request] = await db
     .insert(emergencyFundingRequests)
-    .values({ requestingTeamId: session!.user.teamId, amountRequested, reason })
+    .values({ sessionId, requestingTeamId: actor!.teamId!, amountRequested, reason })
     .returning();
 
-  const allTeams = await db.query.teams.findMany();
-  const otherTeams = allTeams.filter((t) => t.id !== session!.user.teamId);
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
+  const otherTeams = allTeams.filter((t) => t.id !== actor!.teamId);
   if (otherTeams.length > 0) {
     await db.insert(teamNotifications).values(
       otherTeams.map((t) => ({
+        sessionId,
         teamId: t.id,
         kind: "emergency_funding",
         message: `${requestingTeam?.regionId} has requested $${amountRequested.toLocaleString()} in emergency funding: "${reason}." Visit Emergency Funding to contribute.`,
@@ -93,8 +101,9 @@ export async function POST(req: NextRequest) {
 // PATCH (action=contribute): a team, or the instructor acting as WHO HQ,
 // pledges an amount toward an open request. Funds move immediately.
 export async function PATCH(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const requestId = Number(body.requestId);
@@ -103,18 +112,20 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
   }
 
-  const request = await db.query.emergencyFundingRequests.findFirst({ where: eq(emergencyFundingRequests.id, requestId) });
+  const request = await db.query.emergencyFundingRequests.findFirst({
+    where: and(eq(emergencyFundingRequests.sessionId, sessionId), eq(emergencyFundingRequests.id, requestId)),
+  });
   if (!request || request.status !== "open") return NextResponse.json({ error: "Request not found or already closed" }, { status: 404 });
 
-  const isWhoHq = session!.user.role === "instructor";
-  if (!isWhoHq && !session!.user.teamId) return NextResponse.json({ error: "Only teams or the instructor can contribute" }, { status: 403 });
-  if (!isWhoHq && session!.user.teamId === request.requestingTeamId) {
+  const isWhoHq = actor!.role === "instructor";
+  if (!isWhoHq && !actor!.teamId) return NextResponse.json({ error: "Only teams or the instructor can contribute" }, { status: 403 });
+  if (!isWhoHq && actor!.teamId === request.requestingTeamId) {
     return NextResponse.json({ error: "Can't contribute to your own request" }, { status: 400 });
   }
 
   // Insert the contribution row first — the unique constraint on
-  // (requestId, contributorTeamId, isWhoHq) is what actually guarantees
-  // "at most one contribution per party," atomically, even under
+  // (sessionId, requestId, contributorTeamId, isWhoHq) is what actually
+  // guarantees "at most one contribution per party," atomically, even under
   // concurrent double-clicks. The fund deduction only runs after a
   // successful insert, and is itself an atomic conditional update (see
   // lib/db-atomic.ts); if it fails, the just-inserted row is removed so a
@@ -123,22 +134,22 @@ export async function PATCH(req: NextRequest) {
   try {
     [inserted] = await db
       .insert(emergencyFundingContributions)
-      .values({ requestId, contributorTeamId: isWhoHq ? null : session!.user.teamId, isWhoHq, amount })
+      .values({ sessionId, requestId, contributorTeamId: isWhoHq ? null : actor!.teamId, isWhoHq, amount })
       .returning();
   } catch {
     return NextResponse.json({ error: "You've already contributed to this request." }, { status: 409 });
   }
 
   if (isWhoHq) {
-    const deducted = await tryDeductWhoHqField("whoHqFund", amount);
+    const deducted = await tryDeductWhoHqField(sessionId, "whoHqFund", amount);
     if (!deducted) {
       await db.delete(emergencyFundingContributions).where(eq(emergencyFundingContributions.id, inserted.id));
       return NextResponse.json({ error: "WHO HQ doesn't have that much remaining." }, { status: 400 });
     }
   } else {
-    const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId!) });
+    const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, actor!.teamId!)) });
     if (!team) return NextResponse.json({ error: "Region not found" }, { status: 404 });
-    const deducted = await tryDeductRegionField(team.regionId, "fundRemaining", amount);
+    const deducted = await tryDeductRegionField(sessionId, team.regionId, "fundRemaining", amount);
     if (!deducted) {
       await db.delete(emergencyFundingContributions).where(eq(emergencyFundingContributions.id, inserted.id));
       return NextResponse.json({ error: "You don't have that much available." }, { status: 400 });

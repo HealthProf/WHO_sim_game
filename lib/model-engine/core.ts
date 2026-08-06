@@ -4,41 +4,48 @@
 // Model Impact and § Escalation States.
 
 import { db } from "../db";
-import { modelState, modelStateHistory, globalState } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { modelState, modelStateHistory, sessionState, scores, decisions } from "../db/schema";
+import { and, eq } from "drizzle-orm";
 import type { ModelDelta } from "../db/seed-data/events";
 import { REGIONS as ALL_REGIONS } from "../regions";
 
 export async function applyModelDelta(opts: {
+  sessionId: string;
   deltas: ModelDelta[];
   submittingRegionId: string;
   reason: string;
 }) {
-  const { deltas, submittingRegionId, reason } = opts;
+  const { sessionId, deltas, submittingRegionId, reason } = opts;
 
   const affectedRegions = new Set<string>();
 
   for (const delta of deltas) {
     if (delta.field === "mediaPressureIndex") {
-      const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
+      const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
       const current = gs?.mediaPressureIndex ?? 0;
       const next = clamp(current + delta.delta, 0, 100);
-      await db.update(globalState).set({ mediaPressureIndex: next, updatedAt: new Date() }).where(eq(globalState.id, 1));
+      await db
+        .update(sessionState)
+        .set({ mediaPressureIndex: next, updatedAt: new Date() })
+        .where(eq(sessionState.sessionId, sessionId));
       continue;
     }
 
     const targetRegions = delta.region === "SELF" ? [submittingRegionId] : delta.region === "GLOBAL" ? [...ALL_REGIONS] : [delta.region];
 
     for (const regionId of targetRegions) {
-      await applyFieldDelta(regionId, delta.field, delta.delta);
+      await applyFieldDelta(sessionId, regionId, delta.field, delta.delta);
       affectedRegions.add(regionId);
     }
   }
 
   for (const regionId of affectedRegions) {
-    const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+    const state = await db.query.modelState.findFirst({
+      where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)),
+    });
     if (state) {
       await db.insert(modelStateHistory).values({
+        sessionId,
         regionId,
         day: state.day,
         snapshotJson: state,
@@ -47,7 +54,7 @@ export async function applyModelDelta(opts: {
     }
   }
 
-  await recomputeEscalationState();
+  await recomputeEscalationState(sessionId);
 }
 
 const FIELD_BOUNDS: Record<string, [number, number]> = {
@@ -65,11 +72,14 @@ const FIELD_BOUNDS: Record<string, [number, number]> = {
 };
 
 export async function applyFieldDelta(
+  sessionId: string,
   regionId: string,
   field: Exclude<ModelDelta["field"], "mediaPressureIndex">,
   delta: number
 ) {
-  const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+  const state = await db.query.modelState.findFirst({
+    where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)),
+  });
   if (!state) return;
 
   const [min, max] = FIELD_BOUNDS[field] ?? [-Infinity, Infinity];
@@ -78,7 +88,7 @@ export async function applyFieldDelta(
   await db
     .update(modelState)
     .set({ [field]: next, updatedAt: new Date() } as never)
-    .where(eq(modelState.regionId, regionId));
+    .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)));
 }
 
 export function clamp(v: number, min: number, max: number) {
@@ -108,9 +118,9 @@ export function isSignificantDelta(deltas: ModelDelta[]): boolean {
 }
 
 // Escalation state per simulation-docs/01-scenario.md § Escalation States.
-export async function recomputeEscalationState() {
+export async function recomputeEscalationState(sessionId: string) {
   const allRegions = await db.query.regions.findMany();
-  const allStates = await db.query.modelState.findMany();
+  const allStates = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
 
   let weightedRtSum = 0;
   let weightSum = 0;
@@ -122,7 +132,7 @@ export async function recomputeEscalationState() {
   }
   const globalRt = weightSum > 0 ? weightedRtSum / weightSum : 0;
 
-  const recentCriticalFailures = await countRecentCriticalFailures();
+  const recentCriticalFailures = await countRecentCriticalFailures(sessionId);
 
   let escalation: "GREEN" | "AMBER" | "RED" = "GREEN";
   if (globalRt > 4.0 || recentCriticalFailures >= 2) {
@@ -131,26 +141,29 @@ export async function recomputeEscalationState() {
     escalation = "AMBER";
   }
 
-  await db.update(globalState).set({ escalationState: escalation, updatedAt: new Date() }).where(eq(globalState.id, 1));
+  await db
+    .update(sessionState)
+    .set({ escalationState: escalation, updatedAt: new Date() })
+    .where(eq(sessionState.sessionId, sessionId));
 
   return { globalRt, escalation };
 }
 
-async function countRecentCriticalFailures(): Promise<number> {
+async function countRecentCriticalFailures(sessionId: string): Promise<number> {
   // Simplified: count all-time critical failures scored in the current day
   // rather than a rolling 24h window, which is an acceptable prototype
   // simplification given the compressed fast-mode timescale.
-  const { scores, decisions } = await import("../db/schema");
   const rows = await db
     .select({ tier: scores.tier })
     .from(scores)
-    .innerJoin(decisions, eq(scores.decisionId, decisions.id));
+    .innerJoin(decisions, eq(scores.decisionId, decisions.id))
+    .where(eq(scores.sessionId, sessionId));
   return rows.filter((r) => r.tier === "CRITICAL_FAILURE").length;
 }
 
-export async function computeGlobalRt(): Promise<number> {
+export async function computeGlobalRt(sessionId: string): Promise<number> {
   const allRegions = await db.query.regions.findMany();
-  const allStates = await db.query.modelState.findMany();
+  const allStates = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
   let weightedRtSum = 0;
   let weightSum = 0;
   for (const region of allRegions) {

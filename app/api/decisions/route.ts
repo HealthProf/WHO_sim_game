@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { decisions, eventDispatches, events, modelState, teams, modelStateHistory } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { and, eq, desc } from "drizzle-orm";
+import { requireActor, requireTeamActor } from "@/lib/session-context";
 import type { OptionCost, StructuredOption } from "@/lib/db/seed-data/events";
 
 // Applies an option's resource cost to the submitting team's own region
@@ -11,8 +11,8 @@ import type { OptionCost, StructuredOption } from "@/lib/db/seed-data/events";
 // the choice itself, independent of how it's later scored). Returns an
 // error string if the team can't currently afford it (item 4) instead of
 // throwing, so the caller can turn it into a clean 400 response.
-async function applyOptionCost(regionId: string, cost: OptionCost, reason: string): Promise<string | null> {
-  const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+async function applyOptionCost(sessionId: string, regionId: string, cost: OptionCost, reason: string): Promise<string | null> {
+  const state = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)) });
   if (!state) return "Region state not found";
 
   const fundCost = cost.fund ?? 0;
@@ -30,18 +30,18 @@ async function applyOptionCost(regionId: string, cost: OptionCost, reason: strin
       antiviralsRemaining: state.antiviralsRemaining - antiviralsCost,
       updatedAt: new Date(),
     })
-    .where(eq(modelState.regionId, regionId));
+    .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)));
 
-  const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
-  if (updated) await db.insert(modelStateHistory).values({ regionId, day: updated.day, snapshotJson: updated, reason });
+  const updated = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)) });
+  if (updated) await db.insert(modelStateHistory).values({ sessionId, regionId, day: updated.day, snapshotJson: updated, reason });
   return null;
 }
 
 // Refunds a previously-charged option's cost — used when a team resubmits a
 // decision before it's scored (each resubmission is a new row, see below),
 // so switching options doesn't double-charge the earlier choice.
-async function refundOptionCost(regionId: string, cost: OptionCost, reason: string) {
-  const state = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
+async function refundOptionCost(sessionId: string, regionId: string, cost: OptionCost, reason: string) {
+  const state = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)) });
   if (!state) return;
   await db
     .update(modelState)
@@ -51,9 +51,9 @@ async function refundOptionCost(regionId: string, cost: OptionCost, reason: stri
       antiviralsRemaining: state.antiviralsRemaining + (cost.antivirals ?? 0),
       updatedAt: new Date(),
     })
-    .where(eq(modelState.regionId, regionId));
-  const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, regionId) });
-  if (updated) await db.insert(modelStateHistory).values({ regionId, day: updated.day, snapshotJson: updated, reason });
+    .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)));
+  const updated = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)) });
+  if (updated) await db.insert(modelStateHistory).values({ sessionId, regionId, day: updated.day, snapshotJson: updated, reason });
 }
 
 // POST: a team submits a decision for a dispatch targeted at them. Allows
@@ -61,18 +61,18 @@ async function refundOptionCost(regionId: string, cost: OptionCost, reason: stri
 // each submission is a new row, so full revision history is retained rather
 // than overwritten.
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (session!.user.role !== "student" || !session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can submit decisions" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const eventDispatchId = body.eventDispatchId as number;
 
-  const dispatch = await db.query.eventDispatches.findFirst({ where: eq(eventDispatches.id, eventDispatchId) });
+  const dispatch = await db.query.eventDispatches.findFirst({
+    where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, eventDispatchId)),
+  });
   if (!dispatch) return NextResponse.json({ error: "Dispatch not found" }, { status: 404 });
-  if (dispatch.targetTeamId !== session!.user.teamId) {
+  if (dispatch.targetTeamId !== actor!.teamId) {
     return NextResponse.json({ error: "This event is not targeted at your team" }, { status: 403 });
   }
   if (dispatch.status === "scored" || dispatch.status === "closed") {
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   const confidenceLevel = ["LOW", "MEDIUM", "HIGH"].includes(body.confidenceLevel) ? body.confidenceLevel : null;
   const structuredChoice = (body.structuredChoice as string) ?? null;
 
-  const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
+  const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, actor!.teamId!)) });
   if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
 
   const options = (event?.structuredOptionsJson as StructuredOption[] | null) ?? null;
@@ -104,27 +104,29 @@ export async function POST(req: NextRequest) {
   // resubmission before scoring is allowed (see below) and shouldn't
   // double-charge if a team changes their mind.
   const priorDecision = await db.query.decisions.findFirst({
-    where: eq(decisions.eventDispatchId, eventDispatchId),
+    where: and(eq(decisions.sessionId, sessionId), eq(decisions.eventDispatchId, eventDispatchId)),
     orderBy: [desc(decisions.submittedAt)],
   });
   if (priorDecision?.structuredChoice) {
     const priorOption = options?.find((o) => o.label === priorDecision.structuredChoice);
     if (priorOption?.cost) {
-      await refundOptionCost(team.regionId, priorOption.cost, `${event!.id}: refunded cost of previous choice (${priorOption.label}) on resubmission`);
+      await refundOptionCost(sessionId, team.regionId, priorOption.cost, `${event!.id}: refunded cost of previous choice (${priorOption.label}) on resubmission`);
     }
   }
 
   if (chosenOption?.cost) {
-    const affordabilityError = await applyOptionCost(team.regionId, chosenOption.cost, `${event!.id}: chose option ${chosenOption.label}`);
+    const affordabilityError = await applyOptionCost(sessionId, team.regionId, chosenOption.cost, `${event!.id}: chose option ${chosenOption.label}`);
     if (affordabilityError) return NextResponse.json({ error: affordabilityError }, { status: 400 });
   }
 
   const [decision] = await db
     .insert(decisions)
     .values({
+      sessionId,
       eventDispatchId,
-      teamId: session!.user.teamId,
-      submittedByUserId: Number(session!.user.id),
+      teamId: actor!.teamId!,
+      submittedByUserId: actor!.userId,
+      actorKind: actor!.isOwner ? "owner" : "team",
       structuredChoice,
       rationaleText,
       resourceAllocationJson: body.resourceAllocationJson ?? null,
@@ -139,22 +141,37 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
   const { searchParams } = new URL(req.url);
   const dispatchId = searchParams.get("eventDispatchId");
 
   if (dispatchId) {
-    const rows = await db.query.decisions.findMany({ where: eq(decisions.eventDispatchId, Number(dispatchId)) });
+    // Ownership check: the dispatch must belong to this actor's session, and
+    // a team actor may only see decisions for a dispatch targeted at them —
+    // previously this had no check at all and returned every decision for
+    // any eventDispatchId, which becomes a cross-session leak once other
+    // sessions' dispatch ids exist.
+    const dispatch = await db.query.eventDispatches.findFirst({
+      where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, Number(dispatchId))),
+    });
+    if (!dispatch) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (actor!.role === "student" && dispatch.targetTeamId !== actor!.teamId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const rows = await db.query.decisions.findMany({
+      where: and(eq(decisions.sessionId, sessionId), eq(decisions.eventDispatchId, Number(dispatchId))),
+    });
     return NextResponse.json({ decisions: rows });
   }
 
-  if (session!.user.role === "instructor") {
-    const rows = await db.query.decisions.findMany();
+  if (actor!.role === "instructor") {
+    const rows = await db.query.decisions.findMany({ where: eq(decisions.sessionId, sessionId) });
     return NextResponse.json({ decisions: rows });
   }
 
-  const rows = await db.query.decisions.findMany({ where: eq(decisions.teamId, session!.user.teamId!) });
+  const rows = await db.query.decisions.findMany({ where: and(eq(decisions.sessionId, sessionId), eq(decisions.teamId, actor!.teamId!)) });
   return NextResponse.json({ decisions: rows });
 }
