@@ -26,8 +26,9 @@
 // competitive game.
 
 import { db } from "./db";
-import { modelState, globalState } from "./db/schema";
+import { modelState, sessionState } from "./db/schema";
 import { and, eq, sql } from "drizzle-orm";
+import { bumpStateVersion } from "./state-version";
 
 type FundField = "fundRemaining" | "ppeDaysRemaining" | "antiviralsRemaining";
 
@@ -37,40 +38,64 @@ type FundField = "fundRemaining" | "ppeDaysRemaining" | "antiviralsRemaining";
 // balance comparison is done in the same `sql` fragment as the column
 // reference (rather than via the typed gte() helper) since `field` is a
 // union of possible columns and gte()'s generic overload resolution
-// doesn't narrow cleanly against a union column type.
-export async function tryDeductRegionField(regionId: string, field: FundField, amount: number): Promise<boolean> {
+// doesn't narrow cleanly against a union column type. sessionId is part of
+// the WHERE clause (not just an implicit consequence of regionId being
+// unique) so the atomic guard is provably session-scoped even though
+// modelState's uniqueness is now (sessionId, regionId) rather than
+// regionId alone.
+export async function tryDeductRegionField(
+  sessionId: string,
+  regionId: string,
+  field: FundField,
+  amount: number
+): Promise<boolean> {
   const result = await db
     .update(modelState)
     .set({ [field]: sql`${modelState[field]} - ${amount}`, updatedAt: new Date() } as never)
-    .where(and(eq(modelState.regionId, regionId), sql`${modelState[field]} >= ${amount}`))
+    .where(
+      and(
+        eq(modelState.sessionId, sessionId),
+        eq(modelState.regionId, regionId),
+        sql`${modelState[field]} >= ${amount}`
+      )
+    )
     .returning();
+  if (result.length > 0) await bumpStateVersion(sessionId);
   return result.length > 0;
 }
 
 // Credits are never blocked by a balance floor, but still done as a single
 // atomic increment (SET x = x + amount) rather than read-then-write, so a
 // concurrent credit to the same region can never be lost to a stale read.
-export async function creditRegionField(regionId: string, field: FundField, amount: number): Promise<void> {
+export async function creditRegionField(
+  sessionId: string,
+  regionId: string,
+  field: FundField,
+  amount: number
+): Promise<void> {
   await db
     .update(modelState)
     .set({ [field]: sql`${modelState[field]} + ${amount}`, updatedAt: new Date() } as never)
-    .where(eq(modelState.regionId, regionId));
+    .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)));
+  await bumpStateVersion(sessionId);
 }
 
 type WhoHqStockField = "whoHqPpeStock" | "whoHqAntiviralsStock" | "whoHqFund";
 
-export async function tryDeductWhoHqField(field: WhoHqStockField, amount: number): Promise<boolean> {
+export async function tryDeductWhoHqField(sessionId: string, field: WhoHqStockField, amount: number): Promise<boolean> {
   const result = await db
-    .update(globalState)
-    .set({ [field]: sql`${globalState[field]} - ${amount}`, updatedAt: new Date() } as never)
-    .where(and(eq(globalState.id, 1), sql`${globalState[field]} >= ${amount}`))
+    .update(sessionState)
+    .set({ [field]: sql`${sessionState[field]} - ${amount}`, updatedAt: new Date() } as never)
+    .where(and(eq(sessionState.sessionId, sessionId), sql`${sessionState[field]} >= ${amount}`))
     .returning();
+  if (result.length > 0) await bumpStateVersion(sessionId);
   return result.length > 0;
 }
 
-export async function creditWhoHqField(field: WhoHqStockField, amount: number): Promise<void> {
+export async function creditWhoHqField(sessionId: string, field: WhoHqStockField, amount: number): Promise<void> {
   await db
-    .update(globalState)
-    .set({ [field]: sql`${globalState[field]} + ${amount}`, updatedAt: new Date() } as never)
-    .where(eq(globalState.id, 1));
+    .update(sessionState)
+    .set({ [field]: sql`${sessionState[field]} + ${amount}`, updatedAt: new Date() } as never)
+    .where(eq(sessionState.sessionId, sessionId));
+  await bumpStateVersion(sessionId);
 }

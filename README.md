@@ -70,13 +70,17 @@ available on request.
   than a real scheduler, but it fits the actual constraint (free tier,
   short session) instead of asking for a paid plan to solve a problem that
   doesn't need one.
-- **Shared per-region logins, not per-student accounts.** Six fixed
-  usernames plus one instructor account, reseeded with the same
-  credentials every time. A real LMS-integrated identity system would be
-  the "correct" answer for a production course tool; for a ~60-minute
-  live session where a team huddles around one laptop, it's overhead this
-  prototype doesn't need. That tradeoff is called out explicitly in the
-  code rather than left implicit.
+- **Shared per-region logins, not per-student accounts.** Six generated
+  usernames plus one instructor account per game session, not per-student.
+  A real LMS-integrated identity system would be the "correct" answer for a
+  production course tool; for a ~60-minute live session where a team
+  huddles around one laptop, it's overhead this prototype doesn't need.
+  That tradeoff is called out explicitly in the code rather than left
+  implicit.
+- **Multi-tenant: every game is its own isolated session, not a global
+  singleton.** The app is mid-migration from "one game running at a time"
+  to "any number of games running concurrently, each fully isolated" — see
+  [Status](#status) below for what's landed so far.
 - **A separate compressed "narrative clock" from the deadline clock.**
   `lib/sim-clock.ts` maps real elapsed minutes onto a ~90-day in-game
   narrative arc (pure math, no DB read, so it ticks identically on server
@@ -92,8 +96,22 @@ Next.js (App Router) + Drizzle ORM + Postgres (Neon) + NextAuth v5
 
 ## Status
 
-Prototype. It runs end-to-end (login, event dispatch, scoring, live model
+Prototype, mid-migration to a multi-tenant public deployment. The core
+simulation runs end-to-end (login, event dispatch, scoring, live model
 updates, debrief) but hasn't been run with real students in a course yet.
+
+The data model and every API route are session-scoped — any number of game
+sessions can run concurrently, fully isolated from each other. Self-serve
+public registration and instructor session creation now exist: visit
+`/register`, then `/sessions` to run a session with your class and get a
+printable credential sheet. **Part 1 of the setup guide below (the
+no-coding-experience instructor flow) still describes the old fixed-login
+model and is out of date** — there's no more fixed `instructor`/`afro`/etc.
+account, and `npm run db:seed` no longer prints login credentials, only
+static game content; use the in-app `/register` → `/sessions` flow instead.
+Not yet built: demo mode (solo play against a scripted autoplayer), the
+scaling/reaping hygiene for running this at real public-traffic volume, and
+the mobile/PWA pass.
 
 ## About me
 
@@ -113,6 +131,17 @@ don't have a programming background, start with **Part 1**. If you're
 comfortable with a terminal, npm, and deploying web apps, skip to **Part 2**.
 
 ### Part 1 — Setup Guide for Instructors (No Coding Experience Needed)
+
+> **Steps 7-8 below are out of date.** The app moved from one fixed
+> `instructor` login and six fixed region logins (`afro`, `amro`, ...) to a
+> per-session model — every game session gets its own generated
+> instructor/region credentials. There's no more "Seed regions, events, and
+> login accounts" GitHub Actions step that prints them. Instead, once your
+> site is deployed and its database is set up (Steps 1-6), visit
+> `your-project-name.vercel.app/register` to create an account, then
+> `/sessions` to run a session with your class — that generates the six
+> region credentials and a printable credential sheet for you. Steps 1-6
+> below are still accurate.
 
 Everything below is done by clicking around in a web browser — you will not
 need to install anything or open a terminal. You're doing three things:
@@ -262,10 +291,12 @@ have to do Steps 1–6 once.
   whoever set this project up for you (or open an issue on the GitHub
   repository) — it's much easier to diagnose with the exact message than
   without it.
-- **You want different passwords than the auto-generated ones:** this
-  requires editing one file in the code
-  (`lib/db/seed-data/credentials.ts`) and asking a developer to help, or
-  following Part 2's local setup to do it yourself.
+- **You want to change a password:** `npm run db:set-password --
+  <username> <new-password>` (Part 2's local setup) works for public
+  accounts (`users` table). Per-session region credentials
+  (`session_region_credentials`) are generated fresh at session creation and
+  don't have a password-reset script yet — see the note at the top of this
+  section.
 
 ### Part 2 — Quick Reference for Developers
 
@@ -275,7 +306,7 @@ have to do Steps 1–6 once.
 npm install
 cp .env.example .env   # fill in DATABASE_URL and AUTH_SECRET (openssl rand -base64 32)
 npm run db:push        # create tables
-npm run db:seed        # seed regions/events + print login credentials
+npm run db:seed        # seed static regions/events content (no accounts/sessions)
 npm run dev
 ```
 
@@ -303,8 +334,9 @@ too coarse for a compressed ~60 minute session. Rather than require a paid
 plan, HARD/SOFT deadline enforcement — along with passive drift, snap-vote
 expiry, budget-cycle timers, and social-metric milestones (see
 `lib/deadline.ts`) — runs opportunistically on every dashboard/display poll,
-throttled server-side (`globalState.lastTickAt` + `TICK_THROTTLE_SECONDS` in
-`lib/config.ts`) so concurrent pollers don't re-trigger it. This fires every
+throttled per-session (`sessionState.lastTickAt` + `TICK_THROTTLE_SECONDS`
+in `lib/config.ts`) so concurrent pollers within a session don't re-trigger
+it and separate sessions tick independently of each other. This fires every
 10-15 seconds as long as at least one team dashboard or the projector
 display is open, which is true for essentially the entire session. The
 `vercel.json` cron entry is a once-daily fallback safety net, not the
@@ -317,36 +349,40 @@ when no one has a page open, you can change its schedule to `* * * * *`
 Every region shares **one login for the whole team** (see the design
 discussion above on shared-per-region logins vs. individual student
 accounts — this prototype uses shared logins for a fast-paced compressed
-test session).
+test session), but logins are now **per-session, not fixed**:
 
-- **Usernames are fixed**: `afro`, `amro`, `emro`, `euro`, `searo`, `wpro`, and
-  `instructor`. No email addresses are used anywhere in this prototype.
-- **Passwords are fixed**, defined in `lib/db/seed-data/credentials.ts`, and
-  print every time you run `npm run db:seed` (or the "Database setup /
-  reset" GitHub Actions workflow) — they're the same every time, not
-  regenerated, so you only need to look them up once and can reuse them
-  across game sessions. Edit that file directly if you want different
-  passwords, then re-seed to apply the change.
-- Re-running `npm run db:seed` any time is safe — it resets regions/events
-  to their seed content and re-applies the fixed credentials; it does not
-  touch decisions, scores, or model state from an in-progress game (those
-  live in separate tables this script never truncates).
-- **To set one specific account's password** without touching anything else:
+- Each game session (`game_sessions` row) gets its own instructor account
+  (a `users` row, currently created directly — the registration UI is not
+  live yet) and six generated region logins in
+  `session_region_credentials`, created by `lib/session-lifecycle.ts`'s
+  `createSession(ownerUserId, mode)`. Usernames aren't fixed strings like
+  `afro` anymore — they carry a random suffix (e.g. `afro-7f3k9q`) so they
+  can never collide with another session's or a public account's username.
+- Passwords are randomly generated per session, bcrypt-hashed, and stored
+  with a one-time plaintext hint (`plaintextHint`) so a credential sheet can
+  be re-rendered mid-session. There's no single fixed password to look up —
+  each session's credentials are its own.
+- `npm run db:seed` only seeds the global static content (`regions`,
+  `events`, `eventChainLinks`) — it does not touch any session, account, or
+  credential, and prints no login information.
+- **To reset one specific `users`-table account's password** (public
+  accounts, not per-session region credentials):
   ```bash
-  npm run db:set-password -- afro your-chosen-password
+  npm run db:set-password -- <username> your-chosen-password
   ```
 
 #### Running a Compressed (~60 Minute) Test Session
 
-`global_state.fast_mode_multiplier` (seeded to `1/60`) compresses every
-event's stated deadline window (in hours) into real minutes — a "2-hour HARD
-window" becomes a 2-minute real window. `global_state.intensity_multiplier`
-(the instructor's live "tempo dial" on the Command Center) further scales
-this on top, in the 0.5x–2.0x range, for in-session pacing control. Adjust
-`fast_mode_multiplier` directly in the database if 60 minutes runs too fast
-or too slow overall. The blackout window (10pm–6am Phoenix) is disabled by
-default (`respect_blackout_window = false`) since it's irrelevant for a
-single live session.
+`session_state.fast_mode_multiplier` (seeded to `1/60`, per session) compresses
+every event's stated deadline window (in hours) into real minutes — a
+"2-hour HARD window" becomes a 2-minute real window.
+`session_state.intensity_multiplier` (the instructor's live "tempo dial" on
+the Command Center) further scales this on top, in the 0.5x–2.0x range, for
+in-session pacing control. Adjust `fast_mode_multiplier` directly in the
+database if 60 minutes runs too fast or too slow overall. The blackout
+window (10pm–6am Phoenix) is disabled by default
+(`respect_blackout_window = false`) since it's irrelevant for a single live
+session.
 
 #### Public Display Screen
 

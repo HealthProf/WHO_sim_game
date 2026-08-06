@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum("user_role", ["student", "instructor"]);
@@ -55,8 +56,26 @@ export const marketRequestStatusEnum = pgEnum("market_request_status", ["pending
 export const tradeOfferStatusEnum = pgEnum("trade_offer_status", ["pending", "accepted", "rejected"]);
 export const emergencyRequestStatusEnum = pgEnum("emergency_request_status", ["open", "closed"]);
 export const marketResourceEnum = pgEnum("market_resource", ["PPE_DAYS", "ANTIVIRALS"]);
+export const sessionModeEnum = pgEnum("session_mode", ["instructor", "demo"]);
+export const sessionStatusEnum = pgEnum("session_status", [
+  "setup",
+  "running",
+  "paused",
+  "completed",
+  "archived",
+]);
+// "team" = a real student region login; "owner" = the session owner acting on
+// behalf of a region (demo mode, occupying a region themselves); "autoplayer"
+// = the scripted demo autoplayer (see lib/autoplayer, Phase 4); "system" =
+// automatic no-response fallback (lib/deadline.ts), which has no user at all.
+export const actorKindEnum = pgEnum("actor_kind", ["team", "owner", "autoplayer", "system"]);
+// Tier-sampling competence distributions for demo mode's scripted
+// autoplayer — see lib/config.ts AUTOPLAY_PROFILE_DISTRIBUTIONS and
+// lib/autoplayer/scripted.ts.
+export const autoplayProfileEnum = pgEnum("autoplay_profile", ["strong", "mixed", "struggling"]);
 
-// Static reference data — seeded once from 04-regions.md
+// Static reference data — seeded once from 04-regions.md. Global across every
+// session: never gets a sessionId.
 export const regions = pgTable("regions", {
   id: text("id").primaryKey(), // AFRO | AMRO | EMRO | EURO | SEARO | WPRO
   fullName: text("full_name").notNull(),
@@ -82,28 +101,161 @@ export const regions = pgTable("regions", {
   profileMarkdown: text("profile_markdown").notNull(),
 });
 
-export const teams = pgTable("teams", {
-  id: serial("id").primaryKey(),
-  regionId: text("region_id")
-    .notNull()
-    .unique()
-    .references(() => regions.id),
-  username: text("username").notNull().unique(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
+// A public account. Region logins are NOT users rows — see
+// sessionRegionCredentials below. Stays global/unscoped.
+//
+// role is legacy from the single-session prototype and is no longer how
+// "instructor-ness" is determined — see lib/session-context.ts requireActor:
+// a public account becomes the instructor for whichever game_sessions row
+// it owns (gameSessions.ownerUserId), not via a fixed role on the account
+// itself. Every public account is created with role="student" at the table
+// level (kept non-null rather than dropped outright since removing it would
+// touch every historical row and isn't needed for Phase 2/3 to work).
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  username: text("username").notNull().unique(), // lowercased, unique key
+  displayUsername: text("display_username").notNull(), // what they actually typed
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull(),
-  teamId: integer("team_id").references(() => teams.id),
+  // Optional profile fields (lib/session-context.ts and registration never
+  // require these) — used only to contact an account holder about updates
+  // to the simulation. email is also the only account-recovery path that
+  // exists; see app/(public)/account/recover.
+  email: text("email"),
+  institution: text("institution"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at"),
 });
 
-// Singleton row (id = 1)
-export const globalState = pgTable("global_state", {
+// Per-IP request throttling for POST /api/account/register and the
+// credentials sign-in path (see lib/rate-limit.ts). A DB-backed counter
+// rather than an in-memory one — on Vercel each lambda instance gets its
+// own memory, so an in-memory limiter is close to decorative. One extra
+// atomic write per auth attempt is the accepted cost.
+export const rateLimitCounters = pgTable("rate_limit_counters", {
+  key: text("key").primaryKey(), // "ip:route", e.g. "203.0.113.4:register"
+  windowStartedAt: timestamp("window_started_at").notNull(),
+  count: integer("count").notNull().default(0),
+});
+
+// Singleton throttle marker (id = 1) for the opportunistic reaper (see
+// lib/reaper.ts) — a global, not per-session, cousin of
+// sessionState.lastTickAt: reaping scans every session at once, so it needs
+// exactly one shared claim rather than one per session.
+export const reaperState = pgTable("reaper_state", {
   id: integer("id").primaryKey().default(1),
+  lastReapAt: timestamp("last_reap_at"),
+});
+
+// Minimal observability log (see lib/session-events.ts) — "47 instructors
+// ran a session" is a far more useful thing to be able to say than "it's
+// deployed." sessionId is nullable and NOT a FK: a session can be deleted
+// (demo sessions, see lib/session-lifecycle.ts deleteSession) after this
+// log has already recorded its lifecycle, and the log is meant to outlive
+// the session it describes.
+export const sessionEvents = pgTable(
+  "session_events",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id"),
+    kind: text("kind").notNull(), // "created" | "completed" | "archived" | "reaped"
+    mode: sessionModeEnum("mode").notNull(),
+    detail: text("detail"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("session_events_created_idx").on(t.createdAt)]
+);
+
+// One live game. Identity and lifecycle only — see sessionState for the wide,
+// hot, per-tick fields (kept in a separate table on purpose: this row is what
+// the reaper and concurrency caps scan, and it stays small and rarely
+// written even while sessionState is rewritten on every tick).
+export const gameSessions = pgTable("game_sessions", {
+  id: text("id").primaryKey(), // crypto.randomUUID(), see lib/ids.ts
+  ownerUserId: integer("owner_user_id")
+    .notNull()
+    .references(() => users.id),
+  mode: sessionModeEnum("mode").notNull(),
+  status: sessionStatusEnum("status").notNull().default("setup"),
+  // Unguessable public identifier for the projector display route
+  // (crypto.randomBytes(24).toString("base64url"), see lib/ids.ts) —
+  // deliberately never the primary key, so the PK never needs to be exposed
+  // in a public URL.
+  displayToken: text("display_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  // Bumped by lib/session-context.ts's requireActor() on every authenticated
+  // request against this session — drives idle-tick gating and reaping
+  // (Phase 5).
+  lastActivityAt: timestamp("last_activity_at").defaultNow().notNull(),
+  // Demo mode only: which region the session owner is currently occupying.
+  // null = the owner is acting as the instructor. See lib/session-context.ts
+  // requireActor() (Phase 4 wires the override; Phase 1 leaves this column in
+  // place but unused by any read path other than the schema itself).
+  demoActiveRegionId: text("demo_active_region_id").references(() => regions.id),
+});
+
+// Per-session region logins (instructor mode). Generated at session creation
+// (lib/session-lifecycle.ts createSession), never chosen by the student.
+// Replaces the old teams.username column — see teams below.
+export const sessionRegionCredentials = pgTable(
+  "session_region_credentials",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    // Globally unique (not just per-session) because NextAuth's Credentials
+    // provider resolves a bare username with no session context — see
+    // lib/auth.ts. Generated with a random suffix (e.g. "afro-7f3k9q") so it
+    // can never collide with a public users.username.
+    username: text("username").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    // Shown once on the credential sheet at creation; kept so the sheet can
+    // be re-rendered mid-session (an instructor may need to reprint it).
+    // Cleared when the session completes — see lib/session-lifecycle.ts.
+    plaintextHint: text("plaintext_hint"),
+  },
+  (t) => [uniqueIndex("session_region_credentials_session_region_uniq").on(t.sessionId, t.regionId)]
+);
+
+// Per-session team row — one per region per session. Was globally unique on
+// regionId/username; both constraints break the moment two sessions coexist,
+// so this table is now session-scoped and username has moved to
+// sessionRegionCredentials above.
+export const teams = pgTable(
+  "teams",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("teams_session_region_uniq").on(t.sessionId, t.regionId),
+    index("teams_session_idx").on(t.sessionId),
+  ]
+);
+
+// Per-session game state. Structurally identical to the old global_state
+// singleton (id = 1) — every column below is byte-identical in meaning, just
+// addressed by sessionId instead of a hardcoded id. Deliberately kept as its
+// own table rather than merged into gameSessions: it's wide and rewritten on
+// every tick, while gameSessions is small and rarely written (the reaper and
+// concurrency caps scan gameSessions, not this table).
+export const sessionState = pgTable("session_state", {
+  sessionId: text("session_id")
+    .primaryKey()
+    .references(() => gameSessions.id),
   currentDay: integer("current_day").notNull().default(1),
   escalationState: escalationStateEnum("escalation_state").notNull().default("GREEN"),
   mediaPressureIndex: integer("media_pressure_index").notNull().default(0),
@@ -140,7 +292,8 @@ export const globalState = pgTable("global_state", {
   // expiry, budget-cycle timers, and social-milestone checks. Claimed via a
   // single atomic conditional UPDATE (same pattern as lib/db-atomic.ts),
   // not a real lock, so at most one caller per throttle window does the
-  // work and the rest no-op.
+  // work and the rest no-op. Scoped per session so concurrent sessions tick
+  // independently.
   lastTickAt: timestamp("last_tick_at"),
   // WHO HQ's own budget/stockpile (see lib/economy.ts) — deliberately larger
   // than any single region's starting fund and, unlike regions, never
@@ -163,39 +316,54 @@ export const globalState = pgTable("global_state", {
   // separate ones so a facilitator who senses the room coasting can turn up
   // the pressure without hunting through multiple settings.
   intensityMultiplier: real("intensity_multiplier").notNull().default(1.0),
+  // Bumped by a single atomic increment on every mutating write this
+  // session makes (see lib/state-version.ts) — /api/dashboard and
+  // /api/display accept ?since=<version> and return { unchanged: true }
+  // without recomputing anything when nothing has changed, so an idle
+  // session's polling costs close to nothing (Phase 5 poll backoff).
+  stateVersion: integer("state_version").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Current live state per region
-export const modelState = pgTable("model_state", {
-  id: serial("id").primaryKey(),
-  regionId: text("region_id")
-    .notNull()
-    .unique()
-    .references(() => regions.id),
-  day: integer("day").notNull().default(1),
-  rt: real("rt").notNull(),
-  cfrMultiplier: real("cfr_multiplier").notNull(),
-  confirmedCases: integer("confirmed_cases").notNull(),
-  estimatedTrueCasesLow: integer("estimated_true_cases_low").notNull(),
-  estimatedTrueCasesHigh: integer("estimated_true_cases_high").notNull(),
-  deaths: integer("deaths").notNull(),
-  hospitalCapacityPct: integer("hospital_capacity_pct").notNull(),
-  surveillanceIndex: integer("surveillance_index").notNull(),
-  fundRemaining: integer("fund_remaining").notNull(),
-  ppeDaysRemaining: integer("ppe_days_remaining").notNull(),
-  antiviralsRemaining: integer("antivirals_remaining").notNull(),
-  hcwSurgePct: integer("hcw_surge_pct").notNull(),
-  politicalTensionIndex: integer("political_tension_index").notNull(),
-  publicTrustIndex: integer("public_trust_index").notNull(),
-  // "Population happiness" — a distinct social metric from trust (item 8):
-  // trust tracks whether the public believes official communications;
-  // happiness tracks general public sentiment/morale, driven by NPI
-  // severity, death growth, escalation state, and event outcomes. See
-  // lib/model-engine.ts for how each is updated.
-  populationHappinessIndex: integer("population_happiness_index").notNull().default(60),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+// Current live state per region, per session.
+export const modelState = pgTable(
+  "model_state",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    day: integer("day").notNull().default(1),
+    rt: real("rt").notNull(),
+    cfrMultiplier: real("cfr_multiplier").notNull(),
+    confirmedCases: integer("confirmed_cases").notNull(),
+    estimatedTrueCasesLow: integer("estimated_true_cases_low").notNull(),
+    estimatedTrueCasesHigh: integer("estimated_true_cases_high").notNull(),
+    deaths: integer("deaths").notNull(),
+    hospitalCapacityPct: integer("hospital_capacity_pct").notNull(),
+    surveillanceIndex: integer("surveillance_index").notNull(),
+    fundRemaining: integer("fund_remaining").notNull(),
+    ppeDaysRemaining: integer("ppe_days_remaining").notNull(),
+    antiviralsRemaining: integer("antivirals_remaining").notNull(),
+    hcwSurgePct: integer("hcw_surge_pct").notNull(),
+    politicalTensionIndex: integer("political_tension_index").notNull(),
+    publicTrustIndex: integer("public_trust_index").notNull(),
+    // "Population happiness" — a distinct social metric from trust (item 8):
+    // trust tracks whether the public believes official communications;
+    // happiness tracks general public sentiment/morale, driven by NPI
+    // severity, death growth, escalation state, and event outcomes. See
+    // lib/model-engine.ts for how each is updated.
+    populationHappinessIndex: integer("population_happiness_index").notNull().default(60),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("model_state_session_region_uniq").on(t.sessionId, t.regionId),
+    index("model_state_session_idx").on(t.sessionId),
+  ]
+);
 
 // A parallel "what if every decision had been Optimal" shadow simulation,
 // updated in lockstep with model_state (see lib/model-engine.ts) — every
@@ -204,36 +372,53 @@ export const modelState = pgTable("model_state", {
 // runs against this table's own Rt/CFR. This is what powers the debrief's
 // "actual vs. achievable" comparison (item 7) without needing to replay the
 // whole game's history after the fact.
-export const modelStateOptimal = pgTable("model_state_optimal", {
-  id: serial("id").primaryKey(),
-  regionId: text("region_id")
-    .notNull()
-    .unique()
-    .references(() => regions.id),
-  rt: real("rt").notNull(),
-  cfrMultiplier: real("cfr_multiplier").notNull(),
-  confirmedCases: integer("confirmed_cases").notNull(),
-  estimatedTrueCasesLow: integer("estimated_true_cases_low").notNull(),
-  estimatedTrueCasesHigh: integer("estimated_true_cases_high").notNull(),
-  deaths: integer("deaths").notNull(),
-  publicTrustIndex: integer("public_trust_index").notNull(),
-  populationHappinessIndex: integer("population_happiness_index").notNull().default(60),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const modelStateOptimal = pgTable(
+  "model_state_optimal",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    rt: real("rt").notNull(),
+    cfrMultiplier: real("cfr_multiplier").notNull(),
+    confirmedCases: integer("confirmed_cases").notNull(),
+    estimatedTrueCasesLow: integer("estimated_true_cases_low").notNull(),
+    estimatedTrueCasesHigh: integer("estimated_true_cases_high").notNull(),
+    deaths: integer("deaths").notNull(),
+    publicTrustIndex: integer("public_trust_index").notNull(),
+    populationHappinessIndex: integer("population_happiness_index").notNull().default(60),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("model_state_optimal_session_region_uniq").on(t.sessionId, t.regionId),
+    index("model_state_optimal_session_idx").on(t.sessionId),
+  ]
+);
 
 // Append-only log — critical for after-action reports
-export const modelStateHistory = pgTable("model_state_history", {
-  id: serial("id").primaryKey(),
-  regionId: text("region_id")
-    .notNull()
-    .references(() => regions.id),
-  day: integer("day").notNull(),
-  snapshotJson: jsonb("snapshot_json").notNull(),
-  reason: text("reason").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const modelStateHistory = pgTable(
+  "model_state_history",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    day: integer("day").notNull(),
+    snapshotJson: jsonb("snapshot_json").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("model_state_history_session_idx").on(t.sessionId)]
+);
 
-// Static reference data — seeded once from 03-events.md
+// Static reference data — seeded once from 03-events.md. Global across every
+// session: never gets a sessionId.
 export const events = pgTable("events", {
   id: text("id").primaryKey(), // "EVT-001"
   title: text("title").notNull(),
@@ -281,161 +466,231 @@ export const eventChainLinks = pgTable("event_chain_links", {
 });
 
 // One row per time an event fires for a given target (or per team for global events)
-export const eventDispatches = pgTable("event_dispatches", {
-  id: serial("id").primaryKey(),
-  eventId: text("event_id")
-    .notNull()
-    .references(() => events.id),
-  targetTeamId: integer("target_team_id").references(() => teams.id), // null = broadcast/global row
-  dispatchedAt: timestamp("dispatched_at").defaultNow().notNull(),
-  deadlineAt: timestamp("deadline_at"),
-  reminderSentAt: timestamp("reminder_sent_at"),
-  status: dispatchStatusEnum("status").notNull().default("dispatched"),
-  revealedToPublic: boolean("revealed_to_public").notNull().default(false),
-  dispatchedByUserId: integer("dispatched_by_user_id").references(() => users.id),
-});
+export const eventDispatches = pgTable(
+  "event_dispatches",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id),
+    targetTeamId: integer("target_team_id").references(() => teams.id), // null = broadcast/global row
+    dispatchedAt: timestamp("dispatched_at").defaultNow().notNull(),
+    deadlineAt: timestamp("deadline_at"),
+    reminderSentAt: timestamp("reminder_sent_at"),
+    status: dispatchStatusEnum("status").notNull().default("dispatched"),
+    revealedToPublic: boolean("revealed_to_public").notNull().default(false),
+    dispatchedByUserId: integer("dispatched_by_user_id").references(() => users.id),
+  },
+  (t) => [index("event_dispatches_session_idx").on(t.sessionId)]
+);
 
-export const decisions = pgTable("decisions", {
-  id: serial("id").primaryKey(),
-  eventDispatchId: integer("event_dispatch_id")
-    .notNull()
-    .references(() => eventDispatches.id),
-  teamId: integer("team_id")
-    .notNull()
-    .references(() => teams.id),
-  submittedByUserId: integer("submitted_by_user_id")
-    .notNull()
-    .references(() => users.id),
-  structuredChoice: text("structured_choice"),
-  rationaleText: text("rationale_text").notNull(),
-  resourceAllocationJson: jsonb("resource_allocation_json"),
-  coordinatedWithTeamsJson: jsonb("coordinated_with_teams_json"),
-  // Self-reported confidence in this decision ("calibration wager" — see
-  // lib/scoring.ts computeCalibrationAdjustment). Null for system-generated
-  // no-response fallback decisions, which carry no calibration signal.
-  confidenceLevel: confidenceLevelEnum("confidence_level"),
-  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
-});
+export const decisions = pgTable(
+  "decisions",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    eventDispatchId: integer("event_dispatch_id")
+      .notNull()
+      .references(() => eventDispatches.id),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    // Null for autoplayer/system-generated decisions — see actorKind.
+    submittedByUserId: integer("submitted_by_user_id").references(() => users.id),
+    // What kind of thing submitted this decision: a real team login, the demo
+    // session owner occupying the region, the scripted autoplayer (Phase 4),
+    // or the automatic no-response fallback (lib/deadline.ts).
+    actorKind: actorKindEnum("actor_kind").notNull().default("team"),
+    structuredChoice: text("structured_choice"),
+    rationaleText: text("rationale_text").notNull(),
+    resourceAllocationJson: jsonb("resource_allocation_json"),
+    coordinatedWithTeamsJson: jsonb("coordinated_with_teams_json"),
+    // Self-reported confidence in this decision ("calibration wager" — see
+    // lib/scoring.ts computeCalibrationAdjustment). Null for system-generated
+    // no-response fallback decisions, which carry no calibration signal.
+    confidenceLevel: confidenceLevelEnum("confidence_level"),
+    submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  },
+  (t) => [index("decisions_session_idx").on(t.sessionId)]
+);
 
-export const scores = pgTable("scores", {
-  id: serial("id").primaryKey(),
-  decisionId: integer("decision_id")
-    .notNull()
-    .unique()
-    .references(() => decisions.id),
-  evidenceScore: integer("evidence_score").notNull(),
-  politicalScore: integer("political_score").notNull(),
-  equityScore: integer("equity_score").notNull(),
-  // Composite before the calibration-wager adjustment (see lib/scoring.ts) —
-  // kept for transparency/debrief even though `tier` is derived from the
-  // final, adjusted compositePct below.
-  rawCompositePct: real("raw_composite_pct").notNull(),
-  calibrationAdjustment: real("calibration_adjustment").notNull().default(0),
-  compositePct: real("composite_pct").notNull(),
-  tier: tierEnum("tier").notNull(),
-  suggestedTier: tierEnum("suggested_tier"),
-  tierOverridden: boolean("tier_overridden").notNull().default(false),
-  overrideReason: text("override_reason"),
-  fastPathed: boolean("fast_pathed").notNull().default(false),
-  scoredByUserId: integer("scored_by_user_id")
-    .notNull()
-    .references(() => users.id),
-  scoredAt: timestamp("scored_at").defaultNow().notNull(),
-});
+export const scores = pgTable(
+  "scores",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    decisionId: integer("decision_id")
+      .notNull()
+      .unique()
+      .references(() => decisions.id),
+    evidenceScore: integer("evidence_score").notNull(),
+    politicalScore: integer("political_score").notNull(),
+    equityScore: integer("equity_score").notNull(),
+    // Composite before the calibration-wager adjustment (see lib/scoring.ts) —
+    // kept for transparency/debrief even though `tier` is derived from the
+    // final, adjusted compositePct below.
+    rawCompositePct: real("raw_composite_pct").notNull(),
+    calibrationAdjustment: real("calibration_adjustment").notNull().default(0),
+    compositePct: real("composite_pct").notNull(),
+    tier: tierEnum("tier").notNull(),
+    suggestedTier: tierEnum("suggested_tier"),
+    tierOverridden: boolean("tier_overridden").notNull().default(false),
+    overrideReason: text("override_reason"),
+    fastPathed: boolean("fast_pathed").notNull().default(false),
+    scoredByUserId: integer("scored_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    scoredAt: timestamp("scored_at").defaultNow().notNull(),
+  },
+  (t) => [index("scores_session_idx").on(t.sessionId)]
+);
 
-export const coordinationMessages = pgTable("coordination_messages", {
-  id: serial("id").primaryKey(),
-  fromTeamId: integer("from_team_id")
-    .notNull()
-    .references(() => teams.id),
-  toTeamId: integer("to_team_id").references(() => teams.id), // null = broadcast to all
-  eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
-  messageText: text("message_text").notNull(),
-  sentAt: timestamp("sent_at").defaultNow().notNull(),
-  // Item 6's diplomatic back-channel: a private (toTeamId set) message has a
-  // small random chance of "leaking" to the public projector feed at send
-  // time — see lib/coordination-leak.ts. Broadcasts (toTeamId null) can
-  // never leak, they're already public.
-  leaked: boolean("leaked").notNull().default(false),
-});
+export const coordinationMessages = pgTable(
+  "coordination_messages",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    fromTeamId: integer("from_team_id")
+      .notNull()
+      .references(() => teams.id),
+    toTeamId: integer("to_team_id").references(() => teams.id), // null = broadcast to all
+    eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
+    messageText: text("message_text").notNull(),
+    sentAt: timestamp("sent_at").defaultNow().notNull(),
+    // Item 6's diplomatic back-channel: a private (toTeamId set) message has a
+    // small random chance of "leaking" to the public projector feed at send
+    // time — see lib/coordination-leak.ts. Broadcasts (toTeamId null) can
+    // never leak, they're already public.
+    leaked: boolean("leaked").notNull().default(false),
+  },
+  (t) => [index("coordination_messages_session_idx").on(t.sessionId)]
+);
 
-export const instructorActions = pgTable("instructor_actions", {
-  id: serial("id").primaryKey(),
-  instructorUserId: integer("instructor_user_id")
-    .notNull()
-    .references(() => users.id),
-  actionType: text("action_type").notNull(),
-  targetDesc: text("target_desc").notNull(),
-  reason: text("reason"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const instructorActions = pgTable(
+  "instructor_actions",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    instructorUserId: integer("instructor_user_id")
+      .notNull()
+      .references(() => users.id),
+    actionType: text("action_type").notNull(),
+    targetDesc: text("target_desc").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("instructor_actions_session_idx").on(t.sessionId)]
+);
 
 // Drives the public-display scrolling ticker
-export const globalFeedItems = pgTable("global_feed_items", {
-  id: serial("id").primaryKey(),
-  headlineText: text("headline_text").notNull(),
-  eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const globalFeedItems = pgTable(
+  "global_feed_items",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    headlineText: text("headline_text").notNull(),
+    eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("global_feed_items_session_idx").on(t.sessionId)]
+);
 
 // Private per-team "what just happened to you" feed — one row per scored
 // decision (the templated consequence card, built from the event's existing
 // consequencesJson prose, see lib/consequences.ts) plus snap-vote and pledge
 // notifications. Surfaced on the team dashboard; distinct from
 // globalFeedItems, which is the shared projector ticker.
-export const teamNotifications = pgTable("team_notifications", {
-  id: serial("id").primaryKey(),
-  teamId: integer("team_id")
-    .notNull()
-    .references(() => teams.id),
-  eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
-  kind: text("kind").notNull().default("consequence"), // consequence | snap_vote | pledge | market | trade | budget_cycle | emergency_funding | decision_revealed
-  message: text("message").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const teamNotifications = pgTable(
+  "team_notifications",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
+    kind: text("kind").notNull().default("consequence"), // consequence | snap_vote | pledge | market | trade | budget_cycle | emergency_funding | decision_revealed
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("team_notifications_session_idx").on(t.sessionId)]
+);
 
 // Resource pledge ledger — turns the previously narrative-only "we'll share
 // PPE/funds/HCW capacity" decisions into an actual transfer between two
 // regions' live model_state resource fields. Visible to everyone (same
 // transparency model as coordination_messages).
-export const resourcePledges = pgTable("resource_pledges", {
-  id: serial("id").primaryKey(),
-  fromTeamId: integer("from_team_id")
-    .notNull()
-    .references(() => teams.id),
-  toTeamId: integer("to_team_id")
-    .notNull()
-    .references(() => teams.id),
-  resourceType: resourceTypeEnum("resource_type").notNull(),
-  amount: integer("amount").notNull(),
-  eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
-  createdByUserId: integer("created_by_user_id")
-    .notNull()
-    .references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const resourcePledges = pgTable(
+  "resource_pledges",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    fromTeamId: integer("from_team_id")
+      .notNull()
+      .references(() => teams.id),
+    toTeamId: integer("to_team_id")
+      .notNull()
+      .references(() => teams.id),
+    resourceType: resourceTypeEnum("resource_type").notNull(),
+    amount: integer("amount").notNull(),
+    eventDispatchId: integer("event_dispatch_id").references(() => eventDispatches.id),
+    // Null for autoplayer/system-generated pledges — see actorKind on decisions.
+    createdByUserId: integer("created_by_user_id").references(() => users.id),
+    actorKind: actorKindEnum("actor_kind").notNull().default("team"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("resource_pledges_session_idx").on(t.sessionId)]
+);
 
 // Facilitator "break-glass" synchronous snap vote — a wildcard pressure tool
 // separate from the scripted event queue (see lib/snap-vote.ts). One open
-// vote at a time; closing it applies a small generic model effect based on
-// participation/agreement rather than a per-question authored consequence.
-export const snapVotes = pgTable("snap_votes", {
-  id: serial("id").primaryKey(),
-  question: text("question").notNull(),
-  optionsJson: jsonb("options_json").notNull(), // string[]
-  createdByUserId: integer("created_by_user_id")
-    .notNull()
-    .references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  closesAt: timestamp("closes_at").notNull(),
-  status: snapVoteStatusEnum("status").notNull().default("open"),
-  resultSummary: text("result_summary"),
-});
+// vote at a time per session; closing it applies a small generic model effect
+// based on participation/agreement rather than a per-question authored
+// consequence.
+export const snapVotes = pgTable(
+  "snap_votes",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    question: text("question").notNull(),
+    optionsJson: jsonb("options_json").notNull(), // string[]
+    createdByUserId: integer("created_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    closesAt: timestamp("closes_at").notNull(),
+    status: snapVoteStatusEnum("status").notNull().default("open"),
+    resultSummary: text("result_summary"),
+  },
+  (t) => [index("snap_votes_session_idx").on(t.sessionId)]
+);
 
 export const snapVoteResponses = pgTable(
   "snap_vote_responses",
   {
     id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
     snapVoteId: integer("snap_vote_id")
       .notNull()
       .references(() => snapVotes.id),
@@ -445,7 +700,10 @@ export const snapVoteResponses = pgTable(
     choice: text("choice").notNull(),
     submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("snap_vote_responses_vote_team_uniq").on(t.snapVoteId, t.teamId)]
+  (t) => [
+    uniqueIndex("snap_vote_responses_session_vote_team_uniq").on(t.sessionId, t.snapVoteId, t.teamId),
+    index("snap_vote_responses_session_idx").on(t.sessionId),
+  ]
 );
 
 // Popup announcements — see lib/announcements.ts. Two scopes:
@@ -455,22 +713,35 @@ export const snapVoteResponses = pgTable(
 // "team" rows persist until that team explicitly closes them (see
 // announcementAcks below) since a missed in-app popup is easy for a
 // student to miss entirely otherwise.
-export const announcements = pgTable("announcements", {
-  id: serial("id").primaryKey(),
-  scope: announcementScopeEnum("scope").notNull(),
-  kind: text("kind").notNull(), // "event_dispatched" | "decision_resolved" | "dramatic_moment" | "interjection"
-  eventId: text("event_id").references(() => events.id),
-  targetTeamIds: jsonb("target_team_ids"), // number[] | null (null = all teams; scope="team" only)
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  autoDismissSeconds: integer("auto_dismiss_seconds"), // set for scope="global_display"; null for scope="team"
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const announcements = pgTable(
+  "announcements",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    scope: announcementScopeEnum("scope").notNull(),
+    kind: text("kind").notNull(), // "event_dispatched" | "decision_resolved" | "dramatic_moment" | "interjection"
+    eventId: text("event_id").references(() => events.id),
+    // number[] | null (null = all teams; scope="team" only) — team ids inside
+    // are only meaningful within this row's own session, which is fine once
+    // the row itself is session-scoped.
+    targetTeamIds: jsonb("target_team_ids"),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    autoDismissSeconds: integer("auto_dismiss_seconds"), // set for scope="global_display"; null for scope="team"
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("announcements_session_idx").on(t.sessionId)]
+);
 
 export const announcementAcks = pgTable(
   "announcement_acks",
   {
     id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
     announcementId: integer("announcement_id")
       .notNull()
       .references(() => announcements.id),
@@ -479,7 +750,10 @@ export const announcementAcks = pgTable(
       .references(() => teams.id),
     ackedAt: timestamp("acked_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("announcement_acks_uniq").on(t.announcementId, t.teamId)]
+  (t) => [
+    uniqueIndex("announcement_acks_session_uniq").on(t.sessionId, t.announcementId, t.teamId),
+    index("announcement_acks_session_idx").on(t.sessionId),
+  ]
 );
 
 // Periodic budget cycle (item 2) — see lib/budget-cycle.ts. Fires every 14
@@ -488,21 +762,31 @@ export const announcementAcks = pgTable(
 // open a snap-vote-style window where each region can accept the default or
 // request more — and if anyone requests more, a second window asks every
 // OTHER region how much of their own disbursement they want to donate.
-export const budgetCycles = pgTable("budget_cycles", {
-  id: serial("id").primaryKey(),
-  cycleNumber: integer("cycle_number").notNull(),
-  narrativeDayDue: real("narrative_day_due").notNull(),
-  status: budgetCycleStatusEnum("status").notNull().default("pending_instructor"),
-  mode: budgetCycleModeEnum("mode"),
-  closesAt: timestamp("closes_at"), // response/donation window deadline, when mode = snap_vote
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  closedAt: timestamp("closed_at"),
-});
+export const budgetCycles = pgTable(
+  "budget_cycles",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    cycleNumber: integer("cycle_number").notNull(),
+    narrativeDayDue: real("narrative_day_due").notNull(),
+    status: budgetCycleStatusEnum("status").notNull().default("pending_instructor"),
+    mode: budgetCycleModeEnum("mode"),
+    closesAt: timestamp("closes_at"), // response/donation window deadline, when mode = snap_vote
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    closedAt: timestamp("closed_at"),
+  },
+  (t) => [index("budget_cycles_session_idx").on(t.sessionId)]
+);
 
 export const budgetCycleResponses = pgTable(
   "budget_cycle_responses",
   {
     id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
     budgetCycleId: integer("budget_cycle_id")
       .notNull()
       .references(() => budgetCycles.id),
@@ -514,13 +798,19 @@ export const budgetCycleResponses = pgTable(
     amountDisbursed: integer("amount_disbursed"), // final amount, set at cycle close
     respondedAt: timestamp("responded_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("budget_cycle_responses_uniq").on(t.budgetCycleId, t.teamId)]
+  (t) => [
+    uniqueIndex("budget_cycle_responses_session_uniq").on(t.sessionId, t.budgetCycleId, t.teamId),
+    index("budget_cycle_responses_session_idx").on(t.sessionId),
+  ]
 );
 
 export const budgetCycleDonations = pgTable(
   "budget_cycle_donations",
   {
     id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
     budgetCycleId: integer("budget_cycle_id")
       .notNull()
       .references(() => budgetCycles.id),
@@ -533,68 +823,100 @@ export const budgetCycleDonations = pgTable(
     amount: integer("amount").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("budget_cycle_donations_uniq").on(t.budgetCycleId, t.fromTeamId, t.toTeamId)]
+  (t) => [
+    uniqueIndex("budget_cycle_donations_session_uniq").on(
+      t.sessionId,
+      t.budgetCycleId,
+      t.fromTeamId,
+      t.toTeamId
+    ),
+    index("budget_cycle_donations_session_idx").on(t.sessionId),
+  ]
 );
 
 // WHO HQ marketplace (item 3) — regions buy PPE/antivirals from WHO HQ's own
 // stockpile at an adaptive price (see lib/economy.ts pricing formula),
 // requiring instructor approval. Other regions get a brief heads-up window
 // to submit their own request before the instructor processes the batch.
-export const marketRequests = pgTable("market_requests", {
-  id: serial("id").primaryKey(),
-  teamId: integer("team_id")
-    .notNull()
-    .references(() => teams.id),
-  resourceType: marketResourceEnum("resource_type").notNull(),
-  amount: integer("amount").notNull(),
-  pricePerUnit: real("price_per_unit").notNull(), // locked at request time
-  totalCost: integer("total_cost").notNull(),
-  status: marketRequestStatusEnum("status").notNull().default("pending"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  resolvedAt: timestamp("resolved_at"),
-  resolvedByUserId: integer("resolved_by_user_id").references(() => users.id),
-});
+export const marketRequests = pgTable(
+  "market_requests",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id),
+    resourceType: marketResourceEnum("resource_type").notNull(),
+    amount: integer("amount").notNull(),
+    pricePerUnit: real("price_per_unit").notNull(), // locked at request time
+    totalCost: integer("total_cost").notNull(),
+    status: marketRequestStatusEnum("status").notNull().default("pending"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+    resolvedByUserId: integer("resolved_by_user_id").references(() => users.id),
+  },
+  (t) => [index("market_requests_session_idx").on(t.sessionId)]
+);
 
 // Direct region-to-region purchase offers (item 3, simplified — no
 // counter-offers: the receiving region can only accept or reject).
-export const regionTradeOffers = pgTable("region_trade_offers", {
-  id: serial("id").primaryKey(),
-  fromTeamId: integer("from_team_id") // buyer
-    .notNull()
-    .references(() => teams.id),
-  toTeamId: integer("to_team_id") // seller
-    .notNull()
-    .references(() => teams.id),
-  resourceType: marketResourceEnum("resource_type").notNull(),
-  amount: integer("amount").notNull(),
-  pricePerUnit: real("price_per_unit").notNull(),
-  totalPrice: integer("total_price").notNull(),
-  status: tradeOfferStatusEnum("status").notNull().default("pending"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  resolvedAt: timestamp("resolved_at"),
-});
+export const regionTradeOffers = pgTable(
+  "region_trade_offers",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    fromTeamId: integer("from_team_id") // buyer
+      .notNull()
+      .references(() => teams.id),
+    toTeamId: integer("to_team_id") // seller
+      .notNull()
+      .references(() => teams.id),
+    resourceType: marketResourceEnum("resource_type").notNull(),
+    amount: integer("amount").notNull(),
+    pricePerUnit: real("price_per_unit").notNull(),
+    totalPrice: integer("total_price").notNull(),
+    status: tradeOfferStatusEnum("status").notNull().default("pending"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+  },
+  (t) => [index("region_trade_offers_session_idx").on(t.sessionId)]
+);
 
 // Emergency funding requests (item 5) — a team asks all other regions AND
 // WHO HQ (which has its own, larger, non-resupplied budget) to help meet a
 // funding goal. Stays open until the instructor closes it (facilitator-paced
 // rather than a hard timer, unlike the market heads-up window, so it fits
 // naturally into however the room is actually moving).
-export const emergencyFundingRequests = pgTable("emergency_funding_requests", {
-  id: serial("id").primaryKey(),
-  requestingTeamId: integer("requesting_team_id")
-    .notNull()
-    .references(() => teams.id),
-  amountRequested: integer("amount_requested").notNull(),
-  reason: text("reason").notNull(),
-  status: emergencyRequestStatusEnum("status").notNull().default("open"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  closedAt: timestamp("closed_at"),
-});
+export const emergencyFundingRequests = pgTable(
+  "emergency_funding_requests",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    requestingTeamId: integer("requesting_team_id")
+      .notNull()
+      .references(() => teams.id),
+    amountRequested: integer("amount_requested").notNull(),
+    reason: text("reason").notNull(),
+    status: emergencyRequestStatusEnum("status").notNull().default("open"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    closedAt: timestamp("closed_at"),
+  },
+  (t) => [index("emergency_funding_requests_session_idx").on(t.sessionId)]
+);
 
 export const emergencyFundingContributions = pgTable(
   "emergency_funding_contributions",
   {
     id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
     requestId: integer("request_id")
       .notNull()
       .references(() => emergencyFundingRequests.id),
@@ -603,7 +925,15 @@ export const emergencyFundingContributions = pgTable(
     amount: integer("amount").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("emergency_funding_contributions_uniq").on(t.requestId, t.contributorTeamId, t.isWhoHq)]
+  (t) => [
+    uniqueIndex("emergency_funding_contributions_session_uniq").on(
+      t.sessionId,
+      t.requestId,
+      t.contributorTeamId,
+      t.isWhoHq
+    ),
+    index("emergency_funding_contributions_session_idx").on(t.sessionId),
+  ]
 );
 
 // De-dupe ledger for the automatic "good direction" social-metric rewards
@@ -620,10 +950,41 @@ export const socialMilestoneAwards = pgTable(
   "social_milestone_awards",
   {
     id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
     regionId: text("region_id").notNull(), // region code, or "GLOBAL"
     metric: text("metric").notNull(), // "publicTrust" | "happiness" | "politicalTension"
     tier: text("tier").notNull(), // "milestone1" | "milestone2"
     awardedAt: timestamp("awarded_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("social_milestone_awards_uniq").on(t.regionId, t.metric, t.tier)]
+  (t) => [
+    uniqueIndex("social_milestone_awards_session_uniq").on(t.sessionId, t.regionId, t.metric, t.tier),
+    index("social_milestone_awards_session_idx").on(t.sessionId),
+  ]
+);
+
+// Demo mode only: which competence profile the scripted autoplayer uses for
+// a region it's driving, and whether it's currently enabled at all (it's
+// disabled for whichever region the session owner is actively occupying —
+// see gameSessions.demoActiveRegionId and lib/autoplayer/scripted.ts).
+// Assigned with variety at session creation (lib/session-lifecycle.ts) so
+// no two demo runs feel identical.
+export const sessionRegionAutoplay = pgTable(
+  "session_region_autoplay",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    profile: autoplayProfileEnum("profile").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+  },
+  (t) => [
+    uniqueIndex("session_region_autoplay_session_region_uniq").on(t.sessionId, t.regionId),
+    index("session_region_autoplay_session_idx").on(t.sessionId),
+  ]
 );

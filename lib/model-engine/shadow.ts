@@ -7,7 +7,7 @@
 
 import { db } from "../db";
 import { modelStateOptimal } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { ModelDelta } from "../db/seed-data/events";
 import { REGIONS as ALL_REGIONS } from "../regions";
 import { clamp } from "./core";
@@ -24,19 +24,21 @@ const SHADOW_BOUNDS: Record<string, [number, number]> = {
 // (never from budget/market/pledge/snap-vote mechanics, which aren't a
 // per-event decision tier) — mirrors the event's OPTIMAL-tier deltas onto
 // the shadow table regardless of what tier actually happened.
-export async function applyOptimalShadowDelta(deltas: ModelDelta[], submittingRegionId: string) {
+export async function applyOptimalShadowDelta(sessionId: string, deltas: ModelDelta[], submittingRegionId: string) {
   for (const delta of deltas) {
     if (!SHADOW_FIELDS.has(delta.field)) continue;
     const targetRegions = delta.region === "SELF" ? [submittingRegionId] : delta.region === "GLOBAL" ? [...ALL_REGIONS] : [delta.region];
     for (const regionId of targetRegions) {
-      const state = await db.query.modelStateOptimal.findFirst({ where: eq(modelStateOptimal.regionId, regionId) });
+      const state = await db.query.modelStateOptimal.findFirst({
+        where: and(eq(modelStateOptimal.sessionId, sessionId), eq(modelStateOptimal.regionId, regionId)),
+      });
       if (!state) continue;
       const [min, max] = SHADOW_BOUNDS[delta.field] ?? [-Infinity, Infinity];
       const next = clamp((state[delta.field as keyof typeof state] as number) + delta.delta, min, max);
       await db
         .update(modelStateOptimal)
         .set({ [delta.field]: next, updatedAt: new Date() } as never)
-        .where(eq(modelStateOptimal.regionId, regionId));
+        .where(and(eq(modelStateOptimal.sessionId, sessionId), eq(modelStateOptimal.regionId, regionId)));
     }
   }
 }

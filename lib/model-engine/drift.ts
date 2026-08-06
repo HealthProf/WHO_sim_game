@@ -21,8 +21,8 @@
 // the whole session, not just at the moments a decision was scored.
 
 import { db } from "../db";
-import { modelState, modelStateOptimal, modelStateHistory, globalState } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { modelState, modelStateOptimal, modelStateHistory, sessionState } from "../db/schema";
+import { and, eq } from "drizzle-orm";
 import { clamp, applyFieldDelta, recomputeEscalationState } from "./core";
 
 const DRIFT_RATE_PER_MINUTE = 0.015; // Rt units per real minute, per region
@@ -93,15 +93,18 @@ export function computeEpidemicGrowth(
   };
 }
 
-export async function applyPassiveDrift(gs?: {
-  simulationStatus: string;
-  lastDriftAppliedAt: Date | null;
-  simulationStartedAt: Date | null;
-  escalationState?: string;
-  gameDaysPerRealMinute?: number;
-  intensityMultiplier?: number;
-}) {
-  const state = gs ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }));
+export async function applyPassiveDrift(
+  sessionId: string,
+  gs?: {
+    simulationStatus: string;
+    lastDriftAppliedAt: Date | null;
+    simulationStartedAt: Date | null;
+    escalationState?: string;
+    gameDaysPerRealMinute?: number;
+    intensityMultiplier?: number;
+  }
+) {
+  const state = gs ?? (await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) }));
   if (!state || state.simulationStatus !== "running") return;
 
   const now = new Date();
@@ -111,17 +114,22 @@ export async function applyPassiveDrift(gs?: {
 
   const intensity = state.intensityMultiplier && state.intensityMultiplier > 0 ? state.intensityMultiplier : 1.0;
   const rtDelta = DRIFT_RATE_PER_MINUTE * elapsedMinutes * intensity;
-  const escalationState = state.escalationState ?? (await db.query.globalState.findFirst({ where: eq(globalState.id, 1) }))?.escalationState ?? "GREEN";
+  const escalationState =
+    state.escalationState ??
+    (await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) }))?.escalationState ??
+    "GREEN";
   const happinessDrain = HAPPINESS_ESCALATION_DRAIN[escalationState] ?? 0;
   const gameDaysPerRealMinute = state.gameDaysPerRealMinute && state.gameDaysPerRealMinute > 0 ? state.gameDaysPerRealMinute : 1.5;
   const elapsedNarrativeDays = elapsedMinutes * gameDaysPerRealMinute;
 
   const allRegions = await db.query.regions.findMany();
   for (const region of allRegions) {
-    const before = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region.id) });
+    const before = await db.query.modelState.findFirst({
+      where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, region.id)),
+    });
     if (!before) continue;
 
-    await applyFieldDelta(region.id, "rt", rtDelta);
+    await applyFieldDelta(sessionId, region.id, "rt", rtDelta);
 
     const ceiling = confirmedCaseCeiling(region.id, before.surveillanceIndex);
     const growth = computeEpidemicGrowth(before, elapsedNarrativeDays, ceiling);
@@ -137,11 +145,14 @@ export async function applyPassiveDrift(gs?: {
         populationHappinessIndex: clamp(before.populationHappinessIndex - happinessLoss, 0, 100),
         updatedAt: new Date(),
       })
-      .where(eq(modelState.regionId, region.id));
+      .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, region.id)));
 
-    const updated = await db.query.modelState.findFirst({ where: eq(modelState.regionId, region.id) });
+    const updated = await db.query.modelState.findFirst({
+      where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, region.id)),
+    });
     if (updated) {
       await db.insert(modelStateHistory).values({
+        sessionId,
         regionId: region.id,
         day: updated.day,
         snapshotJson: updated,
@@ -152,7 +163,9 @@ export async function applyPassiveDrift(gs?: {
     // Mirror the same passage-of-time effects onto the shadow simulation,
     // using ITS OWN rt/cfrMultiplier (which diverges from the real one as
     // Optimal-tier deltas accumulate differently than actual ones).
-    const shadow = await db.query.modelStateOptimal.findFirst({ where: eq(modelStateOptimal.regionId, region.id) });
+    const shadow = await db.query.modelStateOptimal.findFirst({
+      where: and(eq(modelStateOptimal.sessionId, sessionId), eq(modelStateOptimal.regionId, region.id)),
+    });
     if (shadow) {
       const shadowRt = clamp(shadow.rt + rtDelta, 0, 10);
       // No surveillanceIndex on the shadow table — reuse the real region's
@@ -172,10 +185,10 @@ export async function applyPassiveDrift(gs?: {
           populationHappinessIndex: clamp(shadow.populationHappinessIndex - shadowHappinessLoss, 0, 100),
           updatedAt: new Date(),
         })
-        .where(eq(modelStateOptimal.regionId, region.id));
+        .where(and(eq(modelStateOptimal.sessionId, sessionId), eq(modelStateOptimal.regionId, region.id)));
     }
   }
 
-  await db.update(globalState).set({ lastDriftAppliedAt: now }).where(eq(globalState.id, 1));
-  await recomputeEscalationState();
+  await db.update(sessionState).set({ lastDriftAppliedAt: now }).where(eq(sessionState.sessionId, sessionId));
+  await recomputeEscalationState(sessionId);
 }

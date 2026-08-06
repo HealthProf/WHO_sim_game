@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { globalState, instructorActions } from "@/lib/db/schema";
+import { sessionState, instructorActions, gameSessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { requireInstructor } from "@/lib/api-helpers";
+import { requireInstructorActor } from "@/lib/session-context";
+import { logSessionEvent } from "@/lib/session-events";
 
 // Start/pause/resume/complete/reopen the simulation. "Completed" is a soft,
 // reversible state per simulation-docs/07-open-questions.md Q7 — never
@@ -14,13 +15,14 @@ import { requireInstructor } from "@/lib/api-helpers";
 // the clock freezes; resuming folds the frozen duration into
 // pausedAccumulatedMs so elapsed-time math stays correct across pauses.
 export async function PATCH(req: NextRequest) {
-  const { session, error } = await requireInstructor();
+  const { actor, error } = await requireInstructorActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const status = body.status as "not_started" | "running" | "paused" | "completed";
 
-  const current = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
+  const current = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   const now = new Date();
 
   const updates: Record<string, unknown> = { simulationStatus: status, updatedAt: now };
@@ -39,13 +41,19 @@ export async function PATCH(req: NextRequest) {
     updates.pausedAt = now;
   }
 
-  await db.update(globalState).set(updates).where(eq(globalState.id, 1));
+  await db.update(sessionState).set(updates).where(eq(sessionState.sessionId, sessionId));
 
   await db.insert(instructorActions).values({
-    instructorUserId: Number(session!.user.id),
+    sessionId,
+    instructorUserId: actor!.userId!,
     actionType: `simulation_${status}`,
-    targetDesc: "global simulation state",
+    targetDesc: "session simulation state",
   });
+
+  if (status === "completed") {
+    const session = await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, sessionId) });
+    if (session) await logSessionEvent({ sessionId, kind: "completed", mode: session.mode });
+  }
 
   return NextResponse.json({ ok: true, status });
 }

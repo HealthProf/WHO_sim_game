@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { resourcePledges, teams, modelState, modelStateHistory, teamNotifications } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { resourcePledges, teams, eventDispatches, modelState, modelStateHistory, teamNotifications } from "@/lib/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { clamp } from "@/lib/model-engine";
 
 // Resource pledge ledger (see 07-open-questions.md's original discussion of
@@ -26,11 +26,15 @@ const LABEL_BY_RESOURCE: Record<string, string> = {
 };
 
 export async function GET() {
-  const { error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  const allPledges = await db.query.resourcePledges.findMany({ orderBy: (t, { desc }) => [desc(t.createdAt)] });
-  const allTeams = await db.query.teams.findMany();
+  const allPledges = await db.query.resourcePledges.findMany({
+    where: eq(resourcePledges.sessionId, sessionId),
+    orderBy: desc(resourcePledges.createdAt),
+  });
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
   const enriched = allPledges.map((p) => ({
     ...p,
     fromRegionId: allTeams.find((t) => t.id === p.fromTeamId)?.regionId ?? "?",
@@ -41,11 +45,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (session!.user.role !== "student" || !session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can pledge resources" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const toRegionId = body.toRegionId as string;
@@ -58,17 +60,26 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
   }
-  if (toRegionId === session!.user.regionId) {
+  if (toRegionId === actor!.regionId) {
     return NextResponse.json({ error: "Can't pledge resources to your own region" }, { status: 400 });
   }
 
-  const fromTeam = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
-  const toTeam = await db.query.teams.findFirst({ where: eq(teams.regionId, toRegionId) });
+  const fromTeam = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, actor!.teamId!)) });
+  const toTeam = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.regionId, toRegionId)) });
   if (!fromTeam || !toTeam) return NextResponse.json({ error: "Region not found" }, { status: 404 });
 
+  let eventDispatchId: number | null = null;
+  if (body.eventDispatchId) {
+    const dispatch = await db.query.eventDispatches.findFirst({
+      where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, Number(body.eventDispatchId))),
+    });
+    if (!dispatch) return NextResponse.json({ error: "Dispatch not found" }, { status: 404 });
+    eventDispatchId = dispatch.id;
+  }
+
   const field = FIELD_BY_RESOURCE[resourceType];
-  const fromState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, fromTeam.regionId) });
-  const toState = await db.query.modelState.findFirst({ where: eq(modelState.regionId, toTeam.regionId) });
+  const fromState = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, fromTeam.regionId)) });
+  const toState = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, toTeam.regionId)) });
   if (!fromState || !toState) return NextResponse.json({ error: "Model state not found" }, { status: 404 });
 
   const currentAmount = fromState[field] as number;
@@ -79,30 +90,33 @@ export async function POST(req: NextRequest) {
   const nextFrom = currentAmount - amount;
   const nextTo = resourceType === "HCW_SURGE_PCT" ? clamp((toState[field] as number) + amount, 0, 100) : (toState[field] as number) + amount;
 
-  await db.update(modelState).set({ [field]: nextFrom, updatedAt: new Date() }).where(eq(modelState.regionId, fromTeam.regionId));
-  await db.update(modelState).set({ [field]: nextTo, updatedAt: new Date() }).where(eq(modelState.regionId, toTeam.regionId));
+  await db.update(modelState).set({ [field]: nextFrom, updatedAt: new Date() }).where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, fromTeam.regionId)));
+  await db.update(modelState).set({ [field]: nextTo, updatedAt: new Date() }).where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, toTeam.regionId)));
 
   const reason = `Pledge: ${amount}${LABEL_BY_RESOURCE[resourceType]} from ${fromTeam.regionId} to ${toTeam.regionId}`;
   const [updatedFrom, updatedTo] = await Promise.all([
-    db.query.modelState.findFirst({ where: eq(modelState.regionId, fromTeam.regionId) }),
-    db.query.modelState.findFirst({ where: eq(modelState.regionId, toTeam.regionId) }),
+    db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, fromTeam.regionId)) }),
+    db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, toTeam.regionId)) }),
   ]);
-  if (updatedFrom) await db.insert(modelStateHistory).values({ regionId: fromTeam.regionId, day: updatedFrom.day, snapshotJson: updatedFrom, reason });
-  if (updatedTo) await db.insert(modelStateHistory).values({ regionId: toTeam.regionId, day: updatedTo.day, snapshotJson: updatedTo, reason });
+  if (updatedFrom) await db.insert(modelStateHistory).values({ sessionId, regionId: fromTeam.regionId, day: updatedFrom.day, snapshotJson: updatedFrom, reason });
+  if (updatedTo) await db.insert(modelStateHistory).values({ sessionId, regionId: toTeam.regionId, day: updatedTo.day, snapshotJson: updatedTo, reason });
 
   const [pledge] = await db
     .insert(resourcePledges)
     .values({
+      sessionId,
       fromTeamId: fromTeam.id,
       toTeamId: toTeam.id,
       resourceType,
       amount,
-      eventDispatchId: body.eventDispatchId ?? null,
-      createdByUserId: Number(session!.user.id),
+      eventDispatchId,
+      createdByUserId: actor!.userId,
+      actorKind: actor!.isOwner ? "owner" : "team",
     })
     .returning();
 
   await db.insert(teamNotifications).values({
+    sessionId,
     teamId: toTeam.id,
     kind: "pledge",
     message: `${fromTeam.regionId} pledged you ${amount}${LABEL_BY_RESOURCE[resourceType]}.`,

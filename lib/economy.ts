@@ -12,7 +12,7 @@ const ESCALATION_MULTIPLIER: Record<string, number> = { GREEN: 1, AMBER: 1.3, RE
 
 // Scarcity multiplier: price climbs as WHO HQ's own stock depletes relative
 // to its starting stock (2000 PPE-days, 200,000 antivirals — see
-// lib/db/schema.ts globalState defaults). At full stock, multiplier is 1x;
+// lib/db/schema.ts sessionState defaults). At full stock, multiplier is 1x;
 // as stock approaches zero, price climbs toward 3x.
 function scarcityMultiplier(currentStock: number, startingStock: number): number {
   const fraction = startingStock > 0 ? Math.max(0, Math.min(1, currentStock / startingStock)) : 0;

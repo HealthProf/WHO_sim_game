@@ -13,7 +13,7 @@
 
 import { db } from "./db";
 import { eventDispatches, globalFeedItems, instructorActions, teamNotifications } from "./db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { isSignificantDelta } from "./model-engine";
 import { pickVignette } from "./vignettes";
 import type { ModelDelta, Tier } from "./db/seed-data/events";
@@ -52,6 +52,7 @@ export function buildConsequenceCard(
 // public display when the event was mandatory-review, resulted in a Critical
 // Failure, or produced a large enough model swing to matter.
 export async function pushConsequence(opts: {
+  sessionId: string;
   event: {
     id: string;
     title: string;
@@ -63,13 +64,20 @@ export async function pushConsequence(opts: {
   regionId: string;
   tier: Tier;
   deltas: ModelDelta[];
+  // Always the session owner (gameSessions.ownerUserId) — instructor-side
+  // actor columns stay non-nullable users.id FKs even for the automatic
+  // no-response fallback (lib/deadline.ts), which has no human instructor
+  // acting but still attributes the auto-push log entry to whoever owns the
+  // session, replacing the old `eq(users.role, "instructor")` lookup that
+  // picked an arbitrary instructor once multiple accounts existed.
   actorUserId: number;
   afterState?: AfterState;
 }) {
-  const { event, dispatchId, teamId, regionId, tier, deltas, actorUserId, afterState } = opts;
+  const { sessionId, event, dispatchId, teamId, regionId, tier, deltas, actorUserId, afterState } = opts;
 
   const cardText = buildConsequenceCard(event, regionId, tier, afterState);
   await db.insert(teamNotifications).values({
+    sessionId,
     teamId,
     eventDispatchId: dispatchId,
     kind: "consequence",
@@ -79,12 +87,17 @@ export async function pushConsequence(opts: {
   const isMajor = event.requiresMandatoryReview || tier === "CRITICAL_FAILURE" || isSignificantDelta(deltas);
   if (!isMajor) return;
 
-  await db.update(eventDispatches).set({ revealedToPublic: true }).where(eq(eventDispatches.id, dispatchId));
+  await db
+    .update(eventDispatches)
+    .set({ revealedToPublic: true })
+    .where(and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, dispatchId)));
   await db.insert(globalFeedItems).values({
+    sessionId,
     headlineText: cardText,
     eventDispatchId: dispatchId,
   });
   await db.insert(instructorActions).values({
+    sessionId,
     instructorUserId: actorUserId,
     actionType: "auto_push_to_global_display",
     targetDesc: `${event.id} (${regionId}, ${tier}) auto-pushed — ${

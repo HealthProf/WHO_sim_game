@@ -70,7 +70,7 @@ export function DirectorTimeline({ state, events, dispatches }: { state: GlobalC
         ))}
       </div>
 
-      <div className="grid grid-cols-5 gap-2 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
         {acts.map((a, i) => (
           <div key={a.narrativeDay} className={`rounded-lg p-2 ${i === currentActIndex ? "bg-blue-950/60 border border-blue-800" : "bg-slate-800/40"}`}>
             <p className="text-slate-400">Act {a.narrativeDay}</p>

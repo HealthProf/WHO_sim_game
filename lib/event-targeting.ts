@@ -13,6 +13,8 @@
 // region for the other adaptive events so the Control page can show a
 // consistent "currently qualifies" hint across all of them.
 import { db } from "./db";
+import { eventDispatches, teams, decisions, scores, modelState } from "./db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 
 // Events whose trigger names one fixed region outright in prose — no live
 // computation needed, just surfaced here so the UI can show every adaptive
@@ -23,7 +25,7 @@ const FIXED_REGION_HINTS: Record<string, string[]> = {
   "EVT-011": ["AFRO"],
 };
 
-export async function computeEventTargetHints(): Promise<Record<string, string[]>> {
+export async function computeEventTargetHints(sessionId: string): Promise<Record<string, string[]>> {
   const hints: Record<string, string[]> = { ...FIXED_REGION_HINTS };
 
   // EVT-009: "fires only if 2+ regions scored Inadequate/Critical on EVT-004"
@@ -33,15 +35,17 @@ export async function computeEventTargetHints(): Promise<Record<string, string[]
   // dispatch, since there are only ever up to 6 EVT-004 dispatches but this
   // function runs on every Control page poll.
   const evt004Dispatches = await db.query.eventDispatches.findMany({
-    where: (t, { eq: eqOp }) => eqOp(t.eventId, "EVT-004"),
+    where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.eventId, "EVT-004")),
   });
   const dispatchIds = evt004Dispatches.map((d) => d.id).filter((id): id is number => id != null);
-  const allTeams = dispatchIds.length > 0 ? await db.query.teams.findMany() : [];
+  const allTeams = dispatchIds.length > 0 ? await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) }) : [];
   const decisionsForDispatches =
-    dispatchIds.length > 0 ? await db.query.decisions.findMany({ where: (t, { inArray }) => inArray(t.eventDispatchId, dispatchIds) }) : [];
+    dispatchIds.length > 0
+      ? await db.query.decisions.findMany({ where: and(eq(decisions.sessionId, sessionId), inArray(decisions.eventDispatchId, dispatchIds)) })
+      : [];
   const decisionIds = decisionsForDispatches.map((d) => d.id);
   const scoresForDecisions =
-    decisionIds.length > 0 ? await db.query.scores.findMany({ where: (t, { inArray }) => inArray(t.decisionId, decisionIds) }) : [];
+    decisionIds.length > 0 ? await db.query.scores.findMany({ where: and(eq(scores.sessionId, sessionId), inArray(scores.decisionId, decisionIds)) }) : [];
 
   const evt004Poor: string[] = [];
   for (const d of evt004Dispatches) {
@@ -60,7 +64,7 @@ export async function computeEventTargetHints(): Promise<Record<string, string[]
   if (evt004Poor.length >= 2) hints["EVT-009"] = evt004Poor;
 
   // EVT-013: "fires when any region's political tension index > 70"
-  const allStates = await db.query.modelState.findMany();
+  const allStates = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
   const tense = allStates.filter((s) => s.politicalTensionIndex > 70).map((s) => s.regionId);
   if (tense.length > 0) hints["EVT-013"] = tense;
 

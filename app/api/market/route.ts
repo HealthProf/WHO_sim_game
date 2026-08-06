@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { marketRequests, modelState, globalState, teams, teamNotifications } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { marketRequests, modelState, sessionState, teams, teamNotifications } from "@/lib/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { computeMarketPrice } from "@/lib/economy";
 import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
 
@@ -12,10 +12,11 @@ import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
 // instructor processes the batch" depends on everyone seeing the pending
 // queue as it forms).
 export async function GET() {
-  const { error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs) return NextResponse.json({ error: "Simulation not initialized" }, { status: 500 });
 
   const prices = {
@@ -23,8 +24,12 @@ export async function GET() {
     ANTIVIRALS: computeMarketPrice({ resourceType: "ANTIVIRALS", escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock, intensityMultiplier: gs.intensityMultiplier }),
   };
 
-  const allTeams = await db.query.teams.findMany();
-  const requests = await db.query.marketRequests.findMany({ orderBy: (t, { desc }) => [desc(t.createdAt)], limit: 30 });
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
+  const requests = await db.query.marketRequests.findMany({
+    where: eq(marketRequests.sessionId, sessionId),
+    orderBy: desc(marketRequests.createdAt),
+    limit: 30,
+  });
   const enriched = requests.map((r) => ({ ...r, regionId: allTeams.find((t) => t.id === r.teamId)?.regionId ?? "?" }));
 
   return NextResponse.json({
@@ -39,11 +44,9 @@ export async function GET() {
 // current adaptive price. Price is locked at request time. Requires
 // instructor approval — see app/api/instructor/market/route.ts.
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (session!.user.role !== "student" || !session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can submit purchase requests" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const resourceType = body.resourceType as "PPE_DAYS" | "ANTIVIRALS";
@@ -55,14 +58,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
   }
 
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs) return NextResponse.json({ error: "Simulation not initialized" }, { status: 500 });
 
   const pricePerUnit = computeMarketPrice({ resourceType, escalationState: gs.escalationState, whoHqPpeStock: gs.whoHqPpeStock, whoHqAntiviralsStock: gs.whoHqAntiviralsStock, intensityMultiplier: gs.intensityMultiplier });
   const totalCost = Math.round(pricePerUnit * amount);
 
-  const team = await db.query.teams.findFirst({ where: eq(teams.id, session!.user.teamId) });
-  const state = team ? await db.query.modelState.findFirst({ where: eq(modelState.regionId, team.regionId) }) : null;
+  const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, actor!.teamId!)) });
+  const state = team ? await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, team.regionId)) }) : null;
   if (!state) return NextResponse.json({ error: "Region not found" }, { status: 404 });
   if (state.politicalTensionIndex >= POLITICAL_TENSION_LOCKOUT_THRESHOLD) {
     return NextResponse.json(
@@ -76,14 +79,15 @@ export async function POST(req: NextRequest) {
 
   const [request] = await db
     .insert(marketRequests)
-    .values({ teamId: session!.user.teamId, resourceType, amount, pricePerUnit, totalCost })
+    .values({ sessionId, teamId: actor!.teamId!, resourceType, amount, pricePerUnit, totalCost })
     .returning();
 
-  const allTeams = await db.query.teams.findMany();
-  const otherTeams = allTeams.filter((t) => t.id !== session!.user.teamId);
+  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
+  const otherTeams = allTeams.filter((t) => t.id !== actor!.teamId);
   if (otherTeams.length > 0) {
     await db.insert(teamNotifications).values(
       otherTeams.map((t) => ({
+        sessionId,
         teamId: t.id,
         kind: "market",
         message: `${team!.regionId} requested to buy ${amount.toLocaleString()} ${resourceType === "PPE_DAYS" ? "PPE-days" : "antiviral doses"} from WHO HQ — submit your own request in the next 30s if you want in on this batch.`,

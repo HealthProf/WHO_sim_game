@@ -37,9 +37,14 @@ export default function OrientationPage() {
 
   return (
     <div className="max-w-3xl space-y-8">
-      <div>
-        <p className="text-xs uppercase tracking-wide text-slate-500">Welcome to</p>
-        <h1 className="text-2xl font-semibold">Operation Veiled Horizon</h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Welcome to</p>
+          <h1 className="text-2xl font-semibold">Operation Veiled Horizon</h1>
+        </div>
+        <Link href="/orientation/slides" className="text-sm text-blue-400 hover:text-blue-300 whitespace-nowrap">
+          Slide deck version →
+        </Link>
       </div>
 
       <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3 text-sm text-slate-300">

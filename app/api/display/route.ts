@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { globalState, eventDispatches, events } from "@/lib/db/schema";
-import { eq, and, isNotNull, inArray } from "drizzle-orm";
+import { sessionState, eventDispatches, events, modelState, gameSessions, globalFeedItems } from "@/lib/db/schema";
+import { eq, and, isNotNull, inArray, desc } from "drizzle-orm";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { buildSummaryReport } from "@/lib/summary-report";
@@ -10,30 +10,47 @@ import { getActiveGlobalAnnouncement } from "@/lib/announcements";
 import { computeFinalResults } from "@/lib/final-results";
 import { computeAllTeamChapters } from "@/lib/team-chapter";
 import { computeWorldHealth } from "@/lib/world-health";
+import { POLL_BACKOFF_MS } from "@/lib/config";
 
-// Public-safe read-only endpoint for the projector display. No auth (route is
-// protected only by an unguessable URL token — see /display/[token]). While
-// the game is active this MUST NEVER expose: decisions, resource_allocation
-// _json, team-private model_state fields (fund/PPE/antivirals/HCW surge/
-// political tension/public trust), or any event not explicitly revealed via
-// the "Push to Global Display" facilitator action. Once the simulation is
-// marked completed, the round-by-round summary report (which is
-// deliberately cross-team) is included so the projector can show the
-// after-action debrief to the whole room.
+// Public-safe read-only endpoint for the projector display. No auth — gated
+// instead by an unguessable displayToken (crypto.randomBytes(24), see
+// lib/ids.ts and gameSessions.displayToken) resolved to a session below;
+// never the session's primary key. While the game is active this MUST NEVER
+// expose: decisions, resource_allocation_json, team-private model_state
+// fields (fund/PPE/antivirals/HCW surge/political tension/public trust), or
+// any event not explicitly revealed via the "Push to Global Display"
+// facilitator action. Once the simulation is marked completed, the
+// round-by-round summary report (which is deliberately cross-team) is
+// included so the projector can show the after-action debrief to the whole
+// room.
 //
-// Also opportunistically runs deadline enforcement — see the note in
-// app/api/dashboard/route.ts. The projector is typically left open for the
-// entire session, so this is actually the most reliable polling source.
-export async function GET() {
-  await processDeadlines().catch(() => {});
+// Also opportunistically runs deadline enforcement for this session — see
+// the note in app/api/dashboard/route.ts. The projector is typically left
+// open for the entire session, so this is actually the most reliable
+// polling source.
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("token");
+  if (!token) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const session = await db.query.gameSessions.findFirst({ where: eq(gameSessions.displayToken, token) });
+  if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const sessionId = session.id;
+
+  await processDeadlines(sessionId).catch(() => {});
+
+  const since = req.nextUrl.searchParams.get("since");
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  if (since != null && gs && String(gs.stateVersion) === since) {
+    return NextResponse.json({ unchanged: true, nextPollMs: POLL_BACKOFF_MS, stateVersion: gs.stateVersion });
+  }
 
   const allRegions = await db.query.regions.findMany();
-  const allModelState = await db.query.modelState.findMany();
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
-  const globalRt = await computeGlobalRt();
+  const allModelState = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
+  const globalRt = await computeGlobalRt(sessionId);
 
   const feedItems = await db.query.globalFeedItems.findMany({
-    orderBy: (t, { desc }) => [desc(t.createdAt)],
+    where: eq(globalFeedItems.sessionId, sessionId),
+    orderBy: desc(globalFeedItems.createdAt),
     limit: 30,
   });
 
@@ -49,9 +66,9 @@ export async function GET() {
     };
   });
 
-  const rounds = gs?.simulationStatus === "completed" ? await buildSummaryReport() : null;
-  const finalResults = gs?.simulationStatus === "completed" ? await computeFinalResults() : null;
-  const teamChapters = gs?.simulationStatus === "completed" ? await computeAllTeamChapters() : null;
+  const rounds = gs?.simulationStatus === "completed" ? await buildSummaryReport(sessionId) : null;
+  const finalResults = gs?.simulationStatus === "completed" ? await computeFinalResults(sessionId) : null;
+  const teamChapters = gs?.simulationStatus === "completed" ? await computeAllTeamChapters(sessionId) : null;
   const globalAvgHappiness = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.populationHappinessIndex, 0) / allModelState.length) : 0;
   const globalAvgPublicTrust = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.publicTrustIndex, 0) / allModelState.length) : 0;
   const totalConfirmed = allModelState.reduce((s, m) => s + m.confirmedCases, 0);
@@ -61,15 +78,15 @@ export async function GET() {
   // (same herd-voting concern as the team-facing endpoint) — only the
   // question, countdown, and response count; the full tally appears once
   // it's closed.
-  const snapVote = await getSnapVoteState({ forInstructor: false });
-  const activeAnnouncement = await getActiveGlobalAnnouncement();
+  const snapVote = await getSnapVoteState(sessionId, { forInstructor: false });
+  const activeAnnouncement = await getActiveGlobalAnnouncement(sessionId);
 
   // Public-safe deadline countdowns: event title + time remaining only, no
   // region attribution (which regions have/haven't responded stays on the
   // instructor's Control page, not the shared projector). Dispatches of the
   // same event fired together share a deadline, so dedupe by event.
   const openDispatches = await db.query.eventDispatches.findMany({
-    where: and(eq(eventDispatches.status, "dispatched"), isNotNull(eventDispatches.deadlineAt)),
+    where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.status, "dispatched"), isNotNull(eventDispatches.deadlineAt)),
   });
   const uniqueEventIds = [...new Set(openDispatches.map((d) => d.eventId))];
   const dispatchEvents = uniqueEventIds.length > 0 ? await db.query.events.findMany({ where: inArray(events.id, uniqueEventIds) }) : [];
@@ -88,6 +105,7 @@ export async function GET() {
   // text), so there's no separate filtering needed here; see the comment on
   // globalFeedItems in lib/db/schema.ts.
   return NextResponse.json({
+    stateVersion: gs?.stateVersion,
     currentDay: gs?.currentDay,
     escalationState: gs?.escalationState,
     mediaPressureIndex: gs?.mediaPressureIndex,

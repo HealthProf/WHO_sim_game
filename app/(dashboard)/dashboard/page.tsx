@@ -70,7 +70,7 @@ export default function DashboardPage() {
       <TeamSnapVoteBanner />
       <BudgetCycleBanner />
 
-      <section className="flex items-center gap-4">
+      <section className="flex flex-wrap items-center gap-4">
         <span className={`px-3 py-1 rounded-full text-xs font-semibold text-white ${escalationColor[data.globalState.escalationState]}`}>
           {data.globalState.escalationState}
         </span>
@@ -167,7 +167,7 @@ function SituationProjection({ projection }: { projection: { points: { narrative
     <section className="bg-slate-900 border border-amber-900/60 rounded-xl p-6">
       <h2 className="text-lg font-semibold mb-1">Situation Projection</h2>
       <p className="text-sm text-slate-400 mb-4">{projection.narrative}</p>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {projection.points.map((p) => (
           <div key={p.narrativeDay} className="bg-slate-800/50 rounded-lg p-3">
             <p className="text-xs text-slate-500">{p.narrativeDay === 0 ? "Right now" : `In ${p.narrativeDay} days`}</p>

@@ -1,14 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { globalState, teamNotifications } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { sessionState, modelState, teamNotifications } from "@/lib/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { requireActor } from "@/lib/session-context";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { getTeamAnnouncements } from "@/lib/announcements";
 import { projectForward } from "@/lib/projection";
 import { computeSimClock } from "@/lib/sim-clock";
 import { computeFinalResults } from "@/lib/final-results";
+import { POLL_BACKOFF_MS } from "@/lib/config";
 
 // Polled every ~15s by team dashboards (see 07-open-questions.md Q4). Returns
 // the shared Global Situation Summary for every region, plus the requesting
@@ -21,16 +22,29 @@ import { computeFinalResults } from "@/lib/final-results";
 // compressed ~60 minute session, so piggybacking on the polling traffic that
 // dashboards/the projector display already generate every ~10-15s covers the
 // same need without requiring a paid plan.
-export async function GET() {
-  const { session, error } = await requireSession();
+//
+// ?since=<stateVersion> (Phase 5 poll backoff): the tick still has to run
+// (it's the only thing that might change anything), but once sessionState's
+// stateVersion after the tick matches what the client already has, the rest
+// of this handler's queries are skipped entirely and a small
+// { unchanged: true, nextPollMs } response is returned instead — see
+// lib/state-version.ts for which mutations bump it.
+export async function GET(req: NextRequest) {
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  await processDeadlines().catch(() => {});
+  await processDeadlines(sessionId).catch(() => {});
+
+  const since = req.nextUrl.searchParams.get("since");
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  if (since != null && gs && String(gs.stateVersion) === since) {
+    return NextResponse.json({ unchanged: true, nextPollMs: POLL_BACKOFF_MS, stateVersion: gs.stateVersion });
+  }
 
   const allRegions = await db.query.regions.findMany();
-  const allModelState = await db.query.modelState.findMany();
-  const gs = await db.query.globalState.findFirst({ where: eq(globalState.id, 1) });
-  const globalRt = await computeGlobalRt();
+  const allModelState = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
+  const globalRt = await computeGlobalRt(sessionId);
 
   const sharedSummary = allRegions.map((r) => {
     const s = allModelState.find((m) => m.regionId === r.id)!;
@@ -50,9 +64,9 @@ export async function GET() {
   let ownRegion = null;
   let notifications: { id: number; kind: string; message: string; createdAt: Date }[] = [];
   let announcements: Awaited<ReturnType<typeof getTeamAnnouncements>> = [];
-  if (session!.user.role === "student" && session!.user.regionId) {
-    const s = allModelState.find((m) => m.regionId === session!.user.regionId);
-    const r = allRegions.find((r) => r.id === session!.user.regionId);
+  if (actor!.role === "student" && actor!.regionId) {
+    const s = allModelState.find((m) => m.regionId === actor!.regionId);
+    const r = allRegions.find((r) => r.id === actor!.regionId);
     if (s && r) {
       ownRegion = {
         ...s,
@@ -62,13 +76,13 @@ export async function GET() {
         projection: projectForward(s),
       };
     }
-    if (session!.user.teamId) {
+    if (actor!.teamId) {
       notifications = await db.query.teamNotifications.findMany({
-        where: eq(teamNotifications.teamId, session!.user.teamId),
+        where: and(eq(teamNotifications.sessionId, sessionId), eq(teamNotifications.teamId, actor!.teamId)),
         orderBy: [desc(teamNotifications.createdAt)],
         limit: 8,
       });
-      announcements = await getTeamAnnouncements(session!.user.teamId);
+      announcements = await getTeamAnnouncements(sessionId, actor!.teamId);
     }
   }
 
@@ -89,13 +103,14 @@ export async function GET() {
   if (gs && gs.simulationStatus === "running") {
     const clock = computeSimClock(gs);
     if (clock.gameDay / clock.totalGameDays >= 0.7) {
-      const finalResults = await computeFinalResults();
+      const finalResults = await computeFinalResults(sessionId);
       ghostPreview = { worldDeathsPrevented: finalResults.totalDeathsPrevented, worldInfectionsPrevented: finalResults.totalInfectionsPrevented };
     }
   }
 
   return NextResponse.json({
     globalState: gs,
+    stateVersion: gs?.stateVersion,
     globalRt,
     globalAvgPublicTrust: avgPublicTrust,
     globalAvgHappiness: avgHappiness,
@@ -104,5 +119,6 @@ export async function GET() {
     notifications,
     announcements,
     ghostPreview,
+    actor,
   });
 }

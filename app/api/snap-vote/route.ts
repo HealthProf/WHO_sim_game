@@ -1,40 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { snapVotes, snapVoteResponses } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { requireSession } from "@/lib/api-helpers";
+import { and, eq } from "drizzle-orm";
+import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { getSnapVoteState, closeExpiredSnapVotes } from "@/lib/snap-vote";
 
 // GET: any authenticated user can see the current open vote (teams see only
 // response counts while it's open; the instructor sees the live breakdown —
 // see lib/snap-vote.ts) plus recent history.
 export async function GET() {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireActor();
   if (error) return error;
+  const sessionId = actor!.sessionId;
 
-  await closeExpiredSnapVotes().catch(() => {});
+  await closeExpiredSnapVotes(sessionId).catch(() => {});
 
-  const state = await getSnapVoteState({
-    forInstructor: session!.user.role === "instructor",
-    teamId: session!.user.teamId,
+  const state = await getSnapVoteState(sessionId, {
+    forInstructor: actor!.role === "instructor",
+    teamId: actor!.teamId,
   });
   return NextResponse.json(state);
 }
 
 // POST: a team submits its choice on the current open vote.
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { actor, error } = await requireTeamActor();
   if (error) return error;
-  if (session!.user.role !== "student" || !session!.user.teamId) {
-    return NextResponse.json({ error: "Only teams can vote" }, { status: 403 });
-  }
+  const sessionId = actor!.sessionId;
 
   const body = await req.json();
   const snapVoteId = body.snapVoteId as number;
   const choice = body.choice as string;
 
-  const vote = await db.query.snapVotes.findFirst({ where: eq(snapVotes.id, snapVoteId) });
-  if (!vote || vote.status !== "open" || new Date(vote.closesAt) <= new Date()) {
+  const vote = await db.query.snapVotes.findFirst({ where: and(eq(snapVotes.sessionId, sessionId), eq(snapVotes.id, snapVoteId)) });
+  if (!vote) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (vote.status !== "open" || new Date(vote.closesAt) <= new Date()) {
     return NextResponse.json({ error: "This vote is no longer open" }, { status: 409 });
   }
   const options = vote.optionsJson as string[];
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   }
 
   const existing = await db.query.snapVoteResponses.findFirst({
-    where: (t, { and, eq }) => and(eq(t.snapVoteId, snapVoteId), eq(t.teamId, session!.user.teamId!)),
+    where: and(eq(snapVoteResponses.sessionId, sessionId), eq(snapVoteResponses.snapVoteId, snapVoteId), eq(snapVoteResponses.teamId, actor!.teamId!)),
   });
   if (existing) {
     return NextResponse.json({ error: "Your team has already voted on this" }, { status: 409 });
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   const [response] = await db
     .insert(snapVoteResponses)
-    .values({ snapVoteId, teamId: session!.user.teamId, choice })
+    .values({ sessionId, snapVoteId, teamId: actor!.teamId!, choice })
     .returning();
 
   return NextResponse.json({ response });

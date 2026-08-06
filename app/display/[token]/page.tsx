@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { regionColors } from "@/lib/who-region-map";
 import { SimClock } from "@/components/sim-clock";
 import type { GlobalClockFields } from "@/lib/sim-clock";
@@ -56,6 +57,8 @@ const escalationBg: Record<string, string> = {
 };
 
 export default function PublicDisplayPage() {
+  const params = useParams<{ token: string }>();
+  const token = params.token;
   const [data, setData] = useState<DisplayData | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
@@ -97,31 +100,48 @@ export default function PublicDisplayPage() {
 
   useEffect(() => {
     let active = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let lastVersion: number | null = null;
+    const DEFAULT_POLL_MS = 4000;
+
     async function poll() {
+      let nextDelay = DEFAULT_POLL_MS;
       try {
-        const res = await fetch("/api/display", { cache: "no-store" });
+        const since = lastVersion != null ? `&since=${lastVersion}` : "";
+        const res = await fetch(`/api/display?token=${encodeURIComponent(token)}${since}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const json = await res.json();
         if (!active) return;
-        setData(json);
         setLastError(null);
         setLastSuccessAt(Date.now());
-        const incoming = json.activeAnnouncement as DisplayAnnouncement | null;
-        if (incoming) {
-          setAnnouncementSeen((prev) => (prev?.id === incoming.id ? prev : { id: incoming.id, seenAt: Date.now() }));
+
+        if (json.unchanged) {
+          // Phase 5 poll backoff: state hasn't changed since our last known
+          // version — skip re-rendering entirely and just widen the next
+          // poll interval, per the server's suggestion.
+          nextDelay = json.nextPollMs ?? DEFAULT_POLL_MS;
+        } else {
+          setData(json);
+          lastVersion = json.stateVersion ?? null;
+          const incoming = json.activeAnnouncement as DisplayAnnouncement | null;
+          if (incoming) {
+            setAnnouncementSeen((prev) => (prev?.id === incoming.id ? prev : { id: incoming.id, seenAt: Date.now() }));
+          }
         }
       } catch (err) {
         if (!active) return;
         setLastError(err instanceof Error ? err.message : "Failed to reach the server");
+      } finally {
+        if (active) timeoutId = setTimeout(poll, nextDelay);
       }
     }
+    if (!token) return;
     poll();
-    const interval = setInterval(poll, 4000);
     return () => {
       active = false;
-      clearInterval(interval);
+      clearTimeout(timeoutId);
     };
-  }, []);
+  }, [token]);
 
   // Never gets permanently stuck: if we have no data yet and the last
   // attempt failed, show a visible error with an automatic retry countdown
