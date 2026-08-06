@@ -20,24 +20,36 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
 
-    const res = await fetch("/api/account/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        name,
-        password: useOwnPassword ? password : undefined,
-      }),
-    });
-    const json = await res.json();
-    setLoading(false);
+    try {
+      const res = await fetch("/api/account/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          name,
+          password: useOwnPassword ? password : undefined,
+        }),
+      });
 
-    if (!res.ok) {
-      setError(json.error ?? "Registration failed.");
-      return;
+      let json: { error?: string; user?: { username: string }; generatedPassword?: string | null };
+      try {
+        json = await res.json();
+      } catch {
+        setError("Registration failed — the server sent an unexpected response. Please try again.");
+        return;
+      }
+
+      if (!res.ok) {
+        setError(json.error ?? "Registration failed.");
+        return;
+      }
+
+      setResult({ username: json.user!.username, password: json.generatedPassword ?? password });
+    } catch {
+      setError("Registration failed — couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setResult({ username: json.user.username, password: json.generatedPassword ?? password });
   }
 
   async function handleContinue() {
