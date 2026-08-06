@@ -6,28 +6,18 @@
 // session).
 
 import { db } from "./db";
-import { eventDispatches, events, decisions, scores, gameSessions, sessionState, modelState, teams } from "./db/schema";
+import { eventDispatches, events, decisions, gameSessions, sessionState, teams } from "./db/schema";
 import { and, eq, isNull, lte, lt, or, inArray } from "drizzle-orm";
-import { computeCompositePct, defaultScoresForTier } from "./scoring";
-import { applyModelDelta, applyOptimalShadowDelta, applyPassiveDrift } from "./model-engine";
-import { pushConsequence } from "./consequences";
+import { applyPassiveDrift } from "./model-engine";
 import { closeExpiredSnapVotes } from "./snap-vote";
-import { maybeAnnounceResolution, announceDecisionRevealed } from "./announcements";
 import { processBudgetCycleTimers } from "./budget-cycle";
 import { checkSocialMilestones } from "./social-thresholds";
-import { maybeStakeholderReact } from "./stakeholders";
+import { applyFastPathScore } from "./fast-path-scoring";
+import { runAutoplayer } from "./autoplayer/run";
 import { TICK_THROTTLE_SECONDS } from "./config";
+import { computeDeadlineAt } from "./deadline-window";
 
-export async function computeDeadlineAt(sessionId: string, eventId: string, dispatchedAt: Date): Promise<Date | null> {
-  const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-  if (!event || event.deadlineType === "NONE" || event.deadlineWindowHours == null) return null;
-
-  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
-  const multiplier = gs?.fastModeMultiplier ?? 1;
-  const intensity = gs?.intensityMultiplier && gs.intensityMultiplier > 0 ? gs.intensityMultiplier : 1.0;
-  const windowMinutes = (event.deadlineWindowHours * 60 * multiplier) / intensity;
-  return new Date(dispatchedAt.getTime() + windowMinutes * 60_000);
-}
+export { computeDeadlineAt };
 
 // Called opportunistically by every dashboard/display/control-page poll
 // (see the note in app/api/dashboard/route.ts) rather than solely by a
@@ -69,6 +59,7 @@ export async function processDeadlines(sessionId: string) {
   await closeExpiredSnapVotes(sessionId).catch((e) => console.error("[tick] closeExpiredSnapVotes failed:", e));
   await processBudgetCycleTimers(sessionId).catch((e) => console.error("[tick] processBudgetCycleTimers failed:", e));
   await checkSocialMilestones(sessionId).catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
+  await runAutoplayer(sessionId).catch((e) => console.error("[tick] runAutoplayer failed:", e));
 
   const now = new Date();
   let remindersSent = 0;
@@ -142,64 +133,18 @@ export async function processDeadlines(sessionId: string) {
       .returning();
 
     const tier = event.noResponseFallbackTier;
-    const dims = defaultScoresForTier(tier);
-    const compositePct = computeCompositePct(dims);
-
-    await db.insert(scores).values({
-      sessionId,
-      decisionId: decision.id,
-      evidenceScore: dims.evidenceScore,
-      politicalScore: dims.politicalScore,
-      equityScore: dims.equityScore,
-      rawCompositePct: compositePct,
-      calibrationAdjustment: 0,
-      compositePct,
-      tier,
-      suggestedTier: tier,
-      fastPathed: true,
-      overrideReason: "Auto-applied at deadline expiry: no submission received.",
-      scoredByUserId: owningSession.ownerUserId,
-    });
-
-    const deltaJson = (event.modelDeltaJson as Record<string, unknown[]>) ?? {};
-    const deltas = deltaJson[tier] ?? [];
     const region = expiredTeams.find((t) => t.id === dispatch.targetTeamId)?.regionId ?? null;
     if (region) {
-      await applyModelDelta({
+      await applyFastPathScore({
         sessionId,
-        deltas: deltas as never,
-        submittingRegionId: region,
-        reason: `${event.id} deadline expired, no response: ${tier} auto-applied`,
-      });
-      await applyOptimalShadowDelta(sessionId, (deltaJson.OPTIMAL as never) ?? [], region);
-      const afterState = await db.query.modelState.findFirst({
-        where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, region)),
-      });
-      await pushConsequence({
-        sessionId,
+        decision,
         event,
-        dispatchId: dispatch.id,
-        teamId: dispatch.targetTeamId,
         regionId: region,
         tier,
-        deltas: deltas as never,
-        actorUserId: owningSession.ownerUserId,
-        afterState: afterState ?? undefined,
+        overrideReason: "Auto-applied at deadline expiry: no submission received.",
+        scoredByUserId: owningSession.ownerUserId,
       });
-      await announceDecisionRevealed({
-        sessionId,
-        eventId: event.id,
-        eventTitle: event.title,
-        regionId: region,
-        submittingTeamId: dispatch.targetTeamId,
-        structuredChoice: null,
-        tier,
-      });
-      await maybeStakeholderReact(sessionId, dispatch.targetTeamId, tier);
     }
-
-    await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, dispatch.id));
-    await maybeAnnounceResolution(sessionId, event.id);
     autoApplied++;
   }
 

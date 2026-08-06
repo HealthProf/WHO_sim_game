@@ -40,3 +40,27 @@ export const POLITICAL_TENSION_LOCKOUT_THRESHOLD = 90;
 // attempts per window" is all this needs to guard against.
 export const RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
 export const RATE_LIMIT_MAX_ATTEMPTS = 10;
+
+// --- Demo mode pacing (lib/session-lifecycle.ts, Phase 4) ---
+// A demo session runs on a faster clock than an instructor session so a
+// solo visitor can finish an arc in ~10-15 minutes. gameDaysPerRealMinute
+// governs the narrative-day clock; fastModeMultiplier governs individual
+// event deadline windows only (see sessionState's schema comments — the two
+// are deliberately independent). Tuned by actually running a demo, not by
+// arithmetic alone — revisit if a run consistently feels too short/long.
+export const DEMO_GAME_DAYS_PER_REAL_MINUTE = 6;
+export const DEMO_FAST_MODE_MULTIPLIER = 1 / 240;
+
+// --- Scripted autoplayer tier-sampling profiles (lib/autoplayer/scripted.ts) ---
+// Each profile is a probability distribution over the four scoring tiers,
+// sampled once per decision. Assigned with variety across a demo session's
+// five AI-driven regions at creation (lib/session-lifecycle.ts).
+export const AUTOPLAY_PROFILE_DISTRIBUTIONS: Record<"strong" | "mixed" | "struggling", Record<"OPTIMAL" | "ADEQUATE" | "INADEQUATE" | "CRITICAL_FAILURE", number>> = {
+  strong: { OPTIMAL: 0.6, ADEQUATE: 0.3, INADEQUATE: 0.1, CRITICAL_FAILURE: 0.0 },
+  mixed: { OPTIMAL: 0.25, ADEQUATE: 0.45, INADEQUATE: 0.25, CRITICAL_FAILURE: 0.05 },
+  struggling: { OPTIMAL: 0.05, ADEQUATE: 0.3, INADEQUATE: 0.45, CRITICAL_FAILURE: 0.2 },
+};
+// A "struggling" region occasionally misses a deadline entirely (see
+// lib/autoplayer/scripted.ts) so the existing hard-deadline auto-fallback
+// consequences (lib/deadline.ts) visibly fire during a demo.
+export const AUTOPLAY_STRUGGLING_MISS_CHANCE = 0.15;

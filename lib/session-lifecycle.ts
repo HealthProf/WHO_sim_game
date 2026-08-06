@@ -35,10 +35,24 @@ import {
   eventDispatches,
   modelStateHistory,
   instructorActions,
+  sessionRegionAutoplay,
 } from "./db/schema";
 import { eq } from "drizzle-orm";
 import { regionSeed } from "./db/seed-data/regions";
 import { generateSessionId, generateSecret, generateUsernameSuffix } from "./ids";
+import { DEMO_GAME_DAYS_PER_REAL_MINUTE, DEMO_FAST_MODE_MULTIPLIER } from "./config";
+
+// Two of each profile across the six regions, shuffled per session so no
+// two demo runs feel identical (see lib/config.ts AUTOPLAY_PROFILE_DISTRIBUTIONS).
+const DEMO_PROFILE_POOL: ("strong" | "mixed" | "struggling")[] = ["strong", "strong", "mixed", "mixed", "struggling", "struggling"];
+function shuffled<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 
 export async function createSession(ownerUserId: number, mode: "instructor" | "demo"): Promise<string> {
   const sessionId = generateSessionId();
@@ -52,11 +66,23 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
     displayToken: generateSecret(24),
   });
 
-  // 2. Wide per-tick state row, all column defaults from the schema.
-  await db.insert(sessionState).values({ sessionId });
+  // 2. Wide per-tick state row. Demo mode runs on a faster clock so a solo
+  // visitor can finish an arc in ~10-15 minutes (see lib/config.ts) —
+  // instructor mode keeps the schema defaults.
+  await db.insert(sessionState).values(
+    mode === "demo"
+      ? { sessionId, gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE, fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER }
+      : { sessionId }
+  );
+
+  // Demo mode: assign each region a shuffled competence profile up front —
+  // every region starts autoplayed; the owner "occupies" one at a time via
+  // gameSessions.demoActiveRegionId (lib/session-context.ts), which the
+  // autoplayer skips while occupied (lib/autoplayer, lib/deadline.ts).
+  const demoProfiles = mode === "demo" ? shuffled(DEMO_PROFILE_POOL) : null;
 
   // 3-4. One team + starting model_state/model_state_optimal per region.
-  for (const r of regionSeed) {
+  for (const [index, r] of regionSeed.entries()) {
     const [team] = await db.insert(teams).values({ sessionId, regionId: r.id }).returning();
 
     await db.insert(modelState).values({
@@ -94,8 +120,9 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
     });
 
     // 5. Instructor mode only — generated per-region region logins. Demo
-    // mode has no student logins at all (see gameSessions.demoActiveRegionId
-    // — the session owner occupies regions directly, Phase 4).
+    // mode has no student logins at all — the session owner occupies
+    // regions directly (gameSessions.demoActiveRegionId), and every region
+    // not currently occupied is driven by the scripted autoplayer.
     if (mode === "instructor" && team) {
       const password = generateSecret(9);
       const passwordHash = await bcrypt.hash(password, 10);
@@ -105,6 +132,13 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
         username: `${r.id.toLowerCase()}-${generateUsernameSuffix()}`,
         passwordHash,
         plaintextHint: password,
+      });
+    } else if (mode === "demo") {
+      await db.insert(sessionRegionAutoplay).values({
+        sessionId,
+        regionId: r.id,
+        profile: demoProfiles![index],
+        enabled: true,
       });
     }
   }
@@ -144,6 +178,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await db.delete(modelStateOptimal).where(eq(modelStateOptimal.sessionId, sessionId));
   await db.delete(teams).where(eq(teams.sessionId, sessionId));
   await db.delete(sessionRegionCredentials).where(eq(sessionRegionCredentials.sessionId, sessionId));
+  await db.delete(sessionRegionAutoplay).where(eq(sessionRegionAutoplay.sessionId, sessionId));
   await db.delete(sessionState).where(eq(sessionState.sessionId, sessionId));
   await db.delete(gameSessions).where(eq(gameSessions.id, sessionId));
 }

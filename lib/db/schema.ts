@@ -69,6 +69,10 @@ export const sessionStatusEnum = pgEnum("session_status", [
 // = the scripted demo autoplayer (see lib/autoplayer, Phase 4); "system" =
 // automatic no-response fallback (lib/deadline.ts), which has no user at all.
 export const actorKindEnum = pgEnum("actor_kind", ["team", "owner", "autoplayer", "system"]);
+// Tier-sampling competence distributions for demo mode's scripted
+// autoplayer — see lib/config.ts AUTOPLAY_PROFILE_DISTRIBUTIONS and
+// lib/autoplayer/scripted.ts.
+export const autoplayProfileEnum = pgEnum("autoplay_profile", ["strong", "mixed", "struggling"]);
 
 // Static reference data — seeded once from 04-regions.md. Global across every
 // session: never gets a sessionId.
@@ -923,5 +927,30 @@ export const socialMilestoneAwards = pgTable(
   (t) => [
     uniqueIndex("social_milestone_awards_session_uniq").on(t.sessionId, t.regionId, t.metric, t.tier),
     index("social_milestone_awards_session_idx").on(t.sessionId),
+  ]
+);
+
+// Demo mode only: which competence profile the scripted autoplayer uses for
+// a region it's driving, and whether it's currently enabled at all (it's
+// disabled for whichever region the session owner is actively occupying —
+// see gameSessions.demoActiveRegionId and lib/autoplayer/scripted.ts).
+// Assigned with variety at session creation (lib/session-lifecycle.ts) so
+// no two demo runs feel identical.
+export const sessionRegionAutoplay = pgTable(
+  "session_region_autoplay",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    profile: autoplayProfileEnum("profile").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+  },
+  (t) => [
+    uniqueIndex("session_region_autoplay_session_region_uniq").on(t.sessionId, t.regionId),
+    index("session_region_autoplay_session_idx").on(t.sessionId),
   ]
 );

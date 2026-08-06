@@ -109,3 +109,20 @@ export async function requireTeamActor(): Promise<{ actor: Actor | null; error: 
   }
   return { actor, error: null };
 }
+
+// Server-component helper for rendering the demo-mode role switcher
+// (components/role-switcher.tsx) — distinct from requireActor() above
+// because a layout needs to know "is this a demo session at all" to decide
+// whether to render the switcher, not just resolve the current actor.
+export async function ownedDemoSession(): Promise<{ sessionId: string; demoActiveRegionId: string | null } | null> {
+  const authSession = await auth();
+  const user = authSession?.user;
+  if (!user || user.kind !== "user" || !user.userId) return null;
+
+  const owned = await db.query.gameSessions.findFirst({
+    where: and(eq(gameSessions.ownerUserId, user.userId), ne(gameSessions.status, "archived"), eq(gameSessions.mode, "demo")),
+    orderBy: desc(gameSessions.createdAt),
+  });
+  if (!owned) return null;
+  return { sessionId: owned.id, demoActiveRegionId: owned.demoActiveRegionId };
+}

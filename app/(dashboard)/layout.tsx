@@ -1,11 +1,14 @@
 import { auth } from "@/lib/auth";
+import { ownedDemoSession } from "@/lib/session-context";
 import { SignOutButton } from "@/components/signout-button";
 import { HeaderClock } from "@/components/header-clock";
 import { TeamAnnouncementWatcher } from "@/components/team-announcement-watcher";
+import { RoleSwitcher } from "@/components/role-switcher";
 import Link from "next/link";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const demoSession = await ownedDemoSession();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -15,6 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <p className="text-xs uppercase tracking-wide text-slate-500">Operation Veiled Horizon</p>
           <h1 className="text-lg font-semibold">{session?.user?.regionId} Regional Office</h1>
         </div>
+        {demoSession && <RoleSwitcher sessionId={demoSession.sessionId} currentRegionId={demoSession.demoActiveRegionId} />}
         <HeaderClock />
         <nav className="flex items-center gap-4 text-sm">
           <Link href="/orientation" className="text-slate-300 hover:text-white">Orientation</Link>

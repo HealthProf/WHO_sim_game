@@ -35,6 +35,7 @@ const RESETTABLE_TABLES = [
   "model_state_optimal",
   "teams",
   "session_region_credentials",
+  "session_region_autoplay",
   "session_state",
   "game_sessions",
   "users",
