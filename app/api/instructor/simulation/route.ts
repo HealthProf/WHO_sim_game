@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sessionState, instructorActions } from "@/lib/db/schema";
+import { sessionState, instructorActions, gameSessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
+import { logSessionEvent } from "@/lib/session-events";
 
 // Start/pause/resume/complete/reopen the simulation. "Completed" is a soft,
 // reversible state per simulation-docs/07-open-questions.md Q7 — never
@@ -48,6 +49,11 @@ export async function PATCH(req: NextRequest) {
     actionType: `simulation_${status}`,
     targetDesc: "session simulation state",
   });
+
+  if (status === "completed") {
+    const session = await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, sessionId) });
+    if (session) await logSessionEvent({ sessionId, kind: "completed", mode: session.mode });
+  }
 
   return NextResponse.json({ ok: true, status });
 }

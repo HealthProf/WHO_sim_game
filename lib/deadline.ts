@@ -14,8 +14,9 @@ import { processBudgetCycleTimers } from "./budget-cycle";
 import { checkSocialMilestones } from "./social-thresholds";
 import { applyFastPathScore } from "./fast-path-scoring";
 import { runAutoplayer } from "./autoplayer/run";
-import { TICK_THROTTLE_SECONDS } from "./config";
+import { TICK_THROTTLE_SECONDS, IDLE_TICK_CUTOFF_MINUTES } from "./config";
 import { computeDeadlineAt } from "./deadline-window";
+import { reapStale } from "./reaper";
 
 export { computeDeadlineAt };
 
@@ -23,8 +24,9 @@ export { computeDeadlineAt };
 // (see the note in app/api/dashboard/route.ts) rather than solely by a
 // cron route, so this same function also carries every other "opportunistic
 // side effect while the sim is running" subsystem — passive drift, snap
-// vote expiry, budget cycle timers, and social milestones — alongside its
-// own deadline-reminder/auto-fallback work below.
+// vote expiry, budget cycle timers, social milestones, the demo autoplayer,
+// and (Phase 5) the opportunistic session reaper — alongside its own
+// deadline-reminder/auto-fallback work below.
 //
 // Up to ~8 clients can poll within the same second, so the whole tick is
 // claimed first via a single atomic conditional UPDATE (lastTickAt, throttled
@@ -35,9 +37,23 @@ export { computeDeadlineAt };
 // Scoped per session (via sessionState.sessionId) so concurrent sessions
 // tick independently — one session's throttle never blocks another's.
 export async function processDeadlines(sessionId: string) {
+  // The reaper runs regardless of whether this particular session is idle
+  // or running — it's a global sweep, throttled by its own shared marker,
+  // and every poll is a convenient place to opportunistically trigger it.
+  await reapStale().catch((e) => console.error("[tick] reapStale failed:", e));
+
   const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs || gs.simulationStatus !== "running") {
     return { remindersSent: 0, autoApplied: 0, skipped: "simulation not running" };
+  }
+
+  // Idle-tick gating (Phase 5): polls still return current state, they just
+  // stop doing work once nobody's been actively interacting for a while —
+  // this is what keeps an abandoned-but-not-yet-archived session cheap.
+  const session = await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, sessionId) });
+  const idleCutoff = new Date(Date.now() - IDLE_TICK_CUTOFF_MINUTES * 60_000);
+  if (session && session.lastActivityAt < idleCutoff) {
+    return { remindersSent: 0, autoApplied: 0, skipped: "session idle" };
   }
 
   const cutoff = new Date(Date.now() - TICK_THROTTLE_SECONDS * 1000);

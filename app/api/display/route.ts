@@ -10,6 +10,7 @@ import { getActiveGlobalAnnouncement } from "@/lib/announcements";
 import { computeFinalResults } from "@/lib/final-results";
 import { computeAllTeamChapters } from "@/lib/team-chapter";
 import { computeWorldHealth } from "@/lib/world-health";
+import { POLL_BACKOFF_MS } from "@/lib/config";
 
 // Public-safe read-only endpoint for the projector display. No auth — gated
 // instead by an unguessable displayToken (crypto.randomBytes(24), see
@@ -37,9 +38,14 @@ export async function GET(req: NextRequest) {
 
   await processDeadlines(sessionId).catch(() => {});
 
+  const since = req.nextUrl.searchParams.get("since");
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  if (since != null && gs && String(gs.stateVersion) === since) {
+    return NextResponse.json({ unchanged: true, nextPollMs: POLL_BACKOFF_MS, stateVersion: gs.stateVersion });
+  }
+
   const allRegions = await db.query.regions.findMany();
   const allModelState = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
-  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   const globalRt = await computeGlobalRt(sessionId);
 
   const feedItems = await db.query.globalFeedItems.findMany({
@@ -99,6 +105,7 @@ export async function GET(req: NextRequest) {
   // text), so there's no separate filtering needed here; see the comment on
   // globalFeedItems in lib/db/schema.ts.
   return NextResponse.json({
+    stateVersion: gs?.stateVersion,
     currentDay: gs?.currentDay,
     escalationState: gs?.escalationState,
     mediaPressureIndex: gs?.mediaPressureIndex,

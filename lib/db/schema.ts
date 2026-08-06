@@ -139,6 +139,34 @@ export const rateLimitCounters = pgTable("rate_limit_counters", {
   count: integer("count").notNull().default(0),
 });
 
+// Singleton throttle marker (id = 1) for the opportunistic reaper (see
+// lib/reaper.ts) — a global, not per-session, cousin of
+// sessionState.lastTickAt: reaping scans every session at once, so it needs
+// exactly one shared claim rather than one per session.
+export const reaperState = pgTable("reaper_state", {
+  id: integer("id").primaryKey().default(1),
+  lastReapAt: timestamp("last_reap_at"),
+});
+
+// Minimal observability log (see lib/session-events.ts) — "47 instructors
+// ran a session" is a far more useful thing to be able to say than "it's
+// deployed." sessionId is nullable and NOT a FK: a session can be deleted
+// (demo sessions, see lib/session-lifecycle.ts deleteSession) after this
+// log has already recorded its lifecycle, and the log is meant to outlive
+// the session it describes.
+export const sessionEvents = pgTable(
+  "session_events",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id"),
+    kind: text("kind").notNull(), // "created" | "completed" | "archived" | "reaped"
+    mode: sessionModeEnum("mode").notNull(),
+    detail: text("detail"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("session_events_created_idx").on(t.createdAt)]
+);
+
 // One live game. Identity and lifecycle only — see sessionState for the wide,
 // hot, per-tick fields (kept in a separate table on purpose: this row is what
 // the reaper and concurrency caps scan, and it stays small and rarely
@@ -288,6 +316,12 @@ export const sessionState = pgTable("session_state", {
   // separate ones so a facilitator who senses the room coasting can turn up
   // the pressure without hunting through multiple settings.
   intensityMultiplier: real("intensity_multiplier").notNull().default(1.0),
+  // Bumped by a single atomic increment on every mutating write this
+  // session makes (see lib/state-version.ts) — /api/dashboard and
+  // /api/display accept ?since=<version> and return { unchanged: true }
+  // without recomputing anything when nothing has changed, so an idle
+  // session's polling costs close to nothing (Phase 5 poll backoff).
+  stateVersion: integer("state_version").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

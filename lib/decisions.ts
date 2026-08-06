@@ -9,6 +9,7 @@ import { decisions, eventDispatches, events, modelState, teams, modelStateHistor
 import { and, eq, desc } from "drizzle-orm";
 import type { OptionCost, StructuredOption } from "./db/seed-data/events";
 import type { ConfidenceLevel } from "./scoring";
+import { bumpStateVersion } from "./state-version";
 
 // Applies an option's resource cost to the submitting team's own region
 // immediately at submission time (see StructuredOption in
@@ -152,6 +153,7 @@ export async function submitDecision(opts: SubmitDecisionOpts): Promise<SubmitDe
     .returning();
 
   await db.update(eventDispatches).set({ status: "responded" }).where(eq(eventDispatches.id, eventDispatchId));
+  await bumpStateVersion(sessionId);
 
   return { decision };
 }

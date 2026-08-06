@@ -28,6 +28,7 @@
 import { db } from "./db";
 import { modelState, sessionState } from "./db/schema";
 import { and, eq, sql } from "drizzle-orm";
+import { bumpStateVersion } from "./state-version";
 
 type FundField = "fundRemaining" | "ppeDaysRemaining" | "antiviralsRemaining";
 
@@ -59,6 +60,7 @@ export async function tryDeductRegionField(
       )
     )
     .returning();
+  if (result.length > 0) await bumpStateVersion(sessionId);
   return result.length > 0;
 }
 
@@ -75,6 +77,7 @@ export async function creditRegionField(
     .update(modelState)
     .set({ [field]: sql`${modelState[field]} + ${amount}`, updatedAt: new Date() } as never)
     .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)));
+  await bumpStateVersion(sessionId);
 }
 
 type WhoHqStockField = "whoHqPpeStock" | "whoHqAntiviralsStock" | "whoHqFund";
@@ -85,6 +88,7 @@ export async function tryDeductWhoHqField(sessionId: string, field: WhoHqStockFi
     .set({ [field]: sql`${sessionState[field]} - ${amount}`, updatedAt: new Date() } as never)
     .where(and(eq(sessionState.sessionId, sessionId), sql`${sessionState[field]} >= ${amount}`))
     .returning();
+  if (result.length > 0) await bumpStateVersion(sessionId);
   return result.length > 0;
 }
 
@@ -93,4 +97,5 @@ export async function creditWhoHqField(sessionId: string, field: WhoHqStockField
     .update(sessionState)
     .set({ [field]: sql`${sessionState[field]} + ${amount}`, updatedAt: new Date() } as never)
     .where(eq(sessionState.sessionId, sessionId));
+  await bumpStateVersion(sessionId);
 }

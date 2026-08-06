@@ -8,6 +8,7 @@ import { modelState, modelStateHistory, sessionState, scores, decisions } from "
 import { and, eq } from "drizzle-orm";
 import type { ModelDelta } from "../db/seed-data/events";
 import { REGIONS as ALL_REGIONS } from "../regions";
+import { bumpStateVersion } from "../state-version";
 
 export async function applyModelDelta(opts: {
   sessionId: string;
@@ -145,6 +146,7 @@ export async function recomputeEscalationState(sessionId: string) {
     .update(sessionState)
     .set({ escalationState: escalation, updatedAt: new Date() })
     .where(eq(sessionState.sessionId, sessionId));
+  await bumpStateVersion(sessionId);
 
   return { globalRt, escalation };
 }

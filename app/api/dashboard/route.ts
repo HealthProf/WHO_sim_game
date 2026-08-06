@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sessionState, modelState, teamNotifications } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
@@ -9,6 +9,7 @@ import { getTeamAnnouncements } from "@/lib/announcements";
 import { projectForward } from "@/lib/projection";
 import { computeSimClock } from "@/lib/sim-clock";
 import { computeFinalResults } from "@/lib/final-results";
+import { POLL_BACKOFF_MS } from "@/lib/config";
 
 // Polled every ~15s by team dashboards (see 07-open-questions.md Q4). Returns
 // the shared Global Situation Summary for every region, plus the requesting
@@ -21,16 +22,28 @@ import { computeFinalResults } from "@/lib/final-results";
 // compressed ~60 minute session, so piggybacking on the polling traffic that
 // dashboards/the projector display already generate every ~10-15s covers the
 // same need without requiring a paid plan.
-export async function GET() {
+//
+// ?since=<stateVersion> (Phase 5 poll backoff): the tick still has to run
+// (it's the only thing that might change anything), but once sessionState's
+// stateVersion after the tick matches what the client already has, the rest
+// of this handler's queries are skipped entirely and a small
+// { unchanged: true, nextPollMs } response is returned instead — see
+// lib/state-version.ts for which mutations bump it.
+export async function GET(req: NextRequest) {
   const { actor, error } = await requireActor();
   if (error) return error;
   const sessionId = actor!.sessionId;
 
   await processDeadlines(sessionId).catch(() => {});
 
+  const since = req.nextUrl.searchParams.get("since");
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  if (since != null && gs && String(gs.stateVersion) === since) {
+    return NextResponse.json({ unchanged: true, nextPollMs: POLL_BACKOFF_MS, stateVersion: gs.stateVersion });
+  }
+
   const allRegions = await db.query.regions.findMany();
   const allModelState = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
-  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   const globalRt = await computeGlobalRt(sessionId);
 
   const sharedSummary = allRegions.map((r) => {
@@ -97,6 +110,7 @@ export async function GET() {
 
   return NextResponse.json({
     globalState: gs,
+    stateVersion: gs?.stateVersion,
     globalRt,
     globalAvgPublicTrust: avgPublicTrust,
     globalAvgHappiness: avgHappiness,

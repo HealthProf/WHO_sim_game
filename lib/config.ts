@@ -64,3 +64,34 @@ export const AUTOPLAY_PROFILE_DISTRIBUTIONS: Record<"strong" | "mixed" | "strugg
 // lib/autoplayer/scripted.ts) so the existing hard-deadline auto-fallback
 // consequences (lib/deadline.ts) visibly fire during a demo.
 export const AUTOPLAY_STRUGGLING_MISS_CHANCE = 0.15;
+
+// --- Scaling hygiene (Phase 5) ---
+// A session stops ticking (lib/deadline.ts processDeadlines) once idle this
+// long — polls still return current state, they just stop doing work.
+export const IDLE_TICK_CUTOFF_MINUTES = 30;
+// Reaping thresholds (lib/reaper.ts). An idle-past-tick-cutoff session isn't
+// archived yet — only once it's been idle a full day. Demo sessions are
+// deletable once archived (nothing to preserve); instructor sessions are
+// kept far longer since a facilitator may want the debrief data after class.
+export const REAP_ARCHIVE_IDLE_HOURS = 24;
+export const REAP_DELETE_DEMO_AFTER_ARCHIVE_HOURS = 24;
+export const REAP_DELETE_INSTRUCTOR_AFTER_ARCHIVE_HOURS = 24 * 30; // ~30 days
+// The reaper itself only actually scans this often, via a single shared
+// throttle marker (reaperState), so it doesn't re-run on every poll.
+export const REAP_THROTTLE_MINUTES = 10;
+
+// --- Concurrency caps (lib/session-lifecycle.ts createSession) ---
+// Per-user: enforced today by POST /api/sessions refusing a second active
+// session of the same mode (see its own comment) — reusing/archiving the
+// old one instead of silently destroying it is left as a manual step for
+// now. This is the global ceiling across every account, meant to keep a
+// free-tier Neon/Vercel deployment from falling over under a traffic spike
+// rather than degrading gracefully.
+export const MAX_CONCURRENT_ACTIVE_SESSIONS = 40;
+
+// --- Poll backoff (app/api/dashboard, app/api/display, lib/fetcher.ts) ---
+// Suggested next-poll delay when a ?since=<version> request comes back
+// unchanged — roughly double the normal ~15s dashboard interval, so an idle
+// session's polling traffic (and the work it would otherwise trigger) drops
+// without going so slack that a change feels laggy to notice.
+export const POLL_BACKOFF_MS = 30_000;
