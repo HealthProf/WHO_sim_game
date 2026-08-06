@@ -23,7 +23,26 @@ const bodySchema = z.object({
   institution: z.string().max(200).optional(),
 });
 
+// An uncaught throw in a route handler makes Next.js return a bare 500 with
+// a zero-length body in production. The client can't parse that as JSON, so
+// every server-side fault — including "the database schema was never pushed
+// to this environment", which is what actually bit us — surfaced to the user
+// as an indistinguishable "the server sent an unexpected response". Wrap the
+// handler so faults are logged (visible in Vercel's runtime logs) and the
+// client always gets a JSON body it can render.
 export async function POST(req: NextRequest) {
+  try {
+    return await handleRegister(req);
+  } catch (err) {
+    console.error("POST /api/account/register failed:", err);
+    return NextResponse.json(
+      { error: "Registration is temporarily unavailable. Please try again shortly." },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleRegister(req: NextRequest) {
   const ip = clientIpFrom(req.headers);
   const allowed = await checkRateLimit(`${ip}:register`);
   if (!allowed) {
