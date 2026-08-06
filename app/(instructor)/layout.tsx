@@ -17,16 +17,16 @@ export default async function InstructorLayout({ children }: { children: React.R
         </div>
         {demoSession && <RoleSwitcher sessionId={demoSession.sessionId} currentRegionId={demoSession.demoActiveRegionId} />}
         <HeaderClock />
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/control" className="text-slate-300 hover:text-white">Command Center</Link>
-          <Link href="/scoring" className="text-slate-300 hover:text-white">Scoring Inbox</Link>
-          <Link href="/debrief" className="text-slate-300 hover:text-white">Debrief</Link>
-          <Link href="/log" className="text-slate-300 hover:text-white">Action Log</Link>
-          <Link href="/guide" className="text-slate-300 hover:text-white">Guide</Link>
-          <SignOutButton />
-          <ResetSimulationButton />
-        </nav>
       </header>
+      <nav className="flex items-center gap-4 text-sm overflow-x-auto whitespace-nowrap border-b border-slate-800 px-6 py-3 [-webkit-overflow-scrolling:touch]">
+        <Link href="/control" className="text-slate-300 hover:text-white shrink-0">Command Center</Link>
+        <Link href="/scoring" className="text-slate-300 hover:text-white shrink-0">Scoring Inbox</Link>
+        <Link href="/debrief" className="text-slate-300 hover:text-white shrink-0">Debrief</Link>
+        <Link href="/log" className="text-slate-300 hover:text-white shrink-0">Action Log</Link>
+        <Link href="/guide" className="text-slate-300 hover:text-white shrink-0">Guide</Link>
+        <SignOutButton />
+        <ResetSimulationButton />
+      </nav>
       <main className="p-6 max-w-7xl mx-auto">{children}</main>
     </div>
   );

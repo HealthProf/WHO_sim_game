@@ -188,7 +188,7 @@ export default function EventDetailPage() {
               <p className="text-sm font-medium mb-2">
                 Dose Allocation (must total 180,000) - current total: {allocationTotal.toLocaleString()}
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {REGIONS.map((r) => (
                   <label key={r} className="text-sm">
                     {r}

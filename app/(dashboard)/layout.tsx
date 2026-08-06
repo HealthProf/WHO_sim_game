@@ -20,20 +20,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
         {demoSession && <RoleSwitcher sessionId={demoSession.sessionId} currentRegionId={demoSession.demoActiveRegionId} />}
         <HeaderClock />
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/orientation" className="text-slate-300 hover:text-white">Orientation</Link>
-          <Link href="/dashboard" className="text-slate-300 hover:text-white">Situation Room</Link>
-          <Link href="/events" className="text-slate-300 hover:text-white">Events</Link>
-          <Link href="/coordination" className="text-slate-300 hover:text-white">Coordination</Link>
-          <Link href="/pledges" className="text-slate-300 hover:text-white">Pledges</Link>
-          <Link href="/marketplace" className="text-slate-300 hover:text-white">Marketplace</Link>
-          <Link href="/emergency-funding" className="text-slate-300 hover:text-white">Emergency Funding</Link>
-          <Link href="/profile" className="text-slate-300 hover:text-white">Profile</Link>
-          <Link href="/summary" className="text-slate-300 hover:text-white">Summary Report</Link>
-          <Link href="/glossary" className="text-slate-300 hover:text-white">Glossary</Link>
-          <SignOutButton />
-        </nav>
       </header>
+      <nav className="flex items-center gap-4 text-sm overflow-x-auto whitespace-nowrap border-b border-slate-800 px-6 py-3 [-webkit-overflow-scrolling:touch]">
+        <Link href="/orientation" className="text-slate-300 hover:text-white shrink-0">Orientation</Link>
+        <Link href="/dashboard" className="text-slate-300 hover:text-white shrink-0">Situation Room</Link>
+        <Link href="/events" className="text-slate-300 hover:text-white shrink-0">Events</Link>
+        <Link href="/coordination" className="text-slate-300 hover:text-white shrink-0">Coordination</Link>
+        <Link href="/pledges" className="text-slate-300 hover:text-white shrink-0">Pledges</Link>
+        <Link href="/marketplace" className="text-slate-300 hover:text-white shrink-0">Marketplace</Link>
+        <Link href="/emergency-funding" className="text-slate-300 hover:text-white shrink-0">Emergency Funding</Link>
+        <Link href="/profile" className="text-slate-300 hover:text-white shrink-0">Profile</Link>
+        <Link href="/summary" className="text-slate-300 hover:text-white shrink-0">Summary Report</Link>
+        <Link href="/glossary" className="text-slate-300 hover:text-white shrink-0">Glossary</Link>
+        <SignOutButton />
+      </nav>
       <main className="p-6 max-w-6xl mx-auto">{children}</main>
     </div>
   );

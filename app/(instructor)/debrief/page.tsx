@@ -57,7 +57,7 @@ export default function DebriefPage() {
           <FinalStat label="Ideal Deaths" value={data.finalResults.totalOptimalDeaths.toLocaleString()} tone="emerald" />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="bg-amber-950/40 border border-amber-800 rounded-lg p-4">
             <p className="text-xs uppercase tracking-wide text-amber-300">Infections That Could Have Been Prevented</p>
             <p className="text-3xl font-bold mt-1">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
@@ -140,7 +140,7 @@ export default function DebriefPage() {
 
       <section>
         <h3 className="font-medium mb-2">EVT-006 vs EVT-012 Allocation Comparison</h3>
-        <div className="grid grid-cols-2 gap-6 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
           <div>
             <p className="text-slate-400 mb-1">EVT-006 (first tranche)</p>
             {data.evt006Allocations.map((a) => (

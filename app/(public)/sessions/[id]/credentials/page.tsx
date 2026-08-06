@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { QrCode } from "@/components/qr-code";
 
 interface Credential {
   regionId: string;
@@ -53,6 +54,18 @@ export default function SessionCredentialsPage() {
         Hand each region&apos;s login to the team staffing it. Passwords are shown here for as long as the session is
         running — this page can be revisited any time to reprint them.
       </p>
+
+      <div className="flex items-center gap-4 bg-slate-900 border border-slate-800 rounded-lg p-4 mb-6 print:hidden">
+        <QrCode value={typeof window !== "undefined" ? `${window.location.origin}/login` : "/login"} size={112} />
+        <div className="text-sm text-slate-300">
+          <p className="font-medium text-slate-100 mb-1">On phones, install before logging in</p>
+          <p className="text-slate-400">
+            Have each team scan this code and add the site to their home screen (Share → Add to Home Screen on
+            iPhone) <span className="font-medium text-slate-300">before</span> they log in. On iOS, installing after
+            login starts a separate, signed-out session — installing first avoids that.
+          </p>
+        </div>
+      </div>
 
       <table className="w-full text-sm border-collapse mb-8">
         <thead>
