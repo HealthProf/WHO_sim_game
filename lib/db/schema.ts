@@ -98,24 +98,41 @@ export const regions = pgTable("regions", {
 });
 
 // A public account. Region logins are NOT users rows — see
-// sessionRegionCredentials below. Stays global/unscoped; Phase 2 extends this
-// with email/institution/etc. for public registration.
+// sessionRegionCredentials below. Stays global/unscoped.
 //
-// teamId is an interim mechanism (see lib/session-context.ts requireActor):
-// Phase 1 has no session-scoped login yet, so a "student" user's own team
-// row is how their session is resolved. It's deliberately NOT a FK
-// (.references()) to teams — teams -> gameSessions -> users.ownerUserId ->
-// this table would otherwise form a circular table reference, which
-// Drizzle's TypeScript inference can't resolve without explicit type
-// annotations on every table in the cycle. Phase 3 replaces this whole path
-// with session_region_credentials-based login and this column goes away.
+// role is legacy from the single-session prototype and is no longer how
+// "instructor-ness" is determined — see lib/session-context.ts requireActor:
+// a public account becomes the instructor for whichever game_sessions row
+// it owns (gameSessions.ownerUserId), not via a fixed role on the account
+// itself. Every public account is created with role="student" at the table
+// level (kept non-null rather than dropped outright since removing it would
+// touch every historical row and isn't needed for Phase 2/3 to work).
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  username: text("username").notNull().unique(), // lowercased, unique key
+  displayUsername: text("display_username").notNull(), // what they actually typed
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: userRoleEnum("role").notNull(),
-  teamId: integer("team_id"),
+  // Optional profile fields (lib/session-context.ts and registration never
+  // require these) — used only to contact an account holder about updates
+  // to the simulation. email is also the only account-recovery path that
+  // exists; see app/(public)/account/recover.
+  email: text("email"),
+  institution: text("institution"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at"),
+});
+
+// Per-IP request throttling for POST /api/account/register and the
+// credentials sign-in path (see lib/rate-limit.ts). A DB-backed counter
+// rather than an in-memory one — on Vercel each lambda instance gets its
+// own memory, so an in-memory limiter is close to decorative. One extra
+// atomic write per auth attempt is the accepted cost.
+export const rateLimitCounters = pgTable("rate_limit_counters", {
+  key: text("key").primaryKey(), // "ip:route", e.g. "203.0.113.4:register"
+  windowStartedAt: timestamp("window_started_at").notNull(),
+  count: integer("count").notNull().default(0),
 });
 
 // One live game. Identity and lifecycle only — see sessionState for the wide,

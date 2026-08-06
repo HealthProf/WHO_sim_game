@@ -33,3 +33,10 @@ export const COORDINATION_LEAK_CHANCE = 0.15;
 
 // --- Political tension / WHO HQ cooperation lockout (lib/economy.ts) ---
 export const POLITICAL_TENSION_LOCKOUT_THRESHOLD = 90;
+
+// --- Per-IP rate limiting (lib/rate-limit.ts) ---
+// Applied to POST /api/account/register and the credentials sign-in path.
+// A DB-backed fixed window, not a sliding one — simple, and "at most N
+// attempts per window" is all this needs to guard against.
+export const RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
+export const RATE_LIMIT_MAX_ATTEMPTS = 10;

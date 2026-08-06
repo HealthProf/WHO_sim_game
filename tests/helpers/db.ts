@@ -38,6 +38,7 @@ const RESETTABLE_TABLES = [
   "session_state",
   "game_sessions",
   "users",
+  "rate_limit_counters",
 ] as const;
 
 export async function resetDb() {

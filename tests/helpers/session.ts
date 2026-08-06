@@ -10,6 +10,7 @@ export async function createTestUser(role: "student" | "instructor" = "instructo
     .insert(users)
     .values({
       username: `test-${role}-${Math.random().toString(36).slice(2, 8)}`,
+      displayUsername: `test-${role}`,
       passwordHash: await bcrypt.hash("password", 4),
       name: `Test ${role}`,
       role,

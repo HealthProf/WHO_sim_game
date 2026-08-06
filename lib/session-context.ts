@@ -2,13 +2,14 @@
 // acting in" — the single place session identity is decided. No route may
 // accept a sessionId from the client; it always comes from here.
 //
-// Phase 1 note: this resolves session identity from the existing JWT (role,
-// teamId, regionId) via the now-session-scoped `teams` row (student) or the
-// session the user owns (instructor). Phase 3 replaces the student path with
-// a direct sessionId carried on the JWT once session-scoped region logins
-// exist (lib/auth.ts's second Credentials resolution branch), and Phase 4
-// adds the demo-mode `demoActiveRegionId` override mentioned below. Both are
-// additive to the Actor shape, not a rewrite of it.
+// Identity now comes straight from the JWT (see lib/auth.ts): a "region"
+// login carries its sessionId/regionId/teamId directly (baked in at sign-in,
+// stable for that login's whole lifetime — a region credential's team never
+// changes). A "user" login (public account) is the instructor for whichever
+// game session it owns (gameSessions.ownerUserId) — resolved at sign-in and
+// re-resolved via next-auth's update() right after session creation, not
+// looked up fresh on every request, so this file trusts the JWT's role
+// rather than re-querying "does this user own a session" itself.
 import { auth } from "./auth";
 import { db } from "./db";
 import { gameSessions, teams } from "./db/schema";
@@ -29,69 +30,57 @@ async function resolveActor(): Promise<Actor | null> {
   const user = authSession?.user;
   if (!user) return null;
 
-  const userId = Number(user.id);
-
-  if (user.role === "instructor") {
-    const [owned] = await db
-      .select()
-      .from(gameSessions)
-      .where(and(eq(gameSessions.ownerUserId, userId), ne(gameSessions.status, "archived")))
-      .orderBy(desc(gameSessions.createdAt))
-      .limit(1);
-    if (!owned) return null;
-
-    await db
-      .update(gameSessions)
-      .set({ lastActivityAt: new Date() })
-      .where(eq(gameSessions.id, owned.id));
-
-    // Demo mode: the owner may be occupying a region rather than acting as
-    // instructor — see gameSessions.demoActiveRegionId (Phase 4 wires the
-    // UI that sets this; the resolution here is forward-compatible now).
-    if (owned.mode === "demo" && owned.demoActiveRegionId) {
-      const [team] = await db
-        .select()
-        .from(teams)
-        .where(and(eq(teams.sessionId, owned.id), eq(teams.regionId, owned.demoActiveRegionId)))
-        .limit(1);
-      if (team) {
-        return {
-          sessionId: owned.id,
-          role: "student",
-          teamId: team.id,
-          regionId: team.regionId,
-          userId,
-          isOwner: true,
-        };
-      }
-    }
-
+  if (user.kind === "region") {
+    if (!user.sessionId || !user.teamId || !user.regionId) return null;
+    await db.update(gameSessions).set({ lastActivityAt: new Date() }).where(eq(gameSessions.id, user.sessionId));
     return {
-      sessionId: owned.id,
-      role: "instructor",
-      teamId: null,
-      regionId: null,
-      userId,
-      isOwner: true,
+      sessionId: user.sessionId,
+      role: "student",
+      teamId: user.teamId,
+      regionId: user.regionId,
+      userId: null,
+      isOwner: false,
     };
   }
 
-  if (!user.teamId) return null;
-  const [team] = await db.select().from(teams).where(eq(teams.id, user.teamId)).limit(1);
-  if (!team) return null;
+  // kind === "user": the JWT's role is "instructor" only once resolveUserRole
+  // (lib/auth.ts) found an owned, non-archived session at sign-in/update time.
+  if (user.role !== "instructor" || !user.userId) return null;
 
-  await db
-    .update(gameSessions)
-    .set({ lastActivityAt: new Date() })
-    .where(eq(gameSessions.id, team.sessionId));
+  const owned = await db.query.gameSessions.findFirst({
+    where: and(eq(gameSessions.ownerUserId, user.userId), ne(gameSessions.status, "archived")),
+    orderBy: desc(gameSessions.createdAt),
+  });
+  if (!owned) return null;
+
+  await db.update(gameSessions).set({ lastActivityAt: new Date() }).where(eq(gameSessions.id, owned.id));
+
+  // Demo mode: the owner may be occupying a region rather than acting as
+  // instructor — see gameSessions.demoActiveRegionId (Phase 4 wires the UI
+  // that sets this; the resolution here is forward-compatible now).
+  if (owned.mode === "demo" && owned.demoActiveRegionId) {
+    const team = await db.query.teams.findFirst({
+      where: and(eq(teams.sessionId, owned.id), eq(teams.regionId, owned.demoActiveRegionId)),
+    });
+    if (team) {
+      return {
+        sessionId: owned.id,
+        role: "student",
+        teamId: team.id,
+        regionId: team.regionId,
+        userId: user.userId,
+        isOwner: true,
+      };
+    }
+  }
 
   return {
-    sessionId: team.sessionId,
-    role: "student",
-    teamId: team.id,
-    regionId: team.regionId,
-    userId,
-    isOwner: false,
+    sessionId: owned.id,
+    role: "instructor",
+    teamId: null,
+    regionId: null,
+    userId: user.userId,
+    isOwner: true,
   };
 }
 

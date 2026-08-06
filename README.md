@@ -100,16 +100,18 @@ Prototype, mid-migration to a multi-tenant public deployment. The core
 simulation runs end-to-end (login, event dispatch, scoring, live model
 updates, debrief) but hasn't been run with real students in a course yet.
 
-The data model and every API route are now session-scoped — any number of
-game sessions can run concurrently, fully isolated from each other — but the
-self-serve UI for public registration and creating a session through the
-browser hasn't landed yet (that's the next phase of work). **Until it does,
-Part 1 of the setup guide below (the no-coding-experience instructor flow)
-describes a login model that no longer exists** — there's no more fixed
-`instructor`/`afro`/etc. account, and `npm run db:seed` no longer prints
-login credentials, only static game content. Part 2 (the developer setup)
-is still accurate for standing up a session directly against the database
-or through `lib/session-lifecycle.ts`'s `createSession()`.
+The data model and every API route are session-scoped — any number of game
+sessions can run concurrently, fully isolated from each other. Self-serve
+public registration and instructor session creation now exist: visit
+`/register`, then `/sessions` to run a session with your class and get a
+printable credential sheet. **Part 1 of the setup guide below (the
+no-coding-experience instructor flow) still describes the old fixed-login
+model and is out of date** — there's no more fixed `instructor`/`afro`/etc.
+account, and `npm run db:seed` no longer prints login credentials, only
+static game content; use the in-app `/register` → `/sessions` flow instead.
+Not yet built: demo mode (solo play against a scripted autoplayer), the
+scaling/reaping hygiene for running this at real public-traffic volume, and
+the mobile/PWA pass.
 
 ## About me
 
@@ -130,16 +132,16 @@ comfortable with a terminal, npm, and deploying web apps, skip to **Part 2**.
 
 ### Part 1 — Setup Guide for Instructors (No Coding Experience Needed)
 
-> **This section is currently out of date and describes a flow that no
-> longer exists.** The app moved from one fixed `instructor` login and six
-> fixed region logins (`afro`, `amro`, ...) to a per-session model — every
-> game session gets its own generated instructor/region credentials, created
-> through the app. The self-serve "create an account, create a session"
-> browser flow that replaces Steps 7-8 below hasn't shipped yet. If you're
-> setting this up for a class today, use Part 2 and `lib/session-lifecycle.ts`'s
-> `createSession()` directly (or ask a developer) rather than following the
-> steps below, which reference a "Seed regions, events, and login accounts"
-> GitHub Actions step that no longer prints any login credentials.
+> **Steps 7-8 below are out of date.** The app moved from one fixed
+> `instructor` login and six fixed region logins (`afro`, `amro`, ...) to a
+> per-session model — every game session gets its own generated
+> instructor/region credentials. There's no more "Seed regions, events, and
+> login accounts" GitHub Actions step that prints them. Instead, once your
+> site is deployed and its database is set up (Steps 1-6), visit
+> `your-project-name.vercel.app/register` to create an account, then
+> `/sessions` to run a session with your class — that generates the six
+> region credentials and a printable credential sheet for you. Steps 1-6
+> below are still accurate.
 
 Everything below is done by clicking around in a web browser — you will not
 need to install anything or open a terminal. You're doing three things:

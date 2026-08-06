@@ -21,7 +21,7 @@ export default function LoginPage() {
       setError("Invalid username or password.");
       return;
     }
-    router.push("/dashboard");
+    router.push("/");
     router.refresh();
   }
 
@@ -29,7 +29,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-xl p-8">
         <h1 className="text-xl font-semibold text-slate-100 mb-1">Operation Veiled Horizon</h1>
-        <p className="text-sm text-slate-400 mb-6">Sign in with your team or instructor credentials.</p>
+        <p className="text-sm text-slate-400 mb-6">Sign in with your team, instructor, or account credentials.</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm text-slate-300 mb-1">Username</label>
@@ -39,7 +39,6 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-              placeholder="afro"
             />
           </div>
           <div>
@@ -61,6 +60,9 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+        <p className="text-sm text-slate-500 mt-6 text-center">
+          No account? <a href="/register" className="text-blue-400 hover:text-blue-300">Create one</a>
+        </p>
       </div>
     </div>
   );
