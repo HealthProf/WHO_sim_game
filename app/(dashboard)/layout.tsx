@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { ownedDemoSession } from "@/lib/session-context";
+import { ownedActiveSession } from "@/lib/session-context";
 import { SignOutButton } from "@/components/signout-button";
 import { HeaderClock } from "@/components/header-clock";
 import { TeamAnnouncementWatcher } from "@/components/team-announcement-watcher";
@@ -8,7 +8,8 @@ import Link from "next/link";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  const demoSession = await ownedDemoSession();
+  const active = await ownedActiveSession();
+  const demoSession = active?.mode === "demo" ? active : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
