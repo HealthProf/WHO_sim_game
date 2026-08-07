@@ -42,6 +42,7 @@ import { regionSeed } from "./db/seed-data/regions";
 import { generateSessionId, generateSecret, generateUsernameSuffix } from "./ids";
 import { DEMO_GAME_DAYS_PER_REAL_MINUTE, DEMO_FAST_MODE_MULTIPLIER } from "./config";
 import { logSessionEvent } from "./session-events";
+import { logAnalyticsEvent } from "./analytics";
 
 // Two of each profile across the six regions, shuffled per session so no
 // two demo runs feel identical (see lib/config.ts AUTOPLAY_PROFILE_DISTRIBUTIONS).
@@ -147,6 +148,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
   // 6. Commit point.
   await db.update(gameSessions).set({ status: "running", startedAt: new Date() }).where(eq(gameSessions.id, sessionId));
   await logSessionEvent({ sessionId, kind: "created", mode });
+  await logAnalyticsEvent({ sessionId, mode, eventType: "session_created", userId: ownerUserId });
 
   return sessionId;
 }

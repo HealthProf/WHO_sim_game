@@ -29,7 +29,7 @@ export async function createTestSession(mode: "instructor" | "demo" = "instructo
 // route handlers / lib functions in tests, bypassing the HTTP/auth layer —
 // matches the plan's testing approach of mocking session-context rather than
 // spinning up a real HTTP server.
-export async function actorFor(sessionId: string, regionId: string): Promise<Actor> {
+export async function actorFor(sessionId: string, regionId: string, mode: "instructor" | "demo" = "instructor"): Promise<Actor> {
   const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.regionId, regionId)) });
   if (!team) throw new Error(`No team for region ${regionId} in session ${sessionId}`);
   return {
@@ -39,10 +39,11 @@ export async function actorFor(sessionId: string, regionId: string): Promise<Act
     regionId,
     userId: null,
     isOwner: false,
+    mode,
   };
 }
 
-export async function instructorActorFor(sessionId: string, ownerUserId: number): Promise<Actor> {
+export async function instructorActorFor(sessionId: string, ownerUserId: number, mode: "instructor" | "demo" = "instructor"): Promise<Actor> {
   return {
     sessionId,
     role: "instructor",
@@ -50,5 +51,6 @@ export async function instructorActorFor(sessionId: string, ownerUserId: number)
     regionId: null,
     userId: ownerUserId,
     isOwner: true,
+    mode,
   };
 }

@@ -5,6 +5,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { computeMarketPrice } from "@/lib/economy";
 import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // GET: current adaptive WHO HQ pricing + stock, plus every pending/recent
 // request (visible to all teams, not just the requester — item 3's "other
@@ -94,6 +95,16 @@ export async function POST(req: NextRequest) {
       }))
     );
   }
+
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "marketplace_purchase",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { resourceType, amount, pricePerUnit, totalCost },
+  });
 
   return NextResponse.json({ request });
 }

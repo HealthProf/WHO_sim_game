@@ -4,6 +4,7 @@ import { snapVotes, snapVoteResponses } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { getSnapVoteState, closeExpiredSnapVotes } from "@/lib/snap-vote";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // GET: any authenticated user can see the current open vote (teams see only
 // response counts while it's open; the instructor sees the live breakdown —
@@ -53,6 +54,16 @@ export async function POST(req: NextRequest) {
     .insert(snapVoteResponses)
     .values({ sessionId, snapVoteId, teamId: actor!.teamId!, choice })
     .returning();
+
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "snap_vote_responded",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { snapVoteId, choice },
+  });
 
   return NextResponse.json({ response });
 }

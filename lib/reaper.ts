@@ -5,7 +5,7 @@
 // (reaperState) so it only actually scans every REAP_THROTTLE_MINUTES
 // regardless of how many sessions are polling.
 import { db } from "./db";
-import { gameSessions, reaperState } from "./db/schema";
+import { gameSessions, gameSessionSnapshots, reaperState } from "./db/schema";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import {
   REAP_ARCHIVE_IDLE_HOURS,
@@ -15,6 +15,7 @@ import {
 } from "./config";
 import { deleteSession } from "./session-lifecycle";
 import { logSessionEvent } from "./session-events";
+import { captureFinalSnapshot } from "./session-snapshot";
 
 export async function reapStale(): Promise<void> {
   // Ensure the singleton throttle row exists (first-ever call on a fresh
@@ -53,6 +54,13 @@ export async function reapStale(): Promise<void> {
     const archivedAt = s.completedAt ?? s.lastActivityAt;
     const cutoffForMode = s.mode === "demo" ? demoDeleteCutoff : instructorDeleteCutoff;
     if (archivedAt < cutoffForMode) {
+      // A safety net for a session that idled out rather than being
+      // explicitly marked "completed" (see lib/session-snapshot.ts) — don't
+      // overwrite a snapshot that already exists (it would clobber the
+      // "completed" reason with "reaped", losing whether the instructor
+      // actually finished it or the session just timed out).
+      const existingSnapshot = await db.query.gameSessionSnapshots.findFirst({ where: eq(gameSessionSnapshots.sessionId, s.id) });
+      if (!existingSnapshot) await captureFinalSnapshot(s.id, "reaped");
       await logSessionEvent({ sessionId: s.id, kind: "reaped", mode: s.mode, detail: `deleted after archive (${s.mode})` });
       await deleteSession(s.id);
     }

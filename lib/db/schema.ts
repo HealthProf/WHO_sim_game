@@ -988,3 +988,66 @@ export const sessionRegionAutoplay = pgTable(
     index("session_region_autoplay_session_idx").on(t.sessionId),
   ]
 );
+
+// Instructor-only engagement analytics — never rendered to any player or
+// instructor UI, purely for the maintainer to later export (Vercel's
+// Storage tab -> the Neon project's SQL editor) and analyze offline. Demo
+// sessions are never written here at all (see lib/analytics.ts) rather than
+// filtered at query time, so an export can never accidentally include them.
+//
+// sessionId is NOT a foreign key and nullable, deliberately mirroring
+// sessionEvents above: this log is meant to outlive the session it
+// describes (lib/reaper.ts deletes archived sessions, and everything they
+// own, well before anyone gets around to analyzing them).
+export const analyticsEvents = pgTable(
+  "analytics_events",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id"),
+    eventType: text("event_type").notNull(), // e.g. "decision_submitted", "trade_proposed" — see lib/analytics.ts for the fixed set
+    actorRole: text("actor_role"), // "instructor" | "student", null for pre-session events
+    regionId: text("region_id"), // region code, not a FK — see sessionId above
+    userId: integer("user_id").references(() => users.id), // users are never deleted, so this FK is safe
+    metadataJson: jsonb("metadata_json"), // small event-specific payload, e.g. {resourceType, amount}
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("analytics_events_session_idx").on(t.sessionId),
+    index("analytics_events_type_idx").on(t.eventType),
+    index("analytics_events_created_idx").on(t.createdAt),
+  ]
+);
+
+// One row per non-demo session, capturing final outcomes (infections,
+// deaths, resources, and the actual-vs-optimal comparison — see
+// lib/final-results.ts) before lib/reaper.ts deletes the session's live
+// rows (modelState, teams, etc.) for good. Written once when the
+// instructor marks the simulation "completed" (PATCH
+// /api/instructor/simulation), and again defensively right before the
+// reaper deletes an archived session that was never explicitly completed —
+// upserted on sessionId so either path can supersede the other with the
+// latest numbers. Never written for demo sessions.
+export const gameSessionSnapshots = pgTable("game_session_snapshots", {
+  sessionId: text("session_id").primaryKey(),
+  reason: text("reason").notNull(), // "completed" | "reaped"
+  sessionCreatedAt: timestamp("session_created_at").notNull(),
+  capturedAt: timestamp("captured_at").defaultNow().notNull(),
+  currentDay: integer("current_day").notNull(),
+  totalGameDays: integer("total_game_days").notNull(),
+  escalationState: escalationStateEnum("escalation_state").notNull(),
+  mediaPressureIndex: integer("media_pressure_index").notNull(),
+  whoHqFund: integer("who_hq_fund").notNull(),
+  whoHqPpeStock: integer("who_hq_ppe_stock").notNull(),
+  whoHqAntiviralsStock: integer("who_hq_antivirals_stock").notNull(),
+  teamCount: integer("team_count").notNull(),
+  // Per-region final state (confirmed cases, deaths, Rt, resources, social
+  // metrics) plus each region's actual-vs-optimal comparison — see
+  // RegionFinalResult in lib/final-results.ts for the shape.
+  regionResultsJson: jsonb("region_results_json").notNull(),
+  totalActualConfirmed: integer("total_actual_confirmed").notNull(),
+  totalActualDeaths: integer("total_actual_deaths").notNull(),
+  totalOptimalConfirmed: integer("total_optimal_confirmed").notNull(),
+  totalOptimalDeaths: integer("total_optimal_deaths").notNull(),
+  totalInfectionsPrevented: integer("total_infections_prevented").notNull(),
+  totalDeathsPrevented: integer("total_deaths_prevented").notNull(),
+});
