@@ -43,10 +43,10 @@ export function TeamSnapVoteBanner() {
   const seconds = Math.ceil(remainingMs / 1000);
 
   return (
-    <section className="bg-red-950/60 border-2 border-red-600 rounded-xl p-5 space-y-3">
+    <section className="space-y-3 rounded-lg bg-accent-800 p-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-wide text-red-300 font-semibold">Emergency Committee — Snap Vote</p>
-        <p className="text-lg font-bold text-red-300 tabular-nums">{seconds}s</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-accent-200">Emergency Committee — Snap Vote</p>
+        <p className="text-lg font-bold tabular-nums text-white">{seconds}s</p>
       </div>
       <p className="text-base font-medium text-white">{current.question}</p>
       <div className="flex flex-wrap gap-2">
@@ -55,15 +55,15 @@ export function TeamSnapVoteBanner() {
             key={opt}
             disabled={!!current.myChoice || vote.isPending || remainingMs <= 0}
             onClick={() => vote.mutate(opt)}
-            className={`rounded-md px-4 py-2 text-sm font-medium disabled:opacity-40 ${
-              current.myChoice === opt ? "bg-red-600 text-white" : "bg-slate-800 hover:bg-slate-700 text-white"
+            className={`rounded-full px-4 py-2 text-sm font-medium disabled:opacity-40 ${
+              current.myChoice === opt ? "bg-white text-accent-900" : "bg-accent-900 text-white hover:bg-accent-700"
             }`}
           >
             {opt}
           </button>
         ))}
       </div>
-      <p className="text-xs text-red-300">
+      <p className="text-xs text-accent-200">
         {current.myChoice ? `Your team voted "${current.myChoice}" — waiting on others.` : "Your team hasn't responded yet."}{" "}
         {current.respondedCount}/{current.totalTeams} regions have responded so far.
       </p>

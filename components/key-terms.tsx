@@ -8,13 +8,13 @@ export function KeyTerms({ texts }: { texts: string[] }) {
   if (terms.length === 0) return null;
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Key Terms</p>
+    <section className="rounded-lg bg-surface p-4">
+      <p className="mb-2 text-xs uppercase tracking-wide text-neutral-600">Key Terms</p>
       <dl className="space-y-2 text-sm">
         {terms.map((t) => (
           <div key={t.id}>
-            <dt className="font-medium text-slate-200 inline">{t.term}:</dt>{" "}
-            <dd className="text-slate-400 inline">{t.definition}</dd>
+            <dt className="inline font-medium text-text">{t.term}:</dt>{" "}
+            <dd className="inline text-neutral-700">{t.definition}</dd>
           </div>
         ))}
       </dl>

@@ -1,17 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Caprasimo, Figtree } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { InstallPrompt } from "@/components/install-prompt";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const caprasimo = Caprasimo({
+  variable: "--font-heading",
+  weight: "400",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const figtree = Figtree({
+  variable: "--font-body",
   subsets: ["latin"],
 });
 
@@ -32,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#2e2b25",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -46,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${caprasimo.variable} ${figtree.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />

@@ -8,8 +8,11 @@ import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
 import { KeyTerms } from "@/components/key-terms";
 import { AdvisoryBoard } from "@/components/advisory-board";
-import type { StructuredOption as FullStructuredOption, OptionCost } from "@/lib/db/seed-data/events";
+import { affordabilityIssue, formatCost, type OwnRegionResources } from "@/lib/affordability";
+import type { StructuredOption as FullStructuredOption } from "@/lib/db/seed-data/events";
 import { REGIONS } from "@/lib/regions";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { PillButton } from "@/components/ui/pill-button";
 
 type StructuredOption = Pick<FullStructuredOption, "label" | "text" | "cost" | "impactDesc">;
 
@@ -28,36 +31,6 @@ interface EventsData {
   events: EventFull[];
   dispatches: { id: number; eventId: string; status: string; deadlineAt: string | null }[];
 }
-
-interface OwnRegionResources {
-  fundRemaining: number;
-  ppeDaysRemaining: number;
-  antiviralsRemaining: number;
-}
-
-function formatCost(cost: OptionCost | undefined): string {
-  if (!cost) return "No direct resource cost.";
-  const parts: string[] = [];
-  if (cost.fund) parts.push(`$${cost.fund.toLocaleString()}`);
-  if (cost.ppeDays) parts.push(`${cost.ppeDays} PPE-days`);
-  if (cost.antivirals) parts.push(`${cost.antivirals.toLocaleString()} antiviral doses`);
-  return parts.length > 0 ? `Costs ${parts.join(" + ")}.` : "No direct resource cost.";
-}
-
-function affordabilityIssue(cost: OptionCost | undefined, resources: OwnRegionResources | undefined): string | null {
-  if (!cost || !resources) return null;
-  if (cost.fund && resources.fundRemaining < cost.fund) {
-    return `Requires $${cost.fund.toLocaleString()} — you have $${resources.fundRemaining.toLocaleString()}.`;
-  }
-  if (cost.ppeDays && resources.ppeDaysRemaining < cost.ppeDays) {
-    return `Requires ${cost.ppeDays} PPE-days — you have ${resources.ppeDaysRemaining}.`;
-  }
-  if (cost.antivirals && resources.antiviralsRemaining < cost.antivirals) {
-    return `Requires ${cost.antivirals.toLocaleString()} antiviral doses — you have ${resources.antiviralsRemaining.toLocaleString()}.`;
-  }
-  return null;
-}
-
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -106,75 +79,80 @@ export default function EventDetailPage() {
   });
 
   if (queryError) return <QueryError error={queryError} onRetry={() => refetch()} label="event" />;
-  if (isLoading || !data) return <p className="text-slate-400">Loading...</p>;
+  if (isLoading || !data) return <p className="text-neutral-600">Loading...</p>;
 
   const dispatch = data.dispatches.find((d) => d.id === dispatchId);
   const event = data.events.find((e) => e.id === dispatch?.eventId);
-  if (!dispatch || !event) return <p className="text-slate-400">Event not found.</p>;
+  if (!dispatch || !event) return <p className="text-neutral-600">Event not found.</p>;
 
   const allocationTotal = Object.values(allocation).reduce((a, b) => a + b, 0);
   const alreadyResolved = dispatch.status === "scored" || dispatch.status === "closed";
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="flex max-w-2xl flex-col gap-5">
       <div>
-        <h2 className="text-xl font-semibold">{event.title}</h2>
-        <p className="text-xs text-slate-500 uppercase mt-1">{event.id} - {event.deadlineType} deadline</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-accent-700">Event · {event.deadlineType.toLowerCase()} deadline</p>
+        <h1 className="font-heading text-[30px] text-text">{event.title}</h1>
         {dispatch.deadlineAt && (
           <DeadlineCountdown deadlineAt={dispatch.deadlineAt} gameDaysPerRealMinute={dash?.globalState.gameDaysPerRealMinute ?? 1.5} />
         )}
       </div>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-sm text-slate-300">
+      <section className="rounded-lg bg-surface p-4 text-[16px] leading-[1.6] text-neutral-800">
         <p className="whitespace-pre-wrap">{event.narrativeMarkdown}</p>
       </section>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-sm text-slate-200">
-        <p className="font-medium mb-2">Decision Prompt</p>
-        <p className="whitespace-pre-wrap text-slate-300">{event.decisionPromptMarkdown}</p>
+      <section className="rounded-lg bg-surface p-4 text-sm text-neutral-800">
+        <p className="mb-2 font-semibold text-text">Decision Prompt</p>
+        <p className="whitespace-pre-wrap">{event.decisionPromptMarkdown}</p>
       </section>
 
       <KeyTerms texts={[event.narrativeMarkdown, event.decisionPromptMarkdown]} />
       <AdvisoryBoard eventId={event.id} />
 
       {alreadyResolved ? (
-        <p className="text-emerald-400 text-sm">This event has been scored and closed.</p>
+        <p className="text-sm font-medium text-accent-2-700">This event has been scored and closed.</p>
       ) : (
         <form
           onSubmit={(e) => {
             e.preventDefault();
             submit.mutate();
           }}
-          className="space-y-4"
+          className="space-y-5"
         >
           {event.structuredOptionsJson && (
             <div>
-              <p className="text-sm font-medium mb-2">Structured Choice</p>
+              <p className="mb-2 text-sm font-semibold text-text">Structured Choice</p>
               <div className="space-y-2">
                 {event.structuredOptionsJson.map((opt) => {
                   const blockedReason = affordabilityIssue(opt.cost, dash?.ownRegion ?? undefined);
+                  const selected = structuredChoice === opt.label;
                   return (
                     <label
                       key={opt.label}
-                      className={`flex gap-2 items-start bg-slate-900 border rounded-lg p-3 ${
-                        blockedReason ? "border-red-900/60 opacity-60 cursor-not-allowed" : "border-slate-800 cursor-pointer"
+                      className={`flex items-start gap-3 rounded-lg border-2 p-[15px_18px] ${
+                        blockedReason
+                          ? "cursor-not-allowed border-divider opacity-45"
+                          : selected
+                            ? "cursor-pointer border-accent bg-accent-100"
+                            : "cursor-pointer border-divider"
                       }`}
                     >
-                      <input
-                        type="radio"
-                        name="choice"
-                        value={opt.label}
-                        checked={structuredChoice === opt.label}
-                        disabled={!!blockedReason}
-                        onChange={() => setStructuredChoice(opt.label)}
-                        className="mt-1"
-                      />
-                      <span className="text-sm flex-1">
-                        <span className="font-semibold">{opt.label}) </span>
-                        {opt.text}
-                        <span className="block text-xs text-slate-500 mt-1">{formatCost(opt.cost)}</span>
-                        <span className="block text-xs text-slate-400 mt-1">{opt.impactDesc}</span>
-                        {blockedReason && <span className="block text-xs text-red-400 mt-1 font-medium">Can&apos;t afford this option — {blockedReason}</span>}
+                      <span className={`font-heading text-lg ${selected ? "text-accent-700" : "text-neutral-600"}`}>{opt.label}</span>
+                      <span className="flex-1 text-sm">
+                        <input
+                          type="radio"
+                          name="choice"
+                          value={opt.label}
+                          checked={selected}
+                          disabled={!!blockedReason}
+                          onChange={() => setStructuredChoice(opt.label)}
+                          className="sr-only"
+                        />
+                        <span className={selected ? "font-semibold text-accent-900" : "text-text"}>{opt.text}</span>
+                        <span className="mt-1 block text-xs text-neutral-600">{formatCost(opt.cost)}</span>
+                        <span className="mt-1 block text-xs text-neutral-700">{opt.impactDesc}</span>
+                        {blockedReason && <span className="mt-1 block text-xs font-medium text-accent-700">Can&apos;t afford this option — {blockedReason}</span>}
                       </span>
                     </label>
                   );
@@ -185,31 +163,37 @@ export default function EventDetailPage() {
 
           {event.isAllocationEvent && (
             <div>
-              <p className="text-sm font-medium mb-2">
-                Dose Allocation (must total 180,000) - current total: {allocationTotal.toLocaleString()}
+              <p className="mb-2 text-sm font-semibold text-text">
+                Dose Allocation (must total 180,000) — current total: {allocationTotal.toLocaleString()}
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {REGIONS.map((r) => (
-                  <label key={r} className="text-sm">
+                  <div key={r} className="rounded-lg bg-surface p-3">
                     {r}
                     <input
                       type="number"
                       min={0}
                       value={allocation[r]}
                       onChange={(e) => setAllocation({ ...allocation, [r]: Number(e.target.value) })}
-                      className="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-1"
+                      className="mt-1 w-full rounded-full border-2 border-divider bg-bg px-3 py-1.5 text-sm"
                     />
-                  </label>
+                  </div>
                 ))}
+                <div className={`rounded-lg p-3 ${allocationTotal === 180000 ? "bg-accent-2-100" : "bg-accent-100"}`}>
+                  Unallocated
+                  <p className={`text-base font-bold ${allocationTotal === 180000 ? "text-accent-2-800" : "text-accent-800"}`}>
+                    {(180000 - allocationTotal).toLocaleString()}
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           <div>
-            <p className="text-sm font-medium mb-2">Coordinated with</p>
+            <p className="mb-2 text-sm font-semibold text-text">Coordinated with</p>
             <div className="flex flex-wrap gap-2">
               {REGIONS.map((r) => (
-                <label key={r} className="flex items-center gap-1 text-sm bg-slate-900 border border-slate-800 rounded-full px-3 py-1">
+                <label key={r} className="flex items-center gap-1.5 rounded-full border-2 border-divider px-3 py-1 text-sm">
                   <input
                     type="checkbox"
                     checked={coordinatedWith.includes(r)}
@@ -226,48 +210,37 @@ export default function EventDetailPage() {
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">How confident is your team in this decision?</p>
-            <p className="text-xs text-slate-500 mb-2">
+            <p className="mb-2 text-sm font-semibold text-text">How confident is your team in this decision?</p>
+            <p className="mb-2 text-xs text-neutral-600">
               This isn&apos;t scored on whether you were confident — it&apos;s scored on whether your confidence matched the
               outcome. Flagging real uncertainty is never penalized.
             </p>
-            <div className="flex gap-2">
-              {(["LOW", "MEDIUM", "HIGH"] as const).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => setConfidenceLevel(level)}
-                  className={`rounded-md px-4 py-2 text-sm font-medium border ${
-                    confidenceLevel === level
-                      ? "bg-blue-600 border-blue-500 text-white"
-                      : "bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700"
-                  }`}
-                >
-                  {level.charAt(0) + level.slice(1).toLowerCase()}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              options={[
+                { value: "LOW", label: "Low" },
+                { value: "MEDIUM", label: "Medium" },
+                { value: "HIGH", label: "High" },
+              ]}
+              value={confidenceLevel}
+              onChange={setConfidenceLevel}
+            />
           </div>
 
           <div>
-            <p className="text-sm font-medium mb-2">Rationale (optional, but strongly encouraged — this is what the instructor scores)</p>
+            <p className="mb-2 text-sm font-semibold text-text">Rationale (optional, but strongly encouraged — this is what the instructor scores)</p>
             <textarea
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
               rows={8}
-              className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm"
+              className="w-full rounded-lg border-2 border-divider bg-bg px-[18px] py-[14px] text-[15px]"
             />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm font-medium text-accent-800">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={submit.isPending}
-            className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2"
-          >
+          <PillButton type="submit" disabled={submit.isPending} tone="accent" className="px-[30px] py-3">
             {submit.isPending ? "Submitting..." : "Submit Decision"}
-          </button>
+          </PillButton>
         </form>
       )}
     </div>
@@ -288,7 +261,7 @@ function DeadlineCountdown({ deadlineAt, gameDaysPerRealMinute }: { deadlineAt: 
   const gameDaysRemaining = realMsToGameDays(Math.max(0, remaining), gameDaysPerRealMinute);
 
   return (
-    <p className={`text-sm mt-2 font-medium ${expired ? "text-red-400" : "text-amber-400"}`}>
+    <p className={`mt-2 text-sm font-medium ${expired ? "text-accent-800" : "text-accent-700"}`}>
       {expired ? "Deadline passed" : `Deadline in ${minutes}m ${seconds}s (≈ ${formatGameDays(gameDaysRemaining)})`}
     </p>
   );

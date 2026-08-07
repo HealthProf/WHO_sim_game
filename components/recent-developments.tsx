@@ -19,30 +19,30 @@ export function RecentDevelopments({ notifications }: { notifications: { id: num
     leak: "Leak",
   };
   const kindColor: Record<string, string> = {
-    consequence: "text-blue-400",
-    snap_vote: "text-red-400",
-    pledge: "text-emerald-400",
-    market: "text-amber-400",
-    trade: "text-amber-400",
-    budget_cycle: "text-purple-400",
-    emergency_funding: "text-purple-400",
-    decision_revealed: "text-cyan-400",
-    stakeholder: "text-pink-400",
-    interjection: "text-orange-400",
-    leak: "text-red-500",
+    consequence: "text-neutral-600",
+    snap_vote: "text-accent-700",
+    pledge: "text-accent-2-700",
+    market: "text-accent-700",
+    trade: "text-accent-700",
+    budget_cycle: "text-neutral-600",
+    emergency_funding: "text-accent-700",
+    decision_revealed: "text-neutral-600",
+    stakeholder: "text-accent-2-700",
+    interjection: "text-accent-700",
+    leak: "text-accent-800",
   };
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <h2 className="text-sm font-semibold text-slate-200 mb-3">Recent Developments</h2>
-      <div className="space-y-2 max-h-56 overflow-y-auto">
+    <section className="rounded-lg bg-surface p-5">
+      <h2 className="mb-3 text-sm font-bold text-text">Recent Developments</h2>
+      <div className="max-h-56 space-y-2 overflow-y-auto">
         {notifications.map((n) => (
           <div key={n.id} className="text-sm">
-            <span className={`text-xs font-semibold uppercase mr-2 ${kindColor[n.kind] ?? "text-slate-400"}`}>
+            <span className={`mr-2 text-xs font-semibold uppercase ${kindColor[n.kind] ?? "text-neutral-600"}`}>
               {kindLabel[n.kind] ?? n.kind}
             </span>
-            <span className="text-slate-300">{n.message}</span>
-            <span className="text-xs text-slate-600 ml-2">{new Date(n.createdAt).toLocaleTimeString()}</span>
+            <span className="text-neutral-800">{n.message}</span>
+            <span className="ml-2 text-xs text-neutral-500">{new Date(n.createdAt).toLocaleTimeString()}</span>
           </div>
         ))}
       </div>
