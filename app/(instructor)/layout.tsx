@@ -3,6 +3,7 @@ import { SignOutButton } from "@/components/signout-button";
 import { HeaderClock } from "@/components/header-clock";
 import { ResetSimulationButton } from "@/components/reset-simulation-button";
 import { RoleSwitcher } from "@/components/role-switcher";
+import { OpenDisplayButton } from "@/components/open-display-button";
 import Link from "next/link";
 
 export default async function InstructorLayout({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,7 @@ export default async function InstructorLayout({ children }: { children: React.R
       </header>
       <nav className="flex items-center gap-4 text-sm overflow-x-auto whitespace-nowrap border-b border-slate-800 px-6 py-3 [-webkit-overflow-scrolling:touch]">
         <Link href="/control" className="text-slate-300 hover:text-white shrink-0">Command Center</Link>
+        <Link href="/global" className="text-slate-300 hover:text-white shrink-0">Global View</Link>
         <Link href="/scoring" className="text-slate-300 hover:text-white shrink-0">Scoring Inbox</Link>
         <Link href="/debrief" className="text-slate-300 hover:text-white shrink-0">Debrief</Link>
         <Link href="/log" className="text-slate-300 hover:text-white shrink-0">Action Log</Link>
@@ -34,6 +36,7 @@ export default async function InstructorLayout({ children }: { children: React.R
           </Link>
         )}
         <Link href="/sessions" className="text-slate-300 hover:text-white shrink-0">Switch Mode</Link>
+        {active && <OpenDisplayButton displayToken={active.displayToken} label="Projector" />}
         <SignOutButton />
         <ResetSimulationButton />
       </nav>
