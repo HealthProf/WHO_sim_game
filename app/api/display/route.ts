@@ -57,8 +57,14 @@ export async function GET(req: NextRequest) {
 
   // Cheat code #5's "revert to zero" — a purely cosmetic taper applied here,
   // never to the underlying model_state row (see lib/cheat-engine.ts).
+  // Fail-safe: this is the projector's own feed, typically left open for the
+  // whole session, so a cheat-code subsystem problem must never take the
+  // rest of the display down with it.
   const gameDaysPerRealMinute = gs?.gameDaysPerRealMinute && gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
-  const revertOverrides = await getRevertOverridesForSession(sessionId, gameDaysPerRealMinute);
+  const revertOverrides = await getRevertOverridesForSession(sessionId, gameDaysPerRealMinute).catch((e) => {
+    console.error("[display] getRevertOverridesForSession failed:", e);
+    return {} as Record<string, { confirmedCases: number; deaths: number }>;
+  });
 
   const publicRegionData = allRegions.map((r) => {
     const s = allModelState.find((m) => m.regionId === r.id)!;
@@ -90,7 +96,10 @@ export async function GET(req: NextRequest) {
   // it's closed.
   const snapVote = await getSnapVoteState(sessionId, { forInstructor: false });
   const activeAnnouncement = await getActiveGlobalAnnouncement(sessionId);
-  const cheat = await getCheatDisplayState(sessionId);
+  const cheat = await getCheatDisplayState(sessionId).catch((e) => {
+    console.error("[display] getCheatDisplayState failed:", e);
+    return { godModeActive: false, barrelRollAt: null, monologue: null };
+  });
 
   // Public-safe deadline countdowns: event title + time remaining only, no
   // region attribution (which regions have/haven't responded stays on the

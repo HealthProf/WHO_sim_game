@@ -49,8 +49,15 @@ export async function GET(req: NextRequest) {
 
   // Cheat code #5's "revert to zero" — a purely cosmetic taper applied here,
   // never to the underlying model_state row (see lib/cheat-engine.ts).
+  // Fail-safe: this whole endpoint is on the critical path for every screen
+  // in the game, so a cheat-code subsystem problem (e.g. a database that
+  // hasn't been migrated with the cheat_code_* tables yet) must never take
+  // the rest of the dashboard down with it.
   const gameDaysPerRealMinute = gs?.gameDaysPerRealMinute && gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
-  const revertOverrides = await getRevertOverridesForSession(sessionId, gameDaysPerRealMinute);
+  const revertOverrides = await getRevertOverridesForSession(sessionId, gameDaysPerRealMinute).catch((e) => {
+    console.error("[dashboard] getRevertOverridesForSession failed:", e);
+    return {} as Record<string, { confirmedCases: number; deaths: number }>;
+  });
 
   const sharedSummary = allRegions.map((r) => {
     const s = allModelState.find((m) => m.regionId === r.id)!;
@@ -118,7 +125,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const cheat = await getCheatDisplayState(sessionId);
+  const cheat = await getCheatDisplayState(sessionId).catch((e) => {
+    console.error("[dashboard] getCheatDisplayState failed:", e);
+    return { godModeActive: false, barrelRollAt: null, monologue: null };
+  });
   // Reused so the instructor console (which has no per-team announcement
   // watcher) can surface the same "announced globally" cheat-code messages
   // the projector shows — see components/cheat-code-widget.tsx.
