@@ -1,4 +1,4 @@
-import { ownedDemoSession } from "@/lib/session-context";
+import { ownedActiveSession } from "@/lib/session-context";
 import { SignOutButton } from "@/components/signout-button";
 import { HeaderClock } from "@/components/header-clock";
 import { ResetSimulationButton } from "@/components/reset-simulation-button";
@@ -6,7 +6,8 @@ import { RoleSwitcher } from "@/components/role-switcher";
 import Link from "next/link";
 
 export default async function InstructorLayout({ children }: { children: React.ReactNode }) {
-  const demoSession = await ownedDemoSession();
+  const active = await ownedActiveSession();
+  const demoSession = active?.mode === "demo" ? active : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -24,6 +25,15 @@ export default async function InstructorLayout({ children }: { children: React.R
         <Link href="/debrief" className="text-slate-300 hover:text-white shrink-0">Debrief</Link>
         <Link href="/log" className="text-slate-300 hover:text-white shrink-0">Action Log</Link>
         <Link href="/guide" className="text-slate-300 hover:text-white shrink-0">Guide</Link>
+        {/* Instructor mode only — demo sessions have no region logins at all
+            (see lib/session-lifecycle.ts createSession), so there is no
+            credential sheet to re-show. */}
+        {active?.mode === "instructor" && (
+          <Link href={`/sessions/${active.sessionId}/credentials`} className="text-slate-300 hover:text-white shrink-0">
+            Login Details
+          </Link>
+        )}
+        <Link href="/sessions" className="text-slate-300 hover:text-white shrink-0">Switch Mode</Link>
         <SignOutButton />
         <ResetSimulationButton />
       </nav>

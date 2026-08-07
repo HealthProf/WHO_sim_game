@@ -47,9 +47,14 @@ async function resolveActor(): Promise<Actor | null> {
   // (lib/auth.ts) found an owned, non-archived session at sign-in/update time.
   if (user.role !== "instructor" || !user.userId) return null;
 
+  // An account can own one active session per mode (see POST /api/sessions),
+  // so "which one am I acting in" needs a tiebreak. lastActivityAt is it: this
+  // function bumps it on every authenticated request, so the session you're
+  // working in stays selected, and POST /api/sessions/[id]/activate bumps the
+  // other one to switch modes deliberately.
   const owned = await db.query.gameSessions.findFirst({
     where: and(eq(gameSessions.ownerUserId, user.userId), ne(gameSessions.status, "archived")),
-    orderBy: desc(gameSessions.createdAt),
+    orderBy: desc(gameSessions.lastActivityAt),
   });
   if (!owned) return null;
 
@@ -110,19 +115,27 @@ export async function requireTeamActor(): Promise<{ actor: Actor | null; error: 
   return { actor, error: null };
 }
 
-// Server-component helper for rendering the demo-mode role switcher
-// (components/role-switcher.tsx) — distinct from requireActor() above
-// because a layout needs to know "is this a demo session at all" to decide
-// whether to render the switcher, not just resolve the current actor.
-export async function ownedDemoSession(): Promise<{ sessionId: string; demoActiveRegionId: string | null } | null> {
+// Server-component helper for the instructor/dashboard layouts — distinct
+// from requireActor() above because a layout needs the session's mode and id
+// to decide what chrome to render (the demo role switcher, the credential
+// sheet link), not just the resolved actor. Selects the same session
+// resolveActor() would, so the chrome always matches the session the API
+// routes are acting on.
+export interface OwnedSessionSummary {
+  sessionId: string;
+  mode: "instructor" | "demo";
+  demoActiveRegionId: string | null;
+}
+
+export async function ownedActiveSession(): Promise<OwnedSessionSummary | null> {
   const authSession = await auth();
   const user = authSession?.user;
   if (!user || user.kind !== "user" || !user.userId) return null;
 
   const owned = await db.query.gameSessions.findFirst({
-    where: and(eq(gameSessions.ownerUserId, user.userId), ne(gameSessions.status, "archived"), eq(gameSessions.mode, "demo")),
-    orderBy: desc(gameSessions.createdAt),
+    where: and(eq(gameSessions.ownerUserId, user.userId), ne(gameSessions.status, "archived")),
+    orderBy: desc(gameSessions.lastActivityAt),
   });
   if (!owned) return null;
-  return { sessionId: owned.id, demoActiveRegionId: owned.demoActiveRegionId };
+  return { sessionId: owned.id, mode: owned.mode, demoActiveRegionId: owned.demoActiveRegionId };
 }
