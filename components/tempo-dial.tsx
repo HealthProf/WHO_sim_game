@@ -22,21 +22,21 @@ export function TempoDial({ intensityMultiplier }: { intensityMultiplier: number
   });
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-slate-200">Tempo</h2>
-        <span className="text-xs text-slate-500">Scales Rt drift, WHO HQ prices, and deadline windows together</span>
+    <section className="rounded-lg bg-surface p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-bold text-text">Tempo</h2>
+        <span className="text-xs text-neutral-700">Scales Rt drift, WHO HQ prices, and deadline windows together</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 rounded-full bg-neutral-200 p-[5px]">
         {NOTCHES.map((n) => {
-          const active = Math.abs(intensityMultiplier - n.value) < 0.01;
+          const isActive = Math.abs(intensityMultiplier - n.value) < 0.01;
           return (
             <button
               key={n.value}
               onClick={() => setTempo.mutate(n.value)}
               disabled={setTempo.isPending}
-              className={`flex-1 rounded-md px-2 py-2 text-xs font-medium transition-colors ${
-                active ? "bg-orange-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+              className={`flex-1 rounded-full px-2 py-2 text-xs font-medium transition-colors duration-150 ${
+                isActive ? "bg-accent-700 text-white" : "text-neutral-700 hover:text-text"
               }`}
             >
               <p>{n.label}</p>

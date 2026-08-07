@@ -2,77 +2,81 @@
 
 import { useState } from "react";
 import type { SummaryRound } from "@/lib/summary-report";
-
-const tierColor: Record<string, string> = {
-  OPTIMAL: "text-emerald-400 border-emerald-700",
-  ADEQUATE: "text-blue-400 border-blue-700",
-  INADEQUATE: "text-amber-400 border-amber-700",
-  CRITICAL_FAILURE: "text-red-400 border-red-700",
-};
+import { TierChip } from "@/components/ui/chip";
+import { PillButton } from "@/components/ui/pill-button";
 
 // Click-through, one-round-per-panel viewer for the after-action summary.
-// `large` renders projector-sized text for the public display.
+// `large` renders projector-sized text for the public display, which is
+// also the app's one full-bleed dark surface — everywhere else (team
+// summary, instructor debrief) is the light card system.
 export function SummaryReportViewer({ rounds, large = false }: { rounds: SummaryRound[]; large?: boolean }) {
   const [index, setIndex] = useState(0);
 
+  const mutedText = large ? "text-neutral-400" : "text-neutral-700";
   if (rounds.length === 0) {
-    return <p className={large ? "text-2xl text-slate-400" : "text-slate-400"}>No decisions were scored this session.</p>;
+    return <p className={large ? `text-2xl ${mutedText}` : mutedText}>No decisions were scored this session.</p>;
   }
 
   const round = rounds[Math.min(index, rounds.length - 1)];
-  const titleSize = large ? "text-4xl" : "text-xl";
+  const titleSize = large ? "text-4xl" : "text-[21px]";
   const bodySize = large ? "text-xl" : "text-sm";
-  const navSize = large ? "text-2xl px-6 py-3" : "text-sm px-3 py-1.5";
+  const navSize = large ? "text-2xl" : "text-sm";
+  const cardBg = large ? "bg-neutral-800" : "bg-bg";
+  const panelBg = large ? "bg-neutral-900" : "bg-surface";
+  const headingText = large ? "text-white" : "text-text";
+  const bodyText = large ? "text-neutral-300" : "text-neutral-700";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <button
+        <PillButton
+          tone={large ? "ghost-dark" : "ghost"}
           onClick={() => setIndex((i) => Math.max(0, i - 1))}
           disabled={index === 0}
-          className={`rounded-md bg-slate-800 hover:bg-slate-700 disabled:opacity-30 font-medium ${navSize}`}
+          className={navSize}
         >
           ← Prev
-        </button>
-        <span className={`text-slate-400 ${large ? "text-2xl" : "text-sm"}`}>
+        </PillButton>
+        <span className={`${mutedText} ${large ? "text-2xl" : "text-sm"}`}>
           Round {index + 1} of {rounds.length}
         </span>
-        <button
+        <PillButton
+          tone={large ? "ghost-dark" : "ghost"}
           onClick={() => setIndex((i) => Math.min(rounds.length - 1, i + 1))}
           disabled={index === rounds.length - 1}
-          className={`rounded-md bg-slate-800 hover:bg-slate-700 disabled:opacity-30 font-medium ${navSize}`}
+          className={navSize}
         >
           Next →
-        </button>
+        </PillButton>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+      <div className={`space-y-4 rounded-lg p-6 ${panelBg}`}>
         <div>
-          <p className={`text-slate-500 uppercase tracking-wide ${large ? "text-lg" : "text-xs"}`}>
+          <p className={`uppercase tracking-wide ${mutedText} ${large ? "text-lg" : "text-xs"}`}>
             Day {round.day} · {round.category}
           </p>
-          <h2 className={`font-semibold ${titleSize}`}>{round.title}</h2>
-          <p className={`text-slate-400 mt-2 ${bodySize}`}>{round.narrativeMarkdown}</p>
+          <h2 className={`font-heading ${titleSize} ${headingText}`}>{round.title}</h2>
+          <p className={`mt-2 ${bodySize} ${bodyText}`}>{round.narrativeMarkdown}</p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           {round.entries.map((entry) => (
-            <div key={entry.regionId} className={`border rounded-lg p-4 ${tierColor[entry.tier ?? ""] ?? "border-slate-700 text-slate-300"}`}>
+            <div key={entry.regionId} className={`rounded-lg p-4 ${cardBg}`}>
               <div className="flex items-center justify-between">
-                <span className={`font-semibold ${large ? "text-xl" : "text-base"} text-slate-100`}>{entry.regionId}</span>
-                {entry.tier && <span className={`font-semibold ${large ? "text-lg" : "text-xs"}`}>{entry.tier.replace("_", " ")}</span>}
+                <span className={`font-semibold ${large ? "text-xl" : "text-base"} ${headingText}`}>{entry.regionId}</span>
+                {entry.tier && <TierChip tier={entry.tier} />}
               </div>
               {entry.structuredChoice && (
-                <p className={`text-slate-300 mt-1 ${bodySize}`}>Choice: {entry.structuredChoice}</p>
+                <p className={`mt-1 ${bodySize} ${bodyText}`}>Choice: {entry.structuredChoice}</p>
               )}
               {entry.resourceAllocationJson && (
-                <p className={`text-slate-400 mt-1 ${large ? "text-base" : "text-xs"}`}>
+                <p className={`mt-1 ${mutedText} ${large ? "text-base" : "text-xs"}`}>
                   Allocation: {JSON.stringify(entry.resourceAllocationJson)}
                 </p>
               )}
-              <p className={`text-slate-300 mt-2 ${bodySize} whitespace-pre-wrap`}>{entry.rationaleText}</p>
+              <p className={`mt-2 whitespace-pre-wrap ${bodySize} ${bodyText}`}>{entry.rationaleText}</p>
               {entry.impactDesc && (
-                <p className={`text-slate-400 mt-2 italic ${large ? "text-base" : "text-xs"}`}>{entry.impactDesc}</p>
+                <p className={`mt-2 italic ${mutedText} ${large ? "text-base" : "text-xs"}`}>{entry.impactDesc}</p>
               )}
             </div>
           ))}

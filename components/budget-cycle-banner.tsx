@@ -47,18 +47,18 @@ export function BudgetCycleBanner() {
   if (cycle.status === "collecting_responses") {
     if (data.myResponse) {
       return (
-        <section className="bg-emerald-950/40 border border-emerald-800 rounded-xl p-4 text-sm text-emerald-300">
+        <section className="rounded-lg bg-accent-2-100 p-4 text-sm text-accent-2-800">
           Budget cycle #{cycle.cycleNumber}: you {data.myResponse.choice === "accept" ? "accepted the standard disbursement" : `requested $${(data.myResponse.requestedAmount ?? 0).toLocaleString()}`}. Waiting on other regions ({data.respondedCount}/{data.totalTeams} responded).
         </section>
       );
     }
     return (
-      <section className="bg-amber-950/40 border-2 border-amber-700 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-semibold text-amber-300">
+      <section className="space-y-3 rounded-lg bg-accent-100 p-4">
+        <p className="text-sm font-semibold text-accent-800">
           Budget Cycle #{cycle.cycleNumber} — standard disbursement is ${data.myDefaultAmount?.toLocaleString()}. Accept it, or request more.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => respond.mutate({ choice: "accept" })} disabled={respond.isPending} className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2">
+          <button onClick={() => respond.mutate({ choice: "accept" })} disabled={respond.isPending} className="rounded-full bg-accent-700 hover:bg-accent-600 text-white text-sm font-bold px-4 py-2">
             Accept ${data.myDefaultAmount?.toLocaleString()}
           </button>
           <input
@@ -67,12 +67,12 @@ export function BudgetCycleBanner() {
             value={requestedAmount}
             onChange={(e) => setRequestedAmount(e.target.value)}
             placeholder="Amount to request"
-            className="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm w-40"
+            className="rounded-full bg-bg border-2 border-divider px-4 py-2 text-sm w-40"
           />
           <button
             onClick={() => Number(requestedAmount) > 0 && respond.mutate({ choice: "request_more", requestedAmount: Number(requestedAmount) })}
             disabled={respond.isPending || !(Number(requestedAmount) > 0)}
-            className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-medium px-4 py-2"
+            className="rounded-full bg-accent-2-700 hover:bg-accent-2-600 disabled:opacity-40 text-white text-sm font-bold px-4 py-2"
           >
             Request More
           </button>
@@ -85,21 +85,21 @@ export function BudgetCycleBanner() {
     const amIRequester = data.myResponse?.choice === "request_more";
     if (amIRequester) {
       return (
-        <section className="bg-purple-950/40 border border-purple-800 rounded-xl p-4 text-sm text-purple-300">
+        <section className="rounded-lg bg-neutral-200 p-4 text-sm text-neutral-800">
           Budget cycle #{cycle.cycleNumber}: your request for ${(data.myResponse?.requestedAmount ?? 0).toLocaleString()} is out to the other regions — they have a short window to donate part of their own disbursement to you.
         </section>
       );
     }
     if (data.myDonation !== null) {
       return (
-        <section className="bg-emerald-950/40 border border-emerald-800 rounded-xl p-4 text-sm text-emerald-300">
+        <section className="rounded-lg bg-accent-2-100 p-4 text-sm text-accent-2-800">
           You donated ${data.myDonation.toLocaleString()} toward {data.requesters.map((r) => r.regionId).join(", ")}&apos;s request.
         </section>
       );
     }
     return (
-      <section className="bg-purple-950/40 border-2 border-purple-700 rounded-xl p-4 space-y-3">
-        <p className="text-sm font-semibold text-purple-300">
+      <section className="space-y-3 rounded-lg bg-accent-100 p-4">
+        <p className="text-sm font-semibold text-accent-800">
           {data.requesters.map((r) => `${r.regionId} ($${(r.requestedAmount ?? 0).toLocaleString()})`).join(", ")} requested extra funding this cycle. Donate part of your own ${data.myDefaultAmount?.toLocaleString()} disbursement, or donate $0.
         </p>
         <div className="flex items-center gap-2">
@@ -110,12 +110,12 @@ export function BudgetCycleBanner() {
             value={donationAmount}
             onChange={(e) => setDonationAmount(e.target.value)}
             placeholder="Donation amount"
-            className="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm w-40"
+            className="rounded-full bg-bg border-2 border-divider px-4 py-2 text-sm w-40"
           />
           <button
             onClick={() => donate.mutate(Number(donationAmount) || 0)}
             disabled={donate.isPending || Number(donationAmount) < 0}
-            className="rounded-md bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-sm font-medium px-4 py-2"
+            className="rounded-full bg-accent-700 hover:bg-accent-600 disabled:opacity-40 text-white text-sm font-bold px-4 py-2"
           >
             Confirm Donation
           </button>

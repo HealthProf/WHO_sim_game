@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
+import { Chip, type ChipTone } from "@/components/ui/chip";
 import Link from "next/link";
 
 interface EventsData {
@@ -17,11 +18,11 @@ interface DashboardData {
   globalState: { totalGameDays: number; gameDaysPerRealMinute: number };
 }
 
-const statusColor: Record<string, string> = {
-  dispatched: "text-amber-400",
-  responded: "text-blue-400",
-  scored: "text-emerald-400",
-  closed: "text-slate-500",
+const statusTone: Record<string, ChipTone> = {
+  dispatched: "accent-soft",
+  responded: "neutral-soft",
+  scored: "sage-soft",
+  closed: "neutral-outline",
 };
 
 export default function EventsPage() {
@@ -37,7 +38,7 @@ export default function EventsPage() {
   });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="events" />;
-  if (isLoading || !data) return <p className="text-slate-400">Loading events...</p>;
+  if (isLoading || !data) return <p className="text-neutral-700">Loading events...</p>;
 
   const totalGameDays = dash?.globalState.totalGameDays ?? 90;
   const gameDaysPerRealMinute = dash?.globalState.gameDaysPerRealMinute ?? 1.5;
@@ -46,35 +47,37 @@ export default function EventsPage() {
     .slice()
     .sort((a, b) => new Date(b.dispatchedAt).getTime() - new Date(a.dispatchedAt).getTime());
 
-  if (dispatchesByEvent.length === 0) {
-    return <p className="text-slate-400">No events have been dispatched to your team yet.</p>;
-  }
-
   return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-semibold mb-3">Your Events</h2>
-      {dispatchesByEvent.map((d) => {
-        const event = data.events.find((e) => e.id === d.eventId);
-        const gameDay = event ? mapNarrativeDayToGameDay(event.day, totalGameDays) : null;
-        return (
-          <Link
-            key={d.id}
-            href={`/events/${d.id}`}
-            className="block bg-slate-900 border border-slate-800 rounded-lg p-4 hover:border-slate-700 transition"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">{event?.title ?? d.eventId}</p>
-                <p className="text-xs text-slate-500">
-                  {d.eventId} · Game Day {gameDay}
-                </p>
-              </div>
-              <span className={`text-xs font-medium uppercase ${statusColor[d.status] ?? "text-slate-400"}`}>{d.status}</span>
-            </div>
-            {d.deadlineAt && <Countdown deadlineAt={d.deadlineAt} gameDaysPerRealMinute={gameDaysPerRealMinute} />}
-          </Link>
-        );
-      })}
+    <div className="flex flex-col gap-[26px]">
+      <h1 className="font-heading text-[32px] text-text">Events</h1>
+      {dispatchesByEvent.length === 0 ? (
+        <p className="text-neutral-700">No events have been dispatched to your team yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {dispatchesByEvent.map((d) => {
+            const event = data.events.find((e) => e.id === d.eventId);
+            const gameDay = event ? mapNarrativeDayToGameDay(event.day, totalGameDays) : null;
+            return (
+              <Link
+                key={d.id}
+                href={`/events/${d.id}`}
+                className="block rounded-lg bg-surface p-4 transition-colors duration-150 hover:bg-neutral-200"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-text">{event?.title ?? d.eventId}</p>
+                    <p className="text-xs text-neutral-700">
+                      {d.eventId} · Game Day {gameDay}
+                    </p>
+                  </div>
+                  <Chip tone={statusTone[d.status] ?? "neutral-soft"}>{d.status}</Chip>
+                </div>
+                {d.deadlineAt && <Countdown deadlineAt={d.deadlineAt} gameDaysPerRealMinute={gameDaysPerRealMinute} />}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -92,7 +95,7 @@ function Countdown({ deadlineAt, gameDaysPerRealMinute }: { deadlineAt: string; 
   const seconds = Math.max(0, Math.floor((remaining % 60000) / 1000));
   const gameDaysRemaining = realMsToGameDays(Math.max(0, remaining), gameDaysPerRealMinute);
   return (
-    <p className={`text-xs mt-2 ${expired ? "text-red-400" : "text-slate-400"}`}>
+    <p className={`mt-2 text-xs ${expired ? "text-accent-800" : "text-neutral-700"}`}>
       {expired ? "Deadline passed" : `Deadline in ${minutes}m ${seconds}s (≈ ${formatGameDays(gameDaysRemaining)})`}
     </p>
   );

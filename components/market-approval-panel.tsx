@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { Chip } from "@/components/ui/chip";
+import { PillButton } from "@/components/ui/pill-button";
 
 interface PendingRequest {
   id: number;
@@ -49,57 +51,45 @@ export function MarketApprovalPanel() {
   const requests = pending?.requests ?? [];
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+    <section className="space-y-3 rounded-lg bg-surface p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">WHO HQ Marketplace</h2>
-        {requests.length > 0 && (
-          <span className="text-xs uppercase font-semibold rounded-full px-2 py-0.5 bg-amber-900/60 text-amber-300">
-            {requests.length} pending
-          </span>
-        )}
+        <h2 className="font-heading text-[21px] text-text">WHO HQ Marketplace</h2>
+        {requests.length > 0 && <Chip tone="accent-soft">{requests.length} pending</Chip>}
       </div>
       {market && (
-        <div className="grid sm:grid-cols-2 gap-3 text-sm">
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <p className="text-xs text-slate-500">PPE stock / current price</p>
-            <p className="font-semibold">{market.whoHqPpeStock.toLocaleString()} days — ${market.prices.PPE_DAYS.toLocaleString()}/unit</p>
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="rounded-md bg-bg p-3">
+            <p className="text-xs text-neutral-700">PPE stock / current price</p>
+            <p className="font-semibold text-text">{market.whoHqPpeStock.toLocaleString()} days — ${market.prices.PPE_DAYS.toLocaleString()}/unit</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <p className="text-xs text-slate-500">Antiviral stock / current price</p>
-            <p className="font-semibold">{market.whoHqAntiviralsStock.toLocaleString()} doses — ${market.prices.ANTIVIRALS.toLocaleString()}/unit</p>
+          <div className="rounded-md bg-bg p-3">
+            <p className="text-xs text-neutral-700">Antiviral stock / current price</p>
+            <p className="font-semibold text-text">{market.whoHqAntiviralsStock.toLocaleString()} doses — ${market.prices.ANTIVIRALS.toLocaleString()}/unit</p>
           </div>
         </div>
       )}
       {requests.length === 0 ? (
-        <p className="text-sm text-slate-500">No purchase requests waiting on approval.</p>
+        <p className="text-sm text-neutral-700">No purchase requests waiting on approval.</p>
       ) : (
         <div className="space-y-2">
           {requests.map((r) => (
-            <div key={r.id} className="flex items-center justify-between gap-3 bg-slate-800/60 rounded-lg p-3 text-sm">
-              <span>
+            <div key={r.id} className="flex items-center justify-between gap-3 rounded-lg bg-bg p-3 text-sm">
+              <span className="text-text">
                 <strong>{r.regionId}</strong> wants {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()} total (${r.pricePerUnit.toLocaleString()}/unit)
               </span>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => resolve.mutate({ requestId: r.id, action: "approve" })}
-                  disabled={resolve.isPending}
-                  className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5"
-                >
+              <div className="flex shrink-0 gap-2">
+                <PillButton size="sm" tone="sage" onClick={() => resolve.mutate({ requestId: r.id, action: "approve" })} disabled={resolve.isPending}>
                   Approve
-                </button>
-                <button
-                  onClick={() => resolve.mutate({ requestId: r.id, action: "reject" })}
-                  disabled={resolve.isPending}
-                  className="rounded-md bg-red-700 hover:bg-red-600 text-white text-xs font-medium px-3 py-1.5"
-                >
+                </PillButton>
+                <PillButton size="sm" tone="ghost" onClick={() => resolve.mutate({ requestId: r.id, action: "reject" })} disabled={resolve.isPending}>
                   Reject
-                </button>
+                </PillButton>
               </div>
             </div>
           ))}
         </div>
       )}
-      {resolve.isError && <p className="text-sm text-red-400">{(resolve.error as Error).message}</p>}
+      {resolve.isError && <p className="text-sm font-medium text-accent-800">{(resolve.error as Error).message}</p>}
     </section>
   );
 }

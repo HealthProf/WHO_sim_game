@@ -1,5 +1,7 @@
 "use client";
 
+import { PillButton } from "@/components/ui/pill-button";
+
 // Shared "stuck loading forever" fix: react-query's `data` stays undefined
 // both while a request is still in flight AND after it has failed and
 // given up retrying, so `if (!data) return <p>Loading...</p>` can't tell
@@ -17,11 +19,11 @@ export function QueryError({
 }) {
   const message = error instanceof Error ? error.message : "Unknown error";
   return (
-    <div className="text-sm space-y-2">
-      <p className="text-red-400">Couldn&apos;t load {label}: {message}</p>
-      <button onClick={onRetry} className="rounded-md bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium px-3 py-1.5">
+    <div className="space-y-2 text-sm">
+      <p className="font-medium text-accent-800">Couldn&apos;t load {label}: {message}</p>
+      <PillButton size="sm" tone="ghost" onClick={onRetry}>
         Retry
-      </button>
+      </PillButton>
     </div>
   );
 }

@@ -40,29 +40,29 @@ export function InterjectionPanel() {
   });
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-sm font-semibold text-slate-200">Scripted Interjections</h2>
-        <select value={target} onChange={(e) => setTarget(e.target.value)} className="rounded-md bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs">
+    <section className="space-y-3 rounded-lg bg-surface p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-text">Scripted Interjections</h2>
+        <select value={target} onChange={(e) => setTarget(e.target.value)} className="rounded-full border-2 border-divider bg-bg px-3 py-1.5 text-xs">
           <option value="all">Whole room</option>
           {REGIONS.map((r) => (
             <option key={r} value={r}>{r} only</option>
           ))}
         </select>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {INTERJECTIONS.map((i) => (
           <button
             key={i.id}
             onClick={() => fire.mutate(i.id)}
             disabled={fire.isPending}
-            className="rounded-md bg-slate-800 hover:bg-orange-900/60 border border-slate-700 hover:border-orange-700 text-xs font-medium px-2 py-2 text-left disabled:opacity-50"
+            className="rounded-md bg-bg px-2 py-2 text-left text-xs font-medium text-text transition-colors duration-150 hover:bg-accent-100 hover:text-accent-800 disabled:opacity-50"
           >
             {i.title}
           </button>
         ))}
       </div>
-      {lastFired && <p className="text-xs text-orange-400">Fired &quot;{lastFired}&quot; to {target === "all" ? "the whole room" : target}.</p>}
+      {lastFired && <p className="text-xs font-medium text-accent-700">Fired &quot;{lastFired}&quot; to {target === "all" ? "the whole room" : target}.</p>}
     </section>
   );
 }

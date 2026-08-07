@@ -19,7 +19,7 @@ export function DeadlineCountdown({ deadlineAt, className }: { deadlineAt: strin
   const seconds = Math.max(0, Math.floor((remainingMs % 60000) / 1000));
 
   return (
-    <span className={className ?? (expired ? "text-red-400" : "text-amber-400")}>
+    <span className={className ?? (expired ? "text-accent-800" : "text-accent-700")}>
       {expired ? "Deadline passed" : `${minutes}m ${String(seconds).padStart(2, "0")}s`}
     </span>
   );

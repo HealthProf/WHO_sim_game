@@ -33,7 +33,7 @@ export function ResetSimulationButton() {
     <button
       onClick={handleReset}
       disabled={resetSimulation.isPending}
-      className="rounded-md bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5"
+      className="rounded-full bg-accent-800 hover:bg-accent-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5"
     >
       {resetSimulation.isPending ? "Resetting..." : "Reset Simulation"}
     </button>

@@ -32,7 +32,7 @@ export function OpenDisplayButton({
       onClick={open}
       className={
         className ??
-        "rounded-md bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3 py-1 text-sm text-slate-200 shrink-0"
+        "shrink-0 rounded-full border-2 border-neutral-700 px-3 py-1 text-sm text-neutral-300 hover:bg-neutral-800"
       }
     >
       {label}

@@ -31,7 +31,7 @@ export function RoleSwitcher({ sessionId, currentRegionId }: { sessionId: string
       value={currentRegionId ?? "INSTRUCTOR"}
       disabled={pending}
       onChange={(e) => switchTo(e.target.value === "INSTRUCTOR" ? null : e.target.value)}
-      className="rounded-md bg-slate-800 border border-slate-700 px-2 py-1 text-xs text-slate-200"
+      className="rounded-full bg-neutral-800 border border-neutral-700 px-3 py-1 text-xs text-neutral-200"
       title="Demo mode: switch which role you're playing"
     >
       <option value="INSTRUCTOR">Playing: Instructor</option>
