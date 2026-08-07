@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Split Console — design reference (Operation Veiled Horizon)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-bg: #f5ead8;
+  --color-surface: #ebddc5;
+  --color-text: #201e1d;
+  --color-accent: #c67139;
+  --color-accent-2: #7a8a5e;
+  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+
+  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
+     same step of any role matches the others in visual value. */
+  --color-neutral-100: #f9f4ed;
+  --color-neutral-200: #eee7db;
+  --color-neutral-300: #dcd3c4;
+  --color-neutral-400: #c0b6a5;
+  --color-neutral-500: #a19786;
+  --color-neutral-600: #82796a;
+  --color-neutral-700: #645c50;
+  --color-neutral-800: #474238;
+  --color-neutral-900: #2e2b25;
+
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  --font-heading: "Caprasimo", system-ui, sans-serif;
+  --font-heading-weight: 400;
+  --font-body: "Figtree", system-ui, sans-serif;
+
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  /* Elevation — derived from the ground: soft ink-tinted shadows on a
+     light theme, a hairline edge + ambient darkness on a dark one. */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); }
+.opt { width: 860px; }
+.opt-title { font-family: var(--font-heading); font-size: 27px; margin: 12px 0 6px; }
+.opt-note { font-family: var(--font-body); font-size: 15px; line-height: 1.5; color: var(--color-neutral-700); margin: 0 0 20px; max-width: 640px; text-wrap: pretty; }
+.badge { display: inline-block; font-family: ui-monospace, monospace; font-size: 13px; font-weight: 700; letter-spacing: .06em; background: var(--color-accent); color: #fff; border-radius: 999px; padding: 4px 14px; }
+.frame { border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg); }
+</style>
+</head>
+<body>
+<div style="padding: 48px">
+<!-- ============ 1c ============ -->
+    <div class="opt" id="1c">
+      <span class="badge">1c</span>
+      <h2 class="opt-title">Split Console — the desk you work at</h2>
+      <p class="opt-note">Answers "hard to work with" structurally rather than cosmetically: your ledger, your clock and your open deadline live in a rail that never goes away, so you never lose your resources while reading an event or negotiating a trade. The right column swaps between the ten pages. Fewest clicks of the three, densest of the three.</p>
+
+      <div class="frame" style="background: var(--color-bg); display: flex; min-height: 780px">
+        <div style="width: 268px; flex-shrink: 0; background: var(--color-neutral-900); padding: 26px 22px; display: flex; flex-direction: column; gap: 26px">
+          <div>
+            <p style="font-family: var(--font-body); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--color-neutral-500); margin: 0">Veiled Horizon</p>
+            <h1 style="font-family: var(--font-heading); font-size: 24px; margin: 6px 0 0; color: #fff; line-height: 1.15">AFRO<br>Regional Office</h1>
+          </div>
+
+          <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 16px 18px">
+            <p style="font-family: var(--font-body); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-300); margin: 0 0 4px">Deadline</p>
+            <p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 0; letter-spacing: -.02em">3:12</p>
+            <p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-200); margin: 4px 0 0; line-height: 1.35">Antiviral Stockpile Allocation</p>
+          </div>
+
+          <div>
+            <p style="font-family: var(--font-body); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-neutral-500); margin: 0 0 12px">Your ledger</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-family: var(--font-body)">
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Fund</span><span style="font-size: 17px; font-weight: 700; color: #fff">$840K</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">PPE days</span><span style="font-size: 17px; font-weight: 700; color: #fff">21</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Antivirals</span><span style="font-size: 17px; font-weight: 700; color: #fff">34,000</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">HCW surge</span><span style="font-size: 17px; font-weight: 700; color: #fff">12%</span></div>
+              <div style="height: 1px; background: var(--color-neutral-700); margin: 4px 0"></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Your Rt</span><span style="font-size: 17px; font-weight: 700; color: var(--color-accent-300)">1.61 ↑</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Trust</span><span style="font-size: 17px; font-weight: 700; color: #fff">41</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Tension</span><span style="font-size: 17px; font-weight: 700; color: #fff">58</span></div>
+            </div>
+          </div>
+
+          <div>
+            <p style="font-family: var(--font-body); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-neutral-500); margin: 0 0 10px">Go to</p>
+            <div style="display: flex; flex-direction: column; gap: 2px; font-family: var(--font-body); font-size: 15px">
+              <span style="background: var(--color-accent); color: #fff; border-radius: 999px; padding: 8px 16px; font-weight: 700">Situation</span>
+              <span style="color: var(--color-neutral-300); padding: 8px 16px; display: flex; justify-content: space-between">Events <span style="background: var(--color-accent); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 700">1</span></span>
+              <span style="color: var(--color-neutral-300); padding: 8px 16px">Coordination</span>
+              <span style="color: var(--color-neutral-300); padding: 8px 16px">Pledges</span>
+              <span style="color: var(--color-neutral-300); padding: 8px 16px">Marketplace</span>
+              <span style="color: var(--color-neutral-300); padding: 8px 16px">Funding</span>
+              <span style="color: var(--color-neutral-300); padding: 8px 16px">Briefing</span>
+            </div>
+          </div>
+
+          <div style="margin-top: auto; border-top: 1px solid var(--color-neutral-700); padding-top: 16px; font-family: var(--font-body)">
+            <p style="font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-neutral-500); margin: 0">In-game</p>
+            <p style="font-size: 18px; font-weight: 700; color: #fff; margin: 2px 0 0">Day 34 · 08:12</p>
+            <div style="height: 4px; background: var(--color-neutral-700); border-radius: 999px; margin-top: 6px; overflow: hidden"><div style="height: 100%; width: 38%; background: var(--color-accent-400)"></div></div>
+          </div>
+        </div>
+
+        <div style="flex: 1; min-width: 0; padding: 30px 34px; display: flex; flex-direction: column; gap: 26px">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px">
+            <h2 style="font-family: var(--font-heading); font-size: 32px; margin: 0; color: var(--color-text)">Situation</h2>
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span style="background: var(--color-accent); color: #fff; border-radius: 999px; padding: 6px 18px; font-family: var(--font-body); font-size: 14px; font-weight: 700">Amber</span>
+              <span style="font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-700)">Global Rt <b style="color: var(--color-text)">1.42</b></span>
+              <span style="font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-700)">Media <b style="color: var(--color-text)">61</b></span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; background: var(--color-neutral-200); border-radius: 999px; padding: 5px; font-family: var(--font-body); font-size: 14px; align-self: flex-start">
+            <span style="background: var(--color-bg); border-radius: 999px; padding: 7px 20px; font-weight: 700; box-shadow: var(--shadow-sm)">Overview</span>
+            <span style="padding: 7px 20px; color: var(--color-neutral-700)">All regions</span>
+            <span style="padding: 7px 20px; color: var(--color-neutral-700)">Projection</span>
+            <span style="padding: 7px 20px; color: var(--color-neutral-700)">Recent developments</span>
+          </div>
+
+          <div style="background: var(--color-accent-100); border-radius: var(--radius-lg); padding: 22px 24px; display: flex; align-items: center; gap: 20px">
+            <div style="flex: 1">
+              <p style="font-family: var(--font-body); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-700); margin: 0 0 4px">Open decision</p>
+              <p style="font-family: var(--font-heading); font-size: 21px; margin: 0; color: var(--color-accent-900)">Antiviral Stockpile Allocation</p>
+              <p style="font-family: var(--font-body); font-size: 14px; color: var(--color-accent-800); margin: 4px 0 0">Hard deadline · 180,000 courses across six regions</p>
+            </div>
+            <span style="background: var(--color-accent); color: #fff; border-radius: 999px; padding: 11px 26px; font-family: var(--font-body); font-size: 15px; font-weight: 700">Respond</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+            <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: 20px 22px">
+              <p style="font-family: var(--font-body); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 10px">Your visibility gap</p>
+              <p style="font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-800); margin: 0 0 14px; line-height: 1.5">You confirm 4,120 cases. The model estimates the truth is between 9,800 and 16,400.</p>
+              <div style="height: 26px; background: var(--color-neutral-300); border-radius: 999px; position: relative; overflow: hidden">
+                <div style="position: absolute; inset: 0; width: 100%; background: var(--color-accent-200)"></div>
+                <div style="position: absolute; inset: 0; width: 25%; background: var(--color-accent); border-radius: 999px"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-family: var(--font-body); font-size: 13px; color: var(--color-neutral-700); margin-top: 6px"><span>confirmed</span><span>estimated true</span></div>
+            </div>
+            <div style="background: var(--color-accent-2-100); border-radius: var(--radius-lg); padding: 20px 22px">
+              <p style="font-family: var(--font-body); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-2-700); margin: 0 0 10px">If nothing changes</p>
+              <div style="display: flex; gap: 24px; font-family: var(--font-body)">
+                <div><p style="font-size: 13px; color: var(--color-accent-2-700); margin: 0">Now</p><p style="font-size: 24px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">4,120</p></div>
+                <div><p style="font-size: 13px; color: var(--color-accent-2-700); margin: 0">+14d</p><p style="font-size: 24px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">7,980</p></div>
+                <div><p style="font-size: 13px; color: var(--color-accent-2-700); margin: 0">+28d</p><p style="font-size: 24px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">15,460</p></div>
+              </div>
+              <p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-2-700); margin: 14px 0 0; line-height: 1.45">Private to your region. Assumes Rt 1.61 holds — a real decision will move it.</p>
+            </div>
+          </div>
+
+          <div>
+            <p style="font-family: var(--font-body); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-neutral-700); margin: 0 0 12px">All six regions</p>
+            <table style="width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: 14px">
+              <thead><tr style="text-align: left; color: var(--color-neutral-600); border-bottom: 2px solid var(--color-divider)">
+                <th style="padding: 7px 10px 7px 0; font-weight: 500; font-size: 12px">Region</th><th style="padding: 7px 10px 7px 0; font-weight: 500; font-size: 12px">Confirmed</th><th style="padding: 7px 10px 7px 0; font-weight: 500; font-size: 12px">Deaths</th><th style="padding: 7px 10px 7px 0; font-weight: 500; font-size: 12px">Rt</th><th style="padding: 7px 10px 7px 0; font-weight: 500; font-size: 12px">Capacity</th><th style="padding: 7px 0; font-weight: 500; font-size: 12px">Surv.</th>
+              </tr></thead>
+              <tbody>
+                <tr style="border-bottom: 1px solid var(--color-divider); background: var(--color-accent-2-100)"><td style="padding: 9px 10px 9px 0; font-weight: 700">AFRO</td><td style="padding: 9px 10px 9px 0">4,120</td><td style="padding: 9px 10px 9px 0">218</td><td style="padding: 9px 10px 9px 0; font-weight: 700; color: var(--color-accent-700)">1.61</td><td style="padding: 9px 10px 9px 0">74%</td><td style="padding: 9px 0">4/10</td></tr>
+                <tr style="border-bottom: 1px solid var(--color-divider)"><td style="padding: 9px 10px 9px 0; font-weight: 600">AMRO</td><td style="padding: 9px 10px 9px 0">6,890</td><td style="padding: 9px 10px 9px 0">301</td><td style="padding: 9px 10px 9px 0">1.28</td><td style="padding: 9px 10px 9px 0">61%</td><td style="padding: 9px 0">8/10</td></tr>
+                <tr style="border-bottom: 1px solid var(--color-divider)"><td style="padding: 9px 10px 9px 0; font-weight: 600">EMRO</td><td style="padding: 9px 10px 9px 0">2,340</td><td style="padding: 9px 10px 9px 0">142</td><td style="padding: 9px 10px 9px 0">1.55</td><td style="padding: 9px 10px 9px 0">69%</td><td style="padding: 9px 0">5/10</td></tr>
+                <tr style="border-bottom: 1px solid var(--color-divider)"><td style="padding: 9px 10px 9px 0; font-weight: 600">EURO</td><td style="padding: 9px 10px 9px 0">8,120</td><td style="padding: 9px 10px 9px 0">276</td><td style="padding: 9px 10px 9px 0">1.19</td><td style="padding: 9px 10px 9px 0">52%</td><td style="padding: 9px 0">9/10</td></tr>
+                <tr style="border-bottom: 1px solid var(--color-divider)"><td style="padding: 9px 10px 9px 0; font-weight: 600">SEARO</td><td style="padding: 9px 10px 9px 0">11,040</td><td style="padding: 9px 10px 9px 0">604</td><td style="padding: 9px 10px 9px 0">1.47</td><td style="padding: 9px 10px 9px 0">88%</td><td style="padding: 9px 0">6/10</td></tr>
+                <tr style="border-bottom: 1px solid var(--color-divider)"><td style="padding: 9px 10px 9px 0; font-weight: 600">WPRO</td><td style="padding: 9px 10px 9px 0">5,560</td><td style="padding: 9px 10px 9px 0">188</td><td style="padding: 9px 10px 9px 0">1.11</td><td style="padding: 9px 10px 9px 0">47%</td><td style="padding: 9px 0">9/10</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <p style="font-family: var(--font-body); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--color-neutral-600); margin: 32px 0 12px">Same direction — an event, rail intact</p>
+      <div class="frame" style="background: var(--color-bg); display: flex">
+        <div style="width: 268px; flex-shrink: 0; background: var(--color-neutral-900); padding: 26px 22px; display: flex; flex-direction: column; gap: 22px">
+          <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 16px 18px">
+            <p style="font-family: var(--font-body); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-300); margin: 0 0 4px">Deadline</p>
+            <p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 0; letter-spacing: -.02em">3:12</p>
+          </div>
+          <div>
+            <p style="font-family: var(--font-body); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-neutral-500); margin: 0 0 12px">Can you afford it?</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-family: var(--font-body)">
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Fund</span><span style="font-size: 17px; font-weight: 700; color: #fff">$840K</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">Antivirals</span><span style="font-size: 17px; font-weight: 700; color: #fff">34,000</span></div>
+              <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; color: var(--color-neutral-400)">PPE days</span><span style="font-size: 17px; font-weight: 700; color: #fff">21</span></div>
+            </div>
+            <p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-300); margin: 14px 0 0; line-height: 1.4">Option C costs $1.2M — $360K beyond your fund.</p>
+          </div>
+        </div>
+        <div style="flex: 1; min-width: 0; padding: 30px 34px">
+          <p style="font-family: var(--font-body); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-700); margin: 0 0 6px">Event · hard deadline</p>
+          <h2 style="font-family: var(--font-heading); font-size: 30px; margin: 0 0 16px; color: var(--color-text)">Antiviral Stockpile Allocation</h2>
+          <p style="font-family: var(--font-body); font-size: 16px; line-height: 1.6; color: var(--color-neutral-800); margin: 0 0 24px">A donor consortium has released 180,000 courses with modest but real efficacy. It is not enough for everyone.</p>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px">
+            <div style="border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 15px 18px; display: flex; gap: 14px"><span style="font-family: var(--font-heading); font-size: 18px; color: var(--color-neutral-600)">A</span><p style="font-family: var(--font-body); font-size: 15px; margin: 0">Allocate proportional to confirmed burden.</p></div>
+            <div style="border: 2px solid var(--color-accent); background: var(--color-accent-100); border-radius: var(--radius-lg); padding: 15px 18px; display: flex; gap: 14px"><span style="font-family: var(--font-heading); font-size: 18px; color: var(--color-accent-700)">B</span><p style="font-family: var(--font-body); font-size: 15px; margin: 0; font-weight: 600; color: var(--color-accent-900)">Weight by estimated true burden and surveillance gap.</p></div>
+            <div style="border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 15px 18px; display: flex; gap: 14px; opacity: .45"><span style="font-family: var(--font-heading); font-size: 18px; color: var(--color-neutral-600)">C</span><p style="font-family: var(--font-body); font-size: 15px; margin: 0">Reserve 40% for a rapid-response pool.</p></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px">
+            <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: 12px 14px"><p style="font-family: var(--font-body); font-size: 13px; color: var(--color-neutral-700); margin: 0">AFRO</p><p style="font-family: var(--font-body); font-size: 20px; font-weight: 700; margin: 0">42,000</p></div>
+            <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: 12px 14px"><p style="font-family: var(--font-body); font-size: 13px; color: var(--color-neutral-700); margin: 0">SEARO</p><p style="font-family: var(--font-body); font-size: 20px; font-weight: 700; margin: 0">55,000</p></div>
+            <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: 12px 14px; display: flex; flex-direction: column; justify-content: center"><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-700); margin: 0">+ 4 more regions</p></div>
+            <div style="background: var(--color-accent-100); border-radius: var(--radius-lg); padding: 12px 14px"><p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-700); margin: 0">Unallocated</p><p style="font-family: var(--font-body); font-size: 20px; font-weight: 700; margin: 0; color: var(--color-accent-700)">83,000</p></div>
+          </div>
+          <span style="background: var(--color-accent); color: #fff; border-radius: 999px; padding: 12px 30px; font-family: var(--font-body); font-size: 15px; font-weight: 700; display: inline-block">Submit decision</span>
+        </div>
+      </div>
+    </div>
+
+</div>
+</body>
+</html>

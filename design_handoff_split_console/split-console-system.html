@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Split Console — the whole system (Operation Veiled Horizon)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-bg: #f5ead8;
+  --color-surface: #ebddc5;
+  --color-text: #201e1d;
+  --color-accent: #c67139;
+  --color-accent-2: #7a8a5e;
+  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+
+  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
+     same step of any role matches the others in visual value. */
+  --color-neutral-100: #f9f4ed;
+  --color-neutral-200: #eee7db;
+  --color-neutral-300: #dcd3c4;
+  --color-neutral-400: #c0b6a5;
+  --color-neutral-500: #a19786;
+  --color-neutral-600: #82796a;
+  --color-neutral-700: #645c50;
+  --color-neutral-800: #474238;
+  --color-neutral-900: #2e2b25;
+
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  --font-heading: "Caprasimo", system-ui, sans-serif;
+  --font-heading-weight: 400;
+  --font-body: "Figtree", system-ui, sans-serif;
+
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  /* Elevation — derived from the ground: soft ink-tinted shadows on a
+     light theme, a hairline edge + ambient darkness on a dark one. */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+}
+* { box-sizing: border-box; }
+
+body { margin: 0; background: var(--color-bg); }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent); }
+.frame { border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-lg); background: var(--color-bg); }
+.scr-name { font-family: var(--font-heading); font-size: 21px; margin: 0 0 2px; color: var(--color-text); }
+.scr-route { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: var(--color-neutral-700); margin: 0 0 14px; }
+.grp-h { font-family: var(--font-heading); font-size: 34px; margin: 0; color: var(--color-text); }
+.grp-s { font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-700); }
+.eyebrow { font-family: var(--font-body); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; margin: 0; }
+.rail { width: 268px; flex-shrink: 0; background: var(--color-neutral-900); padding: 26px 22px; display: flex; flex-direction: column; gap: 24px; }
+.rail-lbl { font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); }
+.rail-val { font-family: var(--font-body); font-size: 17px; font-weight: 700; color: #fff; }
+.rail-row { display: flex; justify-content: space-between; align-items: baseline; }
+.navpill { font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-300); padding: 8px 16px; border-radius: 999px; display: block; }
+.navpill-on { font-family: var(--font-body); font-size: 15px; background: var(--color-accent-700); color: #fff; padding: 8px 16px; border-radius: 999px; font-weight: 700; display: block; }
+.col { flex: 1; min-width: 0; padding: 30px 34px; display: flex; flex-direction: column; gap: 24px; }
+.ptitle { font-family: var(--font-heading); font-size: 32px; margin: 0; color: var(--color-text); }
+.seg { display: flex; gap: 6px; background: var(--color-neutral-200); border-radius: 999px; padding: 5px; font-family: var(--font-body); font-size: 14px; align-self: flex-start; }
+.seg-on { background: var(--color-bg); border-radius: 999px; padding: 7px 20px; font-weight: 700; box-shadow: var(--shadow-sm); }
+.seg-off { padding: 7px 20px; color: var(--color-neutral-700); }
+.cta { background: var(--color-accent-700); color: #fff; border-radius: 999px; padding: 11px 26px; font-family: var(--font-body); font-size: 15px; font-weight: 700; display: inline-block; }
+.cta-2 { background: var(--color-accent-2-700); color: #fff; border-radius: 999px; padding: 11px 26px; font-family: var(--font-body); font-size: 15px; font-weight: 700; display: inline-block; }
+.ghost { border: 2px solid var(--color-divider); color: var(--color-text); border-radius: 999px; padding: 9px 22px; font-family: var(--font-body); font-size: 14px; font-weight: 600; display: inline-block; }
+.card { background: var(--color-surface); border-radius: var(--radius-lg); padding: 20px 22px; }
+.warm { background: var(--color-accent-100); border-radius: var(--radius-lg); padding: 20px 22px; }
+.sage { background: var(--color-accent-2-100); border-radius: var(--radius-lg); padding: 20px 22px; }
+.inp { border: 2px solid var(--color-divider); border-radius: 999px; padding: 10px 18px; font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-700); background: var(--color-bg); }
+.area { border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 14px 18px; font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-700); background: var(--color-bg); }
+.tag { font-family: var(--font-body); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 12px; display: inline-block; }
+.t-opt { background: var(--color-accent-2-200); color: var(--color-accent-2-800); }
+.t-adq { background: var(--color-neutral-200); color: var(--color-neutral-800); }
+.t-inq { background: var(--color-accent-200); color: var(--color-accent-700); }
+.t-crit { background: var(--color-accent-700); color: #fff; }
+.tbl { width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: 14px; }
+.tbl th { text-align: left; padding: 7px 10px 7px 0; font-weight: 500; font-size: 12px; color: var(--color-neutral-700); border-bottom: 2px solid var(--color-divider); }
+.tbl td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--color-divider); }
+.body { font-family: var(--font-body); font-size: 15px; line-height: 1.55; color: var(--color-neutral-800); }
+.small { font-family: var(--font-body); font-size: 13px; color: var(--color-neutral-800); }
+
+</style>
+</head>
+<body>
+<div style="padding: 56px 64px 96px; min-width: 2900px">
+
+  <div style="max-width: 860px; margin-bottom: 8px">
+    <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 10px">Split Console · the whole system</p>
+    <h1 style="font-family: var(--font-heading); font-size: 56px; line-height: 1.05; margin: 0 0 16px">Operation Veiled Horizon</h1>
+    <p style="font-family: var(--font-body); font-size: 18px; line-height: 1.55; color: var(--color-neutral-800); margin: 0 0 12px; text-wrap: pretty">Every screen in the app on the chosen direction. One persistent rail, one warm ground, one accent that only ever means <i>this needs you</i>. Same routes, same data, same polling as the repo today.</p>
+    <p class="small" style="margin: 0">Four surfaces, four rules. <b>Public</b> is a centred card, no rail. <b>Team</b> and <b>Instructor</b> share the rail and differ only in what it holds. <b>Projector</b> drops the rail and inverts — it is the only full-bleed surface.</p>
+  </div>
+
+  <!-- ===================== PRIMITIVES ===================== -->
+  <div style="display: flex; align-items: baseline; gap: 16px; margin: 64px 0 24px">
+    <h2 class="grp-h">0 · Primitives</h2>
+    <span class="grp-s">The whole system is these six things</span>
+  </div>
+
+  <div class="frame" style="padding: 36px; width: 1180px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px">
+    <div>
+      <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">Ground</p>
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px"><div style="width: 44px; height: 44px; border-radius: 12px; background: var(--color-bg); border: 1px solid var(--color-divider)"></div><div><p class="small" style="margin: 0; font-weight: 600">Content column</p><p class="small" style="margin: 0; color: var(--color-neutral-700)">#f5ead8</p></div></div>
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px"><div style="width: 44px; height: 44px; border-radius: 12px; background: var(--color-surface)"></div><div><p class="small" style="margin: 0; font-weight: 600">Card</p><p class="small" style="margin: 0; color: var(--color-neutral-700)">#ebddc5</p></div></div>
+      <div style="display: flex; gap: 8px; align-items: center"><div style="width: 44px; height: 44px; border-radius: 12px; background: var(--color-neutral-900)"></div><div><p class="small" style="margin: 0; font-weight: 600">Rail &amp; projector</p><p class="small" style="margin: 0; color: var(--color-neutral-700)">#2e2b25</p></div></div>
+    </div>
+    <div>
+      <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">Accent means "this needs you"</p>
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px"><div style="width: 44px; height: 44px; border-radius: 12px; background: var(--color-accent)"></div><div><p class="small" style="margin: 0; font-weight: 600">Terracotta</p><p class="small" style="margin: 0; color: var(--color-neutral-700)">Deadlines, open decisions, primary action</p></div></div>
+      <div style="display: flex; gap: 8px; align-items: center"><div style="width: 44px; height: 44px; border-radius: 12px; background: var(--color-accent-2)"></div><div><p class="small" style="margin: 0; font-weight: 600">Sage</p><p class="small" style="margin: 0; color: var(--color-neutral-700)">You, yours, and what went well</p></div></div>
+      <p class="small" style="margin: 12px 0 0; color: var(--color-neutral-800); line-height: 1.5">No emerald, blue, amber or red anywhere. Tiers map onto the two ramps.</p>
+    </div>
+    <div>
+      <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">Type</p>
+      <p style="font-family: var(--font-heading); font-size: 28px; margin: 0 0 2px">Caprasimo 32/24/21</p>
+      <p class="small" style="margin: 0 0 12px; color: var(--color-neutral-700)">Headings only — never body</p>
+      <p style="font-family: var(--font-body); font-size: 16px; margin: 0 0 2px">Figtree 16 / 15 / 14 / 12</p>
+      <p class="small" style="margin: 0; color: var(--color-neutral-700)">Everything else, including all numbers</p>
+    </div>
+    <div>
+      <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">Actions are pills</p>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center"><span class="cta">Primary</span><span class="ghost">Secondary</span><span class="cta-2">Affirm</span></div>
+    </div>
+    <div>
+      <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">Status is a chip, never colour alone</p>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap"><span class="tag t-opt">OPTIMAL</span><span class="tag t-adq">ADEQUATE</span><span class="tag t-inq">INADEQUATE</span><span class="tag t-crit">CRITICAL FAILURE</span></div>
+    </div>
+    <div>
+      <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">Views switch, pages don't scroll forever</p>
+      <div class="seg"><span class="seg-on">Overview</span><span class="seg-off">All regions</span><span class="seg-off">Projection</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== PUBLIC ===================== -->
+  <div style="display: flex; align-items: baseline; gap: 16px; margin: 72px 0 24px">
+    <h2 class="grp-h">1 · Public &amp; setup</h2>
+    <span class="grp-s">No rail — a centred card on the warm ground</span>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+
+    <div style="width: 460px">
+      <p class="scr-name">Sign in</p>
+      <p class="scr-route">/login</p>
+      <div class="frame" style="padding: 44px 24px; display: flex; align-items: center; justify-content: center">
+        <div style="width: 340px">
+          <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 8px">Operation Veiled Horizon</p>
+          <h1 style="font-family: var(--font-heading); font-size: 34px; line-height: 1.1; margin: 0 0 10px">Sign in</h1>
+          <p class="body" style="margin: 0 0 24px">Your team, instructor, or personal credentials.</p>
+          <p class="small" style="font-weight: 600; margin: 0 0 6px; color: var(--color-text)">Username</p>
+          <div class="inp" style="margin-bottom: 16px">afro-7f3k9q</div>
+          <p class="small" style="font-weight: 600; margin: 0 0 6px; color: var(--color-text)">Password</p>
+          <div class="inp" style="margin-bottom: 24px">••••••••••</div>
+          <span class="cta" style="width: 100%; text-align: center; padding: 13px 0">Sign in</span>
+          <p class="small" style="text-align: center; margin: 20px 0 0">No account? <a href="#1">Create one</a></p>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 460px">
+      <p class="scr-name">Create an account</p>
+      <p class="scr-route">/register</p>
+      <div class="frame" style="padding: 44px 24px; display: flex; align-items: center; justify-content: center">
+        <div style="width: 340px">
+          <h1 style="font-family: var(--font-heading); font-size: 34px; line-height: 1.1; margin: 0 0 10px">Create an account</h1>
+          <p class="body" style="margin: 0 0 24px">To run a session with your class, or to play a solo demo. No email required.</p>
+          <p class="small" style="font-weight: 600; margin: 0 0 6px; color: var(--color-text)">Your name</p>
+          <div class="inp" style="margin-bottom: 14px">&nbsp;</div>
+          <p class="small" style="font-weight: 600; margin: 0 0 6px; color: var(--color-text)">Username</p>
+          <div class="inp" style="margin-bottom: 16px">&nbsp;</div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 24px">
+            <div style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--color-neutral-400)"></div>
+            <span class="small" style="color: var(--color-text)">Set my own password instead of generating one</span>
+          </div>
+          <span class="cta" style="width: 100%; text-align: center; padding: 13px 0">Create account</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 460px">
+      <p class="scr-name">Save this password</p>
+      <p class="scr-route">/register — success state</p>
+      <div class="frame" style="padding: 44px 24px; display: flex; align-items: center; justify-content: center">
+        <div style="width: 340px">
+          <h1 style="font-family: var(--font-heading); font-size: 34px; line-height: 1.1; margin: 0 0 10px">You're in, Jordan</h1>
+          <p class="body" style="margin: 0 0 20px">Username <b style="color: var(--color-text)">jrivera</b></p>
+          <div class="warm" style="margin-bottom: 20px">
+            <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 8px">Save this now</p>
+            <p style="font-family: ui-monospace, monospace; font-size: 20px; font-weight: 700; color: var(--color-accent-900); margin: 0 0 10px">tidal-ember-4471</p>
+            <p class="small" style="color: var(--color-accent-800); margin: 0 0 14px; line-height: 1.5">There is no recovery without an email on file, and it will never be shown again.</p>
+            <span class="ghost" style="border-color: var(--color-accent-400); color: var(--color-accent-800)">Copy password</span>
+          </div>
+          <span class="cta" style="width: 100%; text-align: center; padding: 13px 0">Continue</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 520px">
+      <p class="scr-name">Your sessions</p>
+      <p class="scr-route">/sessions</p>
+      <div class="frame" style="padding: 44px 24px; display: flex; align-items: center; justify-content: center">
+        <div style="width: 400px">
+          <h1 style="font-family: var(--font-heading); font-size: 34px; line-height: 1.1; margin: 0 0 10px">Your sessions</h1>
+          <p class="body" style="margin: 0 0 24px">One class session and one solo demo can run at once. Switching between them never ends the other.</p>
+          <div class="sage" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+            <div>
+              <p style="font-family: var(--font-heading); font-size: 19px; margin: 0; color: var(--color-accent-2-900)">Class session</p>
+              <p class="small" style="margin: 2px 0 0; color: var(--color-accent-2-700)">Running · 6 regions · day 34</p>
+            </div>
+            <div style="display: flex; gap: 8px; flex-shrink: 0">
+              <span class="ghost" style="border-color: var(--color-accent-2-400); color: var(--color-accent-2-800); padding: 7px 16px; font-size: 13px">Logins</span>
+              <span class="cta-2" style="padding: 8px 18px; font-size: 13px">Go to it</span>
+            </div>
+          </div>
+          <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+            <div>
+              <p style="font-family: var(--font-heading); font-size: 19px; margin: 0">Solo demo</p>
+              <p class="small" style="margin: 2px 0 0; color: var(--color-neutral-700)">A scripted AI plays every region you're not, on a ~15 minute clock.</p>
+            </div>
+            <span class="ghost" style="flex-shrink: 0; padding: 8px 18px; font-size: 13px">Start</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 660px">
+      <p class="scr-name">Credential sheet</p>
+      <p class="scr-route">/sessions/[id]/credentials — the one screen designed to be printed</p>
+      <div class="frame" style="padding: 34px 38px">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px">
+          <div>
+            <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 6px">Hand one row to each team</p>
+            <h1 style="font-family: var(--font-heading); font-size: 32px; margin: 0">Session credentials</h1>
+          </div>
+          <div style="display: flex; gap: 8px; flex-shrink: 0"><span class="ghost">Print</span><span class="cta">Command Center</span></div>
+        </div>
+        <div class="sage" style="display: flex; gap: 18px; align-items: center; margin-bottom: 24px">
+          <div style="width: 84px; height: 84px; background: var(--color-accent-2-900); border-radius: 12px; flex-shrink: 0"></div>
+          <div>
+            <p style="font-family: var(--font-heading); font-size: 19px; margin: 0 0 4px; color: var(--color-accent-2-900)">On phones, install before logging in</p>
+            <p class="small" style="margin: 0; color: var(--color-accent-2-700); line-height: 1.5">Scan, add to home screen, <b>then</b> log in. On iOS, installing after login starts a separate signed-out session.</p>
+          </div>
+        </div>
+        <table class="tbl" style="font-size: 15px; margin-bottom: 20px">
+          <thead><tr><th>Region</th><th>Username</th><th>Password</th></tr></thead>
+          <tbody>
+            <tr><td style="font-weight: 700">AFRO</td><td style="font-family: ui-monospace, monospace">afro-7f3k9q</td><td style="font-family: ui-monospace, monospace">crest-lantern-08</td></tr>
+            <tr><td style="font-weight: 700">AMRO</td><td style="font-family: ui-monospace, monospace">amro-2p8dnc</td><td style="font-family: ui-monospace, monospace">quiet-harbor-31</td></tr>
+            <tr><td style="font-weight: 700">EMRO</td><td style="font-family: ui-monospace, monospace">emro-5kw12b</td><td style="font-family: ui-monospace, monospace">amber-thistle-77</td></tr>
+            <tr><td style="font-weight: 700">EURO</td><td style="font-family: ui-monospace, monospace">euro-9qzr4m</td><td style="font-family: ui-monospace, monospace">north-signal-52</td></tr>
+            <tr><td style="font-weight: 700">SEARO</td><td style="font-family: ui-monospace, monospace">searo-3vt6xw</td><td style="font-family: ui-monospace, monospace">salt-meridian-19</td></tr>
+            <tr style="border-bottom: 0"><td style="font-weight: 700">WPRO</td><td style="font-family: ui-monospace, monospace">wpro-8hb04j</td><td style="font-family: ui-monospace, monospace">pale-current-64</td></tr>
+          </tbody>
+        </table>
+        <p class="small" style="margin: 0">Projector, no login needed: <code style="font-family: ui-monospace, monospace; background: var(--color-surface); border-radius: 6px; padding: 2px 8px">/display/veiled-horizon</code></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TEAM ===================== -->
+  <div style="display: flex; align-items: baseline; gap: 16px; margin: 72px 0 24px">
+    <h2 class="grp-h">2 · Team</h2>
+    <span class="grp-s">The rail holds identity, ledger, the one live deadline, and the clock — on every page</span>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+
+    <div style="width: 900px">
+      <p class="scr-name">Situation</p>
+      <p class="scr-route">/dashboard</p>
+      <div class="frame" style="display: flex; min-height: 760px">
+        <div class="rail">
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500)">Veiled Horizon</p>
+            <h1 style="font-family: var(--font-heading); font-size: 24px; margin: 6px 0 0; color: #fff; line-height: 1.15">AFRO<br>Regional Office</h1>
+          </div>
+          <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 16px 18px">
+            <p class="eyebrow" style="color: var(--color-accent-300); font-size: 11px">Deadline</p>
+            <p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">3:12</p>
+            <p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-200); margin: 4px 0 0; line-height: 1.35">Antiviral Stockpile Allocation</p>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px; margin-bottom: 12px">Your ledger</p>
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <div class="rail-row"><span class="rail-lbl">Fund</span><span class="rail-val">$840K</span></div>
+              <div class="rail-row"><span class="rail-lbl">PPE days</span><span class="rail-val">21</span></div>
+              <div class="rail-row"><span class="rail-lbl">Antivirals</span><span class="rail-val">34,000</span></div>
+              <div class="rail-row"><span class="rail-lbl">HCW surge</span><span class="rail-val">12%</span></div>
+              <div style="height: 1px; background: var(--color-neutral-700); margin: 4px 0"></div>
+              <div class="rail-row"><span class="rail-lbl">Your Rt</span><span class="rail-val" style="color: var(--color-accent-300)">1.61 ↑</span></div>
+              <div class="rail-row"><span class="rail-lbl">Trust</span><span class="rail-val">41</span></div>
+              <div class="rail-row"><span class="rail-lbl">Tension</span><span class="rail-val">58</span></div>
+            </div>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px; margin-bottom: 10px">Go to</p>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span class="navpill-on">Situation</span>
+              <span class="navpill" style="display: flex; justify-content: space-between">Events <span style="background: var(--color-accent-700); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 700">1</span></span>
+              <span class="navpill">Coordination</span>
+              <span class="navpill">Pledges</span>
+              <span class="navpill">Marketplace</span>
+              <span class="navpill">Funding</span>
+              <span class="navpill">Briefing</span>
+            </div>
+          </div>
+          <div style="margin-top: auto; border-top: 1px solid var(--color-neutral-700); padding-top: 16px">
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px">In-game</p>
+            <p style="font-family: var(--font-body); font-size: 18px; font-weight: 700; color: #fff; margin: 2px 0 0">Day 34 · 08:12</p>
+            <div style="height: 4px; background: var(--color-neutral-700); border-radius: 999px; margin-top: 6px; overflow: hidden"><div style="height: 100%; width: 38%; background: var(--color-accent-400)"></div></div>
+            <p class="small" style="color: var(--color-neutral-500); margin: 12px 0 0">Sign out</p>
+          </div>
+        </div>
+        <div class="col">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px">
+            <h2 class="ptitle">Situation</h2>
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span class="tag" style="background: var(--color-accent-700); color: #fff; font-size: 13px; padding: 5px 16px">Amber</span>
+              <span class="small">Global Rt <b style="color: var(--color-text)">1.42</b></span>
+              <span class="small">Media <b style="color: var(--color-text)">61</b></span>
+            </div>
+          </div>
+          <div class="seg"><span class="seg-on">Overview</span><span class="seg-off">All regions</span><span class="seg-off">Projection</span><span class="seg-off">Developments</span></div>
+          <div class="warm" style="display: flex; align-items: center; gap: 20px; padding: 22px 24px">
+            <div style="flex: 1">
+              <p class="eyebrow" style="color: var(--color-accent-700); font-size: 12px; margin-bottom: 4px">Open decision</p>
+              <p style="font-family: var(--font-heading); font-size: 21px; margin: 0; color: var(--color-accent-900)">Antiviral Stockpile Allocation</p>
+              <p class="small" style="color: var(--color-accent-800); margin: 4px 0 0">Hard deadline · 180,000 courses across six regions</p>
+            </div>
+            <span class="cta">Respond</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+            <div class="card">
+              <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 10px">Your visibility gap</p>
+              <p class="body" style="margin: 0 0 14px">You confirm 4,120 cases. The model estimates the truth is between 9,800 and 16,400.</p>
+              <div style="height: 26px; background: var(--color-neutral-300); border-radius: 999px; position: relative; overflow: hidden">
+                <div style="position: absolute; inset: 0; width: 100%; background: var(--color-accent-200)"></div>
+                <div style="position: absolute; inset: 0; width: 25%; background: var(--color-accent); border-radius: 999px"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 6px"><span class="small">confirmed</span><span class="small">estimated true</span></div>
+            </div>
+            <div class="sage">
+              <p class="eyebrow" style="color: var(--color-accent-2-700); margin-bottom: 10px">If nothing changes</p>
+              <div style="display: flex; gap: 24px">
+                <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">Now</p><p style="font-family: var(--font-body); font-size: 24px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">4,120</p></div>
+                <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">+14d</p><p style="font-family: var(--font-body); font-size: 24px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">7,980</p></div>
+                <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">+28d</p><p style="font-family: var(--font-body); font-size: 24px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">15,460</p></div>
+              </div>
+              <p class="small" style="color: var(--color-accent-2-700); margin: 14px 0 0; line-height: 1.45">Private to your region. Assumes Rt 1.61 holds — a real decision will move it.</p>
+            </div>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 12px">All six regions</p>
+            <table class="tbl">
+              <thead><tr><th>Region</th><th>Confirmed</th><th>Deaths</th><th>Rt</th><th>Capacity</th><th>Surv.</th></tr></thead>
+              <tbody>
+                <tr style="background: var(--color-accent-2-100)"><td style="font-weight: 700">AFRO</td><td>4,120</td><td>218</td><td style="font-weight: 700; color: var(--color-accent-700)">1.61</td><td>74%</td><td>4/10</td></tr>
+                <tr><td style="font-weight: 600">AMRO</td><td>6,890</td><td>301</td><td>1.28</td><td>61%</td><td>8/10</td></tr>
+                <tr><td style="font-weight: 600">EMRO</td><td>2,340</td><td>142</td><td>1.55</td><td>69%</td><td>5/10</td></tr>
+                <tr><td style="font-weight: 600">EURO</td><td>8,120</td><td>276</td><td>1.19</td><td>52%</td><td>9/10</td></tr>
+                <tr><td style="font-weight: 600">SEARO</td><td>11,040</td><td>604</td><td>1.47</td><td>88%</td><td>6/10</td></tr>
+                <tr style="border-bottom: 0"><td style="font-weight: 600">WPRO</td><td>5,560</td><td>188</td><td>1.11</td><td>47%</td><td>9/10</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 900px">
+      <p class="scr-name">Event detail</p>
+      <p class="scr-route">/events/[dispatchId] — the rail swaps its ledger for an affordability check</p>
+      <div class="frame" style="display: flex">
+        <div class="rail">
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500)">Veiled Horizon</p>
+            <h1 style="font-family: var(--font-heading); font-size: 24px; margin: 6px 0 0; color: #fff; line-height: 1.15">AFRO<br>Regional Office</h1>
+          </div>
+          <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 16px 18px">
+            <p class="eyebrow" style="color: var(--color-accent-300); font-size: 11px">Deadline</p>
+            <p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">3:12</p>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px; margin-bottom: 12px">Can you afford it?</p>
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <div class="rail-row"><span class="rail-lbl">Fund</span><span class="rail-val">$840K</span></div>
+              <div class="rail-row"><span class="rail-lbl">Antivirals</span><span class="rail-val">34,000</span></div>
+              <div class="rail-row"><span class="rail-lbl">PPE days</span><span class="rail-val">21</span></div>
+            </div>
+            <p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-300); margin: 14px 0 0; line-height: 1.4">Option C costs $1.2M — $360K beyond your fund.</p>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px; margin-bottom: 10px">Coordinated with</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px">
+              <span style="font-family: var(--font-body); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 12px; background: var(--color-accent-2-700); color: #fff">AMRO</span>
+              <span style="font-family: var(--font-body); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 12px; background: var(--color-accent-2-700); color: #fff">SEARO</span>
+              <span style="font-family: var(--font-body); font-size: 12px; border-radius: 999px; padding: 4px 12px; border: 1px solid var(--color-neutral-700); color: var(--color-neutral-400)">EMRO</span>
+              <span style="font-family: var(--font-body); font-size: 12px; border-radius: 999px; padding: 4px 12px; border: 1px solid var(--color-neutral-700); color: var(--color-neutral-400)">EURO</span>
+              <span style="font-family: var(--font-body); font-size: 12px; border-radius: 999px; padding: 4px 12px; border: 1px solid var(--color-neutral-700); color: var(--color-neutral-400)">WPRO</span>
+            </div>
+          </div>
+          <div style="margin-top: auto; border-top: 1px solid var(--color-neutral-700); padding-top: 16px">
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px">In-game</p>
+            <p style="font-family: var(--font-body); font-size: 18px; font-weight: 700; color: #fff; margin: 2px 0 0">Day 34 · 08:12</p>
+          </div>
+        </div>
+        <div class="col">
+          <div>
+            <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 6px">Event · hard deadline</p>
+            <h2 style="font-family: var(--font-heading); font-size: 30px; margin: 0 0 14px; color: var(--color-text)">Antiviral Stockpile Allocation</h2>
+            <p style="font-family: var(--font-body); font-size: 16px; line-height: 1.6; color: var(--color-neutral-800); margin: 0">A donor consortium has released 180,000 courses of an antiviral with modest but real efficacy against NCoV-X1. It is not enough for everyone. Two regions have surging ICU occupancy; a third has the weakest surveillance and may be undercounting badly.</p>
+          </div>
+          <div class="card">
+            <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Your decision</p>
+            <p class="body" style="margin: 0">Choose an allocation principle and distribute the full 180,000 courses. Your rationale must name the equity tradeoff you are accepting.</p>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 15px 18px; display: flex; gap: 14px; align-items: flex-start">
+              <span style="font-family: var(--font-heading); font-size: 18px; color: var(--color-neutral-700); line-height: 1.3">A</span>
+              <div><p style="font-family: var(--font-body); font-size: 15px; margin: 0">Allocate proportional to confirmed burden.</p><p class="small" style="margin: 3px 0 0; color: var(--color-neutral-700)">No direct cost · rewards the best surveillance</p></div>
+            </div>
+            <div style="border: 2px solid var(--color-accent); background: var(--color-accent-100); border-radius: var(--radius-lg); padding: 15px 18px; display: flex; gap: 14px; align-items: flex-start">
+              <span style="font-family: var(--font-heading); font-size: 18px; color: var(--color-accent-700); line-height: 1.3">B</span>
+              <div><p style="font-family: var(--font-body); font-size: 15px; margin: 0; font-weight: 600; color: var(--color-accent-900)">Weight by estimated true burden and surveillance gap.</p><p class="small" style="margin: 3px 0 0; color: var(--color-accent-800)">$400,000 · harder to justify politically, better equity</p></div>
+            </div>
+            <div style="border: 2px solid var(--color-divider); border-radius: var(--radius-lg); padding: 15px 18px; display: flex; gap: 14px; align-items: flex-start; opacity: .45">
+              <span style="font-family: var(--font-heading); font-size: 18px; color: var(--color-neutral-700); line-height: 1.3">C</span>
+              <div><p style="font-family: var(--font-body); font-size: 15px; margin: 0">Reserve 40% for a rapid-response pool.</p><p class="small" style="margin: 3px 0 0; color: var(--color-accent-700)">Beyond your fund</p></div>
+            </div>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 10px">Distribute 180,000 courses</p>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px">
+              <div class="card" style="padding: 12px 14px"><p class="small" style="margin: 0">AFRO</p><p style="font-family: var(--font-body); font-size: 20px; font-weight: 700; margin: 0">42,000</p></div>
+              <div class="card" style="padding: 12px 14px"><p class="small" style="margin: 0">SEARO</p><p style="font-family: var(--font-body); font-size: 20px; font-weight: 700; margin: 0">55,000</p></div>
+              <div class="card" style="padding: 12px 14px; display: flex; align-items: center"><p class="small" style="margin: 0">+ 4 more regions</p></div>
+              <div class="warm" style="padding: 12px 14px"><p class="small" style="margin: 0; color: var(--color-accent-700)">Unallocated</p><p style="font-family: var(--font-body); font-size: 20px; font-weight: 700; margin: 0; color: var(--color-accent-700)">83,000</p></div>
+            </div>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Confidence</p>
+            <div class="seg"><span class="seg-off">Low</span><span class="seg-on">Medium</span><span class="seg-off">High</span></div>
+            <p class="small" style="margin: 8px 0 0; color: var(--color-neutral-700); max-width: 480px; line-height: 1.5">Scored on whether your confidence matched the outcome — flagging real uncertainty is never penalised.</p>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Rationale — this is what gets scored</p>
+            <div class="area" style="min-height: 80px">We are accepting a slower political sign-off in exchange for reaching the regions our own surveillance is least able to see…</div>
+          </div>
+          <div><span class="cta" style="padding: 12px 30px">Submit decision</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 640px">
+      <p class="scr-name">Events</p>
+      <p class="scr-route">/events — status is a chip, deadline is the loudest thing on the row</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <h2 class="ptitle">Events</h2>
+          <div class="seg"><span class="seg-on">Open</span><span class="seg-off">All</span></div>
+        </div>
+        <div class="warm" style="display: flex; align-items: center; gap: 18px">
+          <div style="flex: 1">
+            <p style="font-family: var(--font-heading); font-size: 20px; margin: 0; color: var(--color-accent-900)">Antiviral Stockpile Allocation</p>
+            <p class="small" style="color: var(--color-accent-800); margin: 4px 0 0">EVT-007 · Game Day 34 · hard deadline</p>
+          </div>
+          <div style="text-align: right">
+            <p style="font-family: var(--font-body); font-size: 30px; font-weight: 800; color: var(--color-accent-700); margin: 0; letter-spacing: -.02em">3:12</p>
+            <p class="small" style="color: var(--color-accent-800); margin: 0">≈ 4.7 game days</p>
+          </div>
+          <span class="cta">Respond</span>
+        </div>
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+          <div><p style="font-family: var(--font-heading); font-size: 18px; margin: 0">Border Closure Pressure</p><p class="small" style="margin: 3px 0 0">EVT-005 · Game Day 27</p></div>
+          <span class="tag t-adq">AWAITING SCORE</span>
+        </div>
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+          <div><p style="font-family: var(--font-heading); font-size: 18px; margin: 0">PHEIC Declaration Vote</p><p class="small" style="margin: 3px 0 0">EVT-001 · Game Day 14 · scored 88%</p></div>
+          <span class="tag t-opt">OPTIMAL</span>
+        </div>
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; opacity: .6">
+          <div><p style="font-family: var(--font-heading); font-size: 18px; margin: 0">Lab Capacity Surge Request</p><p class="small" style="margin: 3px 0 0">EVT-003 · Game Day 19 · deadline passed, consequence applied</p></div>
+          <span class="tag t-crit">CRITICAL FAILURE</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 640px">
+      <p class="scr-name">Coordination</p>
+      <p class="scr-route">/coordination — the leak risk is stated where you type, not in a paragraph above</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 18px">
+        <h2 class="ptitle">Coordination</h2>
+        <div class="seg"><span class="seg-on">Broadcast</span><span class="seg-off">Private → SEARO</span><span class="seg-off">Private → EURO</span></div>
+        <div class="warm">
+          <div style="display: flex; gap: 10px; margin-bottom: 10px">
+            <div class="inp" style="flex: 1; background: var(--color-bg)">Send a private message…</div>
+            <span class="cta" style="padding: 10px 24px">Send</span>
+          </div>
+          <p class="small" style="margin: 0; color: var(--color-accent-800); line-height: 1.5"><b>Roughly 1 in 7 private messages leaks</b> to the public projector feed the moment you send it. Treat private as a gamble, not a guarantee.</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="border: 2px solid var(--color-accent-400); border-radius: var(--radius-lg); padding: 16px 18px">
+            <div style="display: flex; gap: 6px; margin-bottom: 8px"><span class="tag t-inq">PRIVATE</span><span class="tag t-crit">LEAKED</span></div>
+            <p class="body" style="margin: 0; color: var(--color-text)">We can cover your antiviral shortfall if you back our position on the border language.</p>
+            <p class="small" style="margin: 8px 0 0">AFRO → SEARO · 10:42</p>
+          </div>
+          <div class="card">
+            <p class="body" style="margin: 0; color: var(--color-text)">AFRO proposing a shared statement on surveillance-adjusted allocation before the EC meets. Who's in?</p>
+            <p class="small" style="margin: 8px 0 0">AFRO → all regions · 10:39</p>
+          </div>
+          <div class="card">
+            <p class="body" style="margin: 0; color: var(--color-text)">In. We'll co-sign if the language covers under-reporting, not just under-resourcing.</p>
+            <p class="small" style="margin: 8px 0 0">EMRO → all regions · 10:40</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 700px">
+      <p class="scr-name">Marketplace</p>
+      <p class="scr-route">/marketplace — buying and trading as two tabs, not one long page</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 18px">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <h2 class="ptitle">Marketplace</h2>
+          <span class="small">Prices rise as HQ stock depletes — waiting is a gamble</span>
+        </div>
+        <div class="seg"><span class="seg-on">Buy from WHO HQ</span><span class="seg-off">Trade with a region</span><span class="seg-off">History</span></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+          <div class="card"><p class="small" style="margin: 0">PPE · per day-equivalent</p><p style="font-family: var(--font-body); font-size: 30px; font-weight: 700; margin: 2px 0 0">$4,200</p><p class="small" style="margin: 4px 0 0; color: var(--color-neutral-700)">HQ stock 3,400 · rising</p></div>
+          <div class="card"><p class="small" style="margin: 0">Antivirals · per dose</p><p style="font-family: var(--font-body); font-size: 30px; font-weight: 700; margin: 2px 0 0">$61</p><p class="small" style="margin: 4px 0 0; color: var(--color-neutral-700)">HQ stock 92,000 · steady</p></div>
+        </div>
+        <div class="warm" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+          <div class="inp" style="background: var(--color-bg)">PPE (days) ▾</div>
+          <div class="inp" style="background: var(--color-bg); width: 110px">120</div>
+          <span class="cta">Request purchase</span>
+          <span class="small" style="color: var(--color-accent-800)">≈ $504,000 — leaves you $336,000</span>
+        </div>
+        <div class="sage" style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+          <div>
+            <p class="eyebrow" style="color: var(--color-accent-2-700); margin-bottom: 4px">Incoming offer</p>
+            <p class="body" style="margin: 0; color: var(--color-accent-2-900)">EURO offers <b>$310,000</b> for 6,000 antiviral doses.</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-shrink: 0"><span class="cta-2" style="padding: 9px 20px; font-size: 14px">Accept</span><span class="ghost" style="border-color: var(--color-accent-2-400); color: var(--color-accent-2-800); padding: 8px 18px; font-size: 14px">Decline</span></div>
+        </div>
+        <div>
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 10px">Awaiting instructor approval</p>
+          <p class="small" style="margin: 0">SEARO · 8,000 antivirals · $488,000 — other regions have 30 seconds to counter-request.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 560px">
+      <p class="scr-name">Pledges</p>
+      <p class="scr-route">/pledges — sage, because giving is the one unambiguously good act in the game</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 18px">
+        <h2 class="ptitle">Pledges</h2>
+        <p class="body" style="margin: 0">This moves the resource between live ledgers immediately, and everyone can see it.</p>
+        <div class="sage" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+          <div class="inp" style="background: var(--color-bg)">To SEARO ▾</div>
+          <div class="inp" style="background: var(--color-bg)">PPE days ▾</div>
+          <div class="inp" style="background: var(--color-bg); width: 90px">15</div>
+          <span class="cta-2">Pledge</span>
+        </div>
+        <div>
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 10px">Ledger</p>
+          <table class="tbl">
+            <tbody>
+              <tr><td style="font-weight: 700">EURO → AFRO</td><td>$2,000,000</td><td style="text-align: right; color: var(--color-neutral-700)">10:44</td></tr>
+              <tr><td style="font-weight: 700">WPRO → SEARO</td><td>25 PPE days</td><td style="text-align: right; color: var(--color-neutral-700)">10:31</td></tr>
+              <tr style="border-bottom: 0"><td style="font-weight: 700">AMRO → EMRO</td><td>8% HCW surge</td><td style="text-align: right; color: var(--color-neutral-700)">10:22</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 560px">
+      <p class="scr-name">Emergency Funding</p>
+      <p class="scr-route">/emergency-funding — an appeal with a visible progress bar</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 18px">
+        <h2 class="ptitle">Funding</h2>
+        <div class="warm">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px">
+            <div>
+              <p style="font-family: var(--font-heading); font-size: 20px; margin: 0; color: var(--color-accent-900)">SEARO needs $4,000,000</p>
+              <p class="small" style="color: var(--color-accent-800); margin: 4px 0 0">Hospital surge capacity exhausted in two member states.</p>
+            </div>
+            <span class="tag t-inq" style="flex-shrink: 0">OPEN</span>
+          </div>
+          <div style="height: 20px; background: var(--color-accent-200); border-radius: 999px; overflow: hidden; margin-bottom: 8px"><div style="height: 100%; width: 36%; background: var(--color-accent); border-radius: 999px"></div></div>
+          <p class="small" style="color: var(--color-accent-800); margin: 0 0 14px">$1,450,000 of $4,000,000 — EURO $900K, WPRO $550K</p>
+          <div style="display: flex; gap: 10px; align-items: center"><div class="inp" style="background: var(--color-bg); width: 130px">Amount</div><span class="cta" style="padding: 10px 22px">Contribute</span></div>
+        </div>
+        <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+          <div><p style="font-family: var(--font-heading); font-size: 18px; margin: 0">EMRO · $2,000,000</p><p class="small" style="margin: 3px 0 0">Cold-chain failure across the northern corridor — fully funded.</p></div>
+          <span class="tag t-opt">CLOSED</span>
+        </div>
+        <div>
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Open your own request</p>
+          <p class="small" style="margin: 0">You can hold one open request at a time. The instructor decides when to close it and disburse.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 620px">
+      <p class="scr-name">Briefing</p>
+      <p class="scr-route">/orientation, /profile and /glossary merged into one tabbed reference</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 18px">
+        <h2 class="ptitle">Briefing</h2>
+        <div class="seg"><span class="seg-on">Your region</span><span class="seg-off">The scenario</span><span class="seg-off">How you're scored</span><span class="seg-off">Glossary</span></div>
+        <div class="sage">
+          <p class="eyebrow" style="color: var(--color-accent-2-700); margin-bottom: 6px">Your role</p>
+          <p style="font-family: var(--font-heading); font-size: 22px; margin: 0; color: var(--color-accent-2-900)">Regional Director, WHO African Region</p>
+          <p class="small" style="color: var(--color-accent-2-700); margin: 4px 0 0">Brazzaville, Republic of the Congo · 47 member states</p>
+        </div>
+        <div class="card">
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Starting position</p>
+          <p class="body" style="margin: 0 0 14px">The widest surveillance gap of any region, and a fund that covers roughly three weeks of surge operations at current burn.</p>
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Geopolitical context</p>
+          <p class="body" style="margin: 0 0 14px">Several member states have signalled they will not accept a travel-restriction framework they had no part in drafting.</p>
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 8px">Strategic priorities</p>
+          <p class="body" style="margin: 0">Protect the surveillance-adjusted case estimate as the basis for allocation; avoid being scored on confirmed counts you know are wrong.</p>
+        </div>
+        <div class="warm">
+          <p class="small" style="margin: 0; color: var(--color-accent-800); line-height: 1.55"><b>Time itself has a cost.</b> Your Rt drifts upward on its own whenever no fresh containment decision has been scored for a while — not deciding is a decision.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 700px">
+      <p class="scr-name">After-action summary</p>
+      <p class="scr-route">/summary — your chapter first, the comparison second, the replay third</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 20px">
+        <h2 class="ptitle">After-action</h2>
+        <div class="sage" style="padding: 26px 28px">
+          <p class="eyebrow" style="color: var(--color-accent-2-700); margin-bottom: 8px">Your chapter</p>
+          <h3 style="font-family: var(--font-heading); font-size: 30px; line-height: 1.2; margin: 0 0 12px; color: var(--color-accent-2-900)">The Region That Argued for the Uncounted</h3>
+          <p class="body" style="margin: 0 0 18px; color: var(--color-accent-2-800)">AFRO spent political capital early to move allocation off confirmed counts, and paid for it in the border vote. The choice held: by day 70 the surveillance-adjusted framework was the one every region was using.</p>
+          <div style="display: flex; gap: 32px; flex-wrap: wrap">
+            <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">Decisions</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">12</p></div>
+            <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">Optimal calls</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">5</p></div>
+            <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">Final deaths</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 700; color: var(--color-accent-2-900); margin: 0">1,204</p></div>
+            <div><p class="small" style="color: var(--color-accent-2-700); margin: 0">Preventable</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 700; color: var(--color-accent-700); margin: 0">386</p></div>
+          </div>
+        </div>
+        <div class="warm">
+          <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 10px">Actual vs. an ideal playthrough</p>
+          <p class="body" style="margin: 0 0 14px; color: var(--color-accent-800)">"Ideal" is a parallel shadow simulation that received the best-tier consequence at every decision point, everywhere — a realistic ceiling, not a perfect score.</p>
+          <div style="display: flex; gap: 32px; flex-wrap: wrap">
+            <div><p class="small" style="color: var(--color-accent-800); margin: 0">World deaths, actual</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 700; color: var(--color-accent-900); margin: 0">4,188</p></div>
+            <div><p class="small" style="color: var(--color-accent-800); margin: 0">Under an ideal response</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 700; color: var(--color-accent-900); margin: 0">2,346</p></div>
+            <div><p class="small" style="color: var(--color-accent-800); margin: 0">Deaths preventable</p><p style="font-family: var(--font-body); font-size: 26px; font-weight: 800; color: var(--color-accent-700); margin: 0">1,842</p></div>
+          </div>
+        </div>
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+            <p class="eyebrow" style="color: var(--color-neutral-700); margin: 0">Round 1 of 12 — replay every region's call</p>
+            <div style="display: flex; gap: 8px"><span class="ghost" style="padding: 7px 16px; font-size: 13px; opacity: .35">← Prev</span><span class="ghost" style="padding: 7px 16px; font-size: 13px">Next →</span></div>
+          </div>
+          <div class="card">
+            <p class="small" style="margin: 0">Day 1 · Emergency Committee</p>
+            <p style="font-family: var(--font-heading); font-size: 21px; margin: 2px 0 14px">PHEIC Declaration Vote</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+              <div style="background: var(--color-bg); border-radius: var(--radius-lg); padding: 14px 16px">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px"><span style="font-family: var(--font-body); font-weight: 700">AFRO</span><span class="tag t-opt">OPTIMAL</span></div>
+                <p class="small" style="margin: 0; color: var(--color-neutral-800); line-height: 1.5">Declare, paired with an explicit commitment that allocation won't be driven by confirmed counts alone.</p>
+              </div>
+              <div style="background: var(--color-bg); border-radius: var(--radius-lg); padding: 14px 16px">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px"><span style="font-family: var(--font-body); font-weight: 700">SEARO</span><span class="tag t-inq">INADEQUATE</span></div>
+                <p class="small" style="margin: 0; color: var(--color-neutral-800); line-height: 1.5">Wait for a second week of sequencing data before supporting a declaration.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== INSTRUCTOR ===================== -->
+  <div style="display: flex; align-items: baseline; gap: 16px; margin: 72px 0 24px">
+    <h2 class="grp-h">3 · Instructor</h2>
+    <span class="grp-s">Same rail, different cargo — it holds what is waiting on you instead of what you own</span>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+
+    <div style="width: 980px">
+      <p class="scr-name">Command Center</p>
+      <p class="scr-route">/control — the densest screen in the app, now with one thing asked of you at a time</p>
+      <div class="frame" style="display: flex; min-height: 800px">
+        <div class="rail">
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500)">Veiled Horizon</p>
+            <h1 style="font-family: var(--font-heading); font-size: 24px; margin: 6px 0 0; color: #fff; line-height: 1.15">Facilitator</h1>
+          </div>
+          <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 16px 18px">
+            <p class="eyebrow" style="color: var(--color-accent-300); font-size: 11px">Waiting on you</p>
+            <p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">4</p>
+            <p style="font-family: var(--font-body); font-size: 13px; color: var(--color-accent-200); margin: 4px 0 0; line-height: 1.35">submissions · oldest 6m · 1 mandatory</p>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px; margin-bottom: 12px">Running deadlines</p>
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <div class="rail-row"><span class="rail-lbl">Antiviral · AFRO</span><span class="rail-val" style="color: var(--color-accent-300)">3:12</span></div>
+              <div class="rail-row"><span class="rail-lbl">Antiviral · SEARO</span><span class="rail-val" style="color: var(--color-accent-300)">3:12</span></div>
+              <div class="rail-row"><span class="rail-lbl">Misinfo · EURO</span><span class="rail-val" style="color: var(--color-accent-300)">0:47</span></div>
+            </div>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px; margin-bottom: 10px">Go to</p>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span class="navpill-on">Command</span>
+              <span class="navpill" style="display: flex; justify-content: space-between">Scoring <span style="background: var(--color-accent-700); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 700">4</span></span>
+              <span class="navpill">Debrief</span>
+              <span class="navpill">Run sheet</span>
+              <span class="navpill">Action log</span>
+            </div>
+          </div>
+          <div style="margin-top: auto; border-top: 1px solid var(--color-neutral-700); padding-top: 16px">
+            <p class="eyebrow" style="color: var(--color-neutral-500); font-size: 11px">In-game</p>
+            <p style="font-family: var(--font-body); font-size: 18px; font-weight: 700; color: #fff; margin: 2px 0 0">Day 34 · 08:12</p>
+            <div style="height: 4px; background: var(--color-neutral-700); border-radius: 999px; margin-top: 6px; overflow: hidden"><div style="height: 100%; width: 38%; background: var(--color-accent-400)"></div></div>
+            <p class="small" style="color: var(--color-neutral-500); margin: 12px 0 0">Projector · /display/veiled-horizon</p>
+          </div>
+        </div>
+        <div class="col">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px">
+            <h2 class="ptitle">Command</h2>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <span class="tag" style="background: var(--color-accent-2-700); color: #fff; font-size: 13px; padding: 5px 16px">Running</span>
+              <span class="ghost" style="padding: 8px 18px; font-size: 14px">Pause</span>
+              <span class="ghost" style="padding: 8px 18px; font-size: 14px">End game</span>
+            </div>
+          </div>
+
+          <div class="warm" style="display: flex; align-items: center; gap: 20px; padding: 22px 24px">
+            <div style="flex: 1">
+              <p class="eyebrow" style="color: var(--color-accent-700); font-size: 12px; margin-bottom: 4px">Do this next</p>
+              <p style="font-family: var(--font-heading); font-size: 21px; margin: 0; color: var(--color-accent-900)">4 submissions are waiting to be scored</p>
+              <p class="small" style="color: var(--color-accent-800); margin: 4px 0 0">Oldest 6 minutes · 1 flagged mandatory review · 3 can be fast-pathed</p>
+            </div>
+            <span class="cta">Open scoring</span>
+          </div>
+
+          <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px">
+              <p class="eyebrow" style="color: var(--color-neutral-700); margin: 0">Session timeline</p>
+              <span class="tag t-inq">BEHIND ON ACT 2 · 1 CORE EVENT UNDISPATCHED</span>
+            </div>
+            <div style="position: relative; height: 10px; background: var(--color-neutral-300); border-radius: 999px; margin-bottom: 16px">
+              <div style="position: absolute; inset: 0 62% 0 0; background: var(--color-accent); border-radius: 999px"></div>
+              <div style="position: absolute; top: 50%; left: 4%; transform: translate(-50%,-50%); width: 14px; height: 14px; border-radius: 999px; background: var(--color-accent-700); border: 3px solid var(--color-bg)"></div>
+              <div style="position: absolute; top: 50%; left: 22%; transform: translate(-50%,-50%); width: 14px; height: 14px; border-radius: 999px; background: var(--color-accent-700); border: 3px solid var(--color-bg)"></div>
+              <div style="position: absolute; top: 50%; left: 40%; transform: translate(-50%,-50%); width: 14px; height: 14px; border-radius: 999px; background: var(--color-accent-700); border: 3px solid var(--color-bg)"></div>
+              <div style="position: absolute; top: 50%; left: 60%; transform: translate(-50%,-50%); width: 14px; height: 14px; border-radius: 999px; background: var(--color-neutral-400); border: 3px solid var(--color-bg)"></div>
+              <div style="position: absolute; top: 50%; left: 80%; transform: translate(-50%,-50%); width: 14px; height: 14px; border-radius: 999px; background: var(--color-neutral-400); border: 3px solid var(--color-bg)"></div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px">
+              <div style="background: var(--color-bg); border-radius: 12px; padding: 10px 12px"><p class="small" style="margin: 0">Act 1</p><p style="font-family: var(--font-body); font-size: 15px; font-weight: 700; margin: 2px 0 0">3/3 sent</p></div>
+              <div style="background: var(--color-accent-100); border-radius: 12px; padding: 10px 12px"><p class="small" style="margin: 0; color: var(--color-accent-700)">Act 2</p><p style="font-family: var(--font-body); font-size: 15px; font-weight: 700; margin: 2px 0 0; color: var(--color-accent-900)">2/3 sent</p></div>
+              <div style="background: var(--color-bg); border: 2px solid var(--color-accent); border-radius: 12px; padding: 10px 12px"><p class="small" style="margin: 0">Act 3 · now</p><p style="font-family: var(--font-body); font-size: 15px; font-weight: 700; margin: 2px 0 0">2/4 sent</p></div>
+              <div style="background: var(--color-bg); border-radius: 12px; padding: 10px 12px"><p class="small" style="margin: 0">Act 4</p><p style="font-family: var(--font-body); font-size: 15px; font-weight: 700; margin: 2px 0 0">0/3 sent</p></div>
+              <div style="background: var(--color-bg); border-radius: 12px; padding: 10px 12px"><p class="small" style="margin: 0">Act 5</p><p style="font-family: var(--font-body); font-size: 15px; font-weight: 700; margin: 2px 0 0">0/3 sent</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+              <p class="eyebrow" style="color: var(--color-neutral-700); margin: 0">Tempo</p>
+              <span class="small">Scales Rt drift, HQ prices and deadline windows together</span>
+            </div>
+            <div class="seg" style="align-self: stretch">
+              <span class="seg-off" style="flex: 1; text-align: center">Calm<br><span style="font-size: 11px">0.50×</span></span>
+              <span class="seg-off" style="flex: 1; text-align: center">Steady<br><span style="font-size: 11px">0.75×</span></span>
+              <span class="seg-off" style="flex: 1; text-align: center">Baseline<br><span style="font-size: 11px">1.00×</span></span>
+              <span style="flex: 1; text-align: center; background: var(--color-accent-700); color: #fff; border-radius: 999px; padding: 7px 20px; font-weight: 700">Tense<br><span style="font-size: 11px; opacity: .8">1.50×</span></span>
+              <span class="seg-off" style="flex: 1; text-align: center">Crisis<br><span style="font-size: 11px">2.00×</span></span>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+              <p class="eyebrow" style="color: var(--color-neutral-700); margin: 0">Event queue · game day 34</p>
+              <div class="seg"><span class="seg-on">Core path</span><span class="seg-off">All 16</span></div>
+            </div>
+
+            <div style="border: 2px solid var(--color-accent-300); background: var(--color-accent-100); border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 12px">
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px">
+                    <p style="font-family: var(--font-heading); font-size: 20px; margin: 0; color: var(--color-accent-900)">Antiviral Stockpile Allocation</p>
+                    <span class="tag" style="background: var(--color-accent-700); color: #fff">CORE</span>
+                    <span class="small" style="color: var(--color-accent-800)">EVT-007 · global</span>
+                  </div>
+                  <p class="small" style="color: var(--color-accent-800); margin: 0; max-width: 480px; line-height: 1.5">Optimal allocation lowers global Rt by 0.06 and raises the equity index; a burden-only split raises tension in the two lowest-surveillance regions.</p>
+                </div>
+                <span class="ghost" style="border-color: var(--color-accent-400); color: var(--color-accent-800); flex-shrink: 0">Re-dispatch</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px">
+                <span class="tag t-inq">AFRO · waiting</span>
+                <span class="tag t-adq">AMRO · responded</span>
+                <span class="tag t-opt">EMRO · scored</span>
+                <span class="tag t-inq">EURO · waiting</span>
+                <span class="tag t-inq">SEARO · waiting</span>
+                <span class="tag" style="background: var(--color-neutral-200); color: var(--color-neutral-700)">WPRO · not sent</span>
+              </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 12px">
+              <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px">
+                    <p style="font-family: var(--font-heading); font-size: 20px; margin: 0">Political Backlash Escalation</p>
+                    <span class="tag" style="background: var(--color-neutral-200); color: var(--color-neutral-700)">OPTIONAL</span>
+                    <span class="small">EVT-013 · multi</span>
+                  </div>
+                  <p class="small" style="margin: 0">Trigger: any region's political tension above 70.</p>
+                </div>
+                <div style="text-align: right; flex-shrink: 0">
+                  <span class="ghost" style="opacity: .4">Dispatch</span>
+                  <p class="small" style="color: var(--color-accent-700); margin: 6px 0 0">Blocked by EVT-009</p>
+                </div>
+              </div>
+              <div style="background: var(--color-bg); border-radius: var(--radius-lg); padding: 14px 16px; margin-top: 14px">
+                <p class="small" style="margin: 0 0 10px">AFRO and SEARO currently satisfy the trigger — pre-selected. Adjust if you want a different audience.</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px">
+                  <span class="tag" style="background: var(--color-accent-700); color: #fff">AFRO ✓</span>
+                  <span class="tag" style="background: var(--color-neutral-200); color: var(--color-neutral-700)">AMRO</span>
+                  <span class="tag" style="background: var(--color-neutral-200); color: var(--color-neutral-700)">EMRO</span>
+                  <span class="tag" style="background: var(--color-neutral-200); color: var(--color-neutral-700)">EURO</span>
+                  <span class="tag" style="background: var(--color-accent-700); color: #fff">SEARO ✓</span>
+                  <span class="tag" style="background: var(--color-neutral-200); color: var(--color-neutral-700)">WPRO</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px">
+                  <span class="small"><a href="#a">Select all</a></span>
+                  <span class="small"><a href="#a">Clear</a></span>
+                  <span class="cta" style="margin-left: auto; padding: 9px 20px; font-size: 14px">Dispatch to 2 regions</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 660px">
+      <p class="scr-name">Scoring inbox</p>
+      <p class="scr-route">/scoring — mandatory review floats to the top and cannot be fast-pathed</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+          <div>
+            <h2 class="ptitle">Scoring</h2>
+            <p class="small" style="margin: 4px 0 0">4 awaiting · oldest 6 minutes</p>
+          </div>
+          <span class="cta-2">Accept all 3 suggested</span>
+        </div>
+        <div class="warm" style="border: 2px solid var(--color-accent)">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px">
+                <p style="font-family: var(--font-heading); font-size: 19px; margin: 0; color: var(--color-accent-900)">Border Closure Pressure</p>
+                <span class="tag t-crit">MANDATORY REVIEW</span>
+              </div>
+              <p class="small" style="color: var(--color-accent-800); margin: 0">SEARO · choice C · high confidence · suggested INADEQUATE · 6m old</p>
+            </div>
+            <span class="cta" style="flex-shrink: 0; padding: 9px 20px; font-size: 14px">Score it</span>
+          </div>
+        </div>
+        <div class="card" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px">
+          <div>
+            <p style="font-family: var(--font-heading); font-size: 19px; margin: 0 0 6px">Antiviral Stockpile Allocation</p>
+            <p class="small" style="margin: 0">AMRO · choice B · medium confidence · suggested <b style="color: var(--color-accent-2-800)">OPTIMAL</b> · 3m old</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-shrink: 0"><span class="cta-2" style="padding: 8px 16px; font-size: 13px">Accept</span><span class="ghost" style="padding: 7px 16px; font-size: 13px">Review</span></div>
+        </div>
+        <div class="card" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px">
+          <div>
+            <p style="font-family: var(--font-heading); font-size: 19px; margin: 0 0 6px">Misinformation Surge</p>
+            <p class="small" style="margin: 0">EURO · choice A · low confidence · suggested <b style="color: var(--color-neutral-800)">ADEQUATE</b> · 2m old</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-shrink: 0"><span class="cta-2" style="padding: 8px 16px; font-size: 13px">Accept</span><span class="ghost" style="padding: 7px 16px; font-size: 13px">Review</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 660px">
+      <p class="scr-name">Score a decision</p>
+      <p class="scr-route">/scoring/[decisionId] — the rubric, the consequence ladder, and the live tier</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 18px">
+        <div>
+          <p class="eyebrow" style="color: var(--color-accent-700); margin-bottom: 6px">SEARO · suggested INADEQUATE</p>
+          <h2 style="font-family: var(--font-heading); font-size: 28px; margin: 0">Border Closure Pressure</h2>
+        </div>
+        <div class="card">
+          <p class="small" style="margin: 0 0 8px"><b style="color: var(--color-text)">Choice C</b> · coordinated with nobody · confidence <b style="color: var(--color-text)">high</b></p>
+          <p class="body" style="margin: 0; color: var(--color-text)">"Closing the land borders buys us three weeks of ICU headroom and the ministries will back it. We accept the trade on cross-border health worker movement."</p>
+        </div>
+        <div>
+          <p class="eyebrow" style="color: var(--color-neutral-700); margin-bottom: 10px">What each tier would mean here</p>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <div style="display: flex; gap: 12px; align-items: flex-start"><span class="tag t-opt" style="flex-shrink: 0; width: 130px; text-align: center">OPTIMAL</span><p class="small" style="margin: 0; color: var(--color-neutral-800)">Targeted screening plus surge capacity; Rt −0.08, trust +5.</p></div>
+            <div style="display: flex; gap: 12px; align-items: flex-start"><span class="tag t-adq" style="flex-shrink: 0; width: 130px; text-align: center">ADEQUATE</span><p class="small" style="margin: 0; color: var(--color-neutral-800)">Partial restrictions with exemptions; Rt −0.03.</p></div>
+            <div style="display: flex; gap: 12px; align-items: flex-start"><span class="tag t-inq" style="flex-shrink: 0; width: 130px; text-align: center">INADEQUATE</span><p class="small" style="margin: 0; color: var(--color-neutral-800)">Blanket closure; tension +12, trust −6, no Rt gain.</p></div>
+            <div style="display: flex; gap: 12px; align-items: flex-start"><span class="tag t-crit" style="flex-shrink: 0; width: 130px; text-align: center">CRITICAL</span><p class="small" style="margin: 0; color: var(--color-neutral-800)">Closure plus a public blame statement; tension +25, cooperation penalty.</p></div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 16px">
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px"><span class="small" style="font-weight: 600; color: var(--color-text)">Evidence-based practice · 40%</span><span class="small" style="font-weight: 700; color: var(--color-text)">2 / 4</span></div>
+            <div class="seg" style="align-self: stretch"><span class="seg-off" style="flex: 1; text-align: center">1</span><span class="seg-on" style="flex: 1; text-align: center">2</span><span class="seg-off" style="flex: 1; text-align: center">3</span><span class="seg-off" style="flex: 1; text-align: center">4</span></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px"><span class="small" style="font-weight: 600; color: var(--color-text)">Political &amp; economic realism · 30%</span><span class="small" style="font-weight: 700; color: var(--color-text)">3 / 4</span></div>
+            <div class="seg" style="align-self: stretch"><span class="seg-off" style="flex: 1; text-align: center">1</span><span class="seg-off" style="flex: 1; text-align: center">2</span><span class="seg-on" style="flex: 1; text-align: center">3</span><span class="seg-off" style="flex: 1; text-align: center">4</span></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px"><span class="small" style="font-weight: 600; color: var(--color-text)">Health equity · 30%</span><span class="small" style="font-weight: 700; color: var(--color-text)">1 / 4</span></div>
+            <div class="seg" style="align-self: stretch"><span class="seg-on" style="flex: 1; text-align: center">1</span><span class="seg-off" style="flex: 1; text-align: center">2</span><span class="seg-off" style="flex: 1; text-align: center">3</span><span class="seg-off" style="flex: 1; text-align: center">4</span></div>
+          </div>
+        </div>
+        <div class="warm" style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+          <div>
+            <p class="small" style="color: var(--color-accent-800); margin: 0">Raw 50.0% · −5 calibration (high confidence on an inadequate call)</p>
+            <p style="font-family: var(--font-heading); font-size: 24px; margin: 4px 0 0; color: var(--color-accent-900)">45.0% — Inadequate</p>
+          </div>
+          <span class="tag t-inq" style="flex-shrink: 0; font-size: 13px; padding: 5px 16px">MATCHES SUGGESTION</span>
+        </div>
+        <div class="area">Override note — required if you disagree with the suggested tier</div>
+        <div><span class="cta" style="padding: 12px 30px">Finalise score</span></div>
+      </div>
+    </div>
+
+    <div style="width: 560px">
+      <p class="scr-name">Action log</p>
+      <p class="scr-route">/log — an audit trail you can read aloud in the debrief</p>
+      <div class="frame" style="padding: 30px 34px; display: flex; flex-direction: column; gap: 12px">
+        <h2 class="ptitle" style="margin-bottom: 6px">Action log</h2>
+        <div class="card">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><p style="font-family: var(--font-heading); font-size: 17px; margin: 0">Dispatched an event</p><span class="small">10:44</span></div>
+          <p class="small" style="margin: 4px 0 0">EVT-007 → all six regions</p>
+        </div>
+        <div class="card">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><p style="font-family: var(--font-heading); font-size: 17px; margin: 0">Overrode a suggested tier</p><span class="small">10:41</span></div>
+          <p class="small" style="margin: 4px 0 0">Decision #118 · SEARO / EVT-005 → Inadequate</p>
+          <p class="small" style="margin: 6px 0 0; color: var(--color-accent-700)">"Rationale never addresses the health-worker movement tradeoff."</p>
+        </div>
+        <div class="card">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><p style="font-family: var(--font-heading); font-size: 17px; margin: 0">Approved a market batch</p><span class="small">10:38</span></div>
+          <p class="small" style="margin: 4px 0 0">3 purchases · $1,120,000 moved</p>
+        </div>
+        <div class="card">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px"><p style="font-family: var(--font-heading); font-size: 17px; margin: 0">Changed the tempo</p><span class="small">10:35</span></div>
+          <p class="small" style="margin: 4px 0 0">Baseline 1.00× → Tense 1.50×</p>
+        </div>
+        <p class="small" style="margin: 8px 0 0; line-height: 1.6">The run sheet (<code style="font-family: ui-monospace, monospace; background: var(--color-surface); border-radius: 6px; padding: 2px 6px">/guide</code>) and debrief (<code style="font-family: ui-monospace, monospace; background: var(--color-surface); border-radius: 6px; padding: 2px 6px">/debrief</code>) share this chrome — a long-form document column on the warm ground, with the rail intact.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PROJECTOR ===================== -->
+  <div style="display: flex; align-items: baseline; gap: 16px; margin: 72px 0 24px">
+    <h2 class="grp-h">4 · Projector</h2>
+    <span class="grp-s">No rail, no navigation — read from the back of a lecture hall</span>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start">
+
+    <div style="width: 1180px">
+      <p class="scr-name">Live room view</p>
+      <p class="scr-route">/display/[token] — the escalation state owns the top edge</p>
+      <div class="frame" style="background: var(--color-neutral-900); display: flex; flex-direction: column">
+        <div style="background: var(--color-accent-700); padding: 24px 36px; display: flex; align-items: center; justify-content: space-between; gap: 24px">
+          <div>
+            <p class="eyebrow" style="color: var(--color-accent-200); font-size: 13px; letter-spacing: .2em">Operation Veiled Horizon</p>
+            <h1 style="font-family: var(--font-heading); font-size: 40px; margin: 6px 0 0; color: #fff">Amber</h1>
+          </div>
+          <div style="display: flex; gap: 44px; font-family: var(--font-body); color: #fff">
+            <div><p class="eyebrow" style="color: var(--color-accent-200); font-size: 13px">Day</p><p style="font-size: 40px; font-weight: 800; margin: 0; letter-spacing: -.02em">34</p></div>
+            <div><p class="eyebrow" style="color: var(--color-accent-200); font-size: 13px">Global Rt</p><p style="font-size: 40px; font-weight: 800; margin: 0; letter-spacing: -.02em">1.42</p></div>
+            <div><p class="eyebrow" style="color: var(--color-accent-200); font-size: 13px">Elapsed</p><p style="font-size: 40px; font-weight: 800; margin: 0; letter-spacing: -.02em">22:41</p></div>
+          </div>
+        </div>
+
+        <div style="background: var(--color-accent-900); padding: 16px 36px; display: flex; align-items: center; gap: 20px">
+          <span class="eyebrow" style="color: var(--color-accent-300); font-size: 13px; flex-shrink: 0">World health</span>
+          <div style="flex: 1; height: 18px; background: var(--color-neutral-800); border-radius: 999px; overflow: hidden"><div style="height: 100%; width: 41%; background: var(--color-accent-400); border-radius: 999px"></div></div>
+          <span style="font-family: var(--font-body); font-size: 24px; font-weight: 800; color: #fff; flex-shrink: 0">41<span style="font-size: 15px; color: var(--color-accent-300)">/100</span></span>
+          <span style="font-family: var(--font-body); font-size: 17px; color: var(--color-accent-300); flex-shrink: 0; width: 140px">Deteriorating</span>
+        </div>
+
+        <div style="background: var(--color-accent-800); padding: 20px 36px; display: flex; align-items: center; justify-content: space-between; gap: 28px">
+          <div>
+            <p class="eyebrow" style="color: var(--color-accent-300); font-size: 13px">Emergency Committee · snap vote</p>
+            <p style="font-family: var(--font-heading); font-size: 28px; margin: 6px 0 0; color: #fff">Do we recommend an immediate global travel advisory?</p>
+          </div>
+          <div style="text-align: right; flex-shrink: 0">
+            <p style="font-family: var(--font-body); font-size: 46px; font-weight: 800; color: var(--color-accent-300); margin: 0; letter-spacing: -.03em">48s</p>
+            <p style="font-family: var(--font-body); font-size: 16px; color: var(--color-accent-200); margin: 0">4 of 6 regions in</p>
+          </div>
+        </div>
+
+        <div style="display: flex; min-height: 460px">
+          <div style="flex: 1; min-width: 0; padding: 28px 36px; display: flex; flex-direction: column; gap: 24px">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px">
+              <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 18px 20px"><p class="eyebrow" style="color: var(--color-neutral-400); font-size: 12px">Confirmed</p><p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">38,070</p></div>
+              <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 18px 20px"><p class="eyebrow" style="color: var(--color-neutral-400); font-size: 12px">Deaths</p><p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">1,729</p></div>
+              <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 18px 20px"><p class="eyebrow" style="color: var(--color-neutral-400); font-size: 12px">Public trust</p><p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">48</p></div>
+              <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 18px 20px"><p class="eyebrow" style="color: var(--color-neutral-400); font-size: 12px">Happiness</p><p style="font-family: var(--font-body); font-size: 34px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">44</p></div>
+            </div>
+
+            <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 24px 26px">
+              <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px">
+                <p class="eyebrow" style="color: var(--color-neutral-400); font-size: 13px">Confirmed cases by region</p>
+                <p style="font-family: var(--font-body); font-size: 15px; color: var(--color-neutral-400); margin: 0">the pale bar behind is estimated true burden</p>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 14px; font-family: var(--font-body)">
+                <div style="display: flex; align-items: center; gap: 16px"><span style="width: 76px; font-size: 16px; font-weight: 700; color: var(--color-neutral-300)">SEARO</span><div style="flex: 1; height: 26px; background: var(--color-neutral-700); border-radius: 999px; overflow: hidden; position: relative"><div style="position: absolute; inset: 0; width: 100%; background: var(--color-accent-800)"></div><div style="position: absolute; inset: 0; width: 37%; background: var(--color-accent-400); border-radius: 999px"></div></div><span style="width: 84px; text-align: right; font-size: 20px; font-weight: 800; color: #fff">11,040</span></div>
+                <div style="display: flex; align-items: center; gap: 16px"><span style="width: 76px; font-size: 16px; font-weight: 700; color: var(--color-neutral-300)">EURO</span><div style="flex: 1; height: 26px; background: var(--color-neutral-700); border-radius: 999px; overflow: hidden; position: relative"><div style="position: absolute; inset: 0; width: 37%; background: var(--color-accent-800)"></div><div style="position: absolute; inset: 0; width: 28%; background: var(--color-accent-400); border-radius: 999px"></div></div><span style="width: 84px; text-align: right; font-size: 20px; font-weight: 800; color: #fff">8,120</span></div>
+                <div style="display: flex; align-items: center; gap: 16px"><span style="width: 76px; font-size: 16px; font-weight: 700; color: var(--color-neutral-300)">AMRO</span><div style="flex: 1; height: 26px; background: var(--color-neutral-700); border-radius: 999px; overflow: hidden; position: relative"><div style="position: absolute; inset: 0; width: 38%; background: var(--color-accent-800)"></div><div style="position: absolute; inset: 0; width: 23%; background: var(--color-accent-400); border-radius: 999px"></div></div><span style="width: 84px; text-align: right; font-size: 20px; font-weight: 800; color: #fff">6,890</span></div>
+                <div style="display: flex; align-items: center; gap: 16px"><span style="width: 76px; font-size: 16px; font-weight: 700; color: var(--color-neutral-300)">WPRO</span><div style="flex: 1; height: 26px; background: var(--color-neutral-700); border-radius: 999px; overflow: hidden; position: relative"><div style="position: absolute; inset: 0; width: 25%; background: var(--color-accent-800)"></div><div style="position: absolute; inset: 0; width: 19%; background: var(--color-accent-400); border-radius: 999px"></div></div><span style="width: 84px; text-align: right; font-size: 20px; font-weight: 800; color: #fff">5,560</span></div>
+                <div style="display: flex; align-items: center; gap: 16px"><span style="width: 76px; font-size: 16px; font-weight: 700; color: var(--color-neutral-300)">AFRO</span><div style="flex: 1; height: 26px; background: var(--color-neutral-700); border-radius: 999px; overflow: hidden; position: relative"><div style="position: absolute; inset: 0; width: 56%; background: var(--color-accent-800)"></div><div style="position: absolute; inset: 0; width: 14%; background: var(--color-accent-400); border-radius: 999px"></div></div><span style="width: 84px; text-align: right; font-size: 20px; font-weight: 800; color: #fff">4,120</span></div>
+                <div style="display: flex; align-items: center; gap: 16px"><span style="width: 76px; font-size: 16px; font-weight: 700; color: var(--color-neutral-300)">EMRO</span><div style="flex: 1; height: 26px; background: var(--color-neutral-700); border-radius: 999px; overflow: hidden; position: relative"><div style="position: absolute; inset: 0; width: 30%; background: var(--color-accent-800)"></div><div style="position: absolute; inset: 0; width: 8%; background: var(--color-accent-400); border-radius: 999px"></div></div><span style="width: 84px; text-align: right; font-size: 20px; font-weight: 800; color: #fff">2,340</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width: 420px; flex-shrink: 0; border-left: 1px solid var(--color-neutral-800); background: var(--color-neutral-800); display: flex; flex-direction: column">
+            <p class="eyebrow" style="color: var(--color-neutral-400); font-size: 13px; padding: 18px 24px; border-bottom: 1px solid var(--color-neutral-700); margin: 0">Live feed</p>
+            <div style="padding: 18px 24px; display: flex; flex-direction: column; gap: 12px">
+              <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 14px 16px"><p style="font-family: var(--font-body); font-size: 17px; color: #fff; margin: 0; line-height: 1.45">Antiviral Stockpile Allocation is now live. All six regions must respond.</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-accent-300); margin: 6px 0 0">4s ago</p></div>
+              <div style="background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 14px 16px"><p style="font-family: var(--font-body); font-size: 17px; color: var(--color-neutral-200); margin: 0; line-height: 1.45">A private message between two regional offices has surfaced publicly.</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); margin: 6px 0 0">1m ago</p></div>
+              <div style="background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 14px 16px"><p style="font-family: var(--font-body); font-size: 17px; color: var(--color-neutral-200); margin: 0; line-height: 1.45">EURO pledged $2,000,000 to AFRO.</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); margin: 6px 0 0">3m ago</p></div>
+              <div style="background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 14px 16px"><p style="font-family: var(--font-body); font-size: 17px; color: var(--color-neutral-200); margin: 0; line-height: 1.45">Escalation state moved from green to amber.</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); margin: 6px 0 0">6m ago</p></div>
+              <div style="background: var(--color-neutral-900); border-radius: var(--radius-lg); padding: 14px 16px"><p style="font-family: var(--font-body); font-size: 17px; color: var(--color-neutral-200); margin: 0; line-height: 1.45">SEARO's border decision was scored inadequate. Regional Rt rose to 1.47.</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); margin: 6px 0 0">8m ago</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 560px">
+      <p class="scr-name">Dramatic moment</p>
+      <p class="scr-route">/display — a full takeover, 1.5s fade, nothing else on screen</p>
+      <div class="frame" style="background: #000; min-height: 360px; display: flex; align-items: center; justify-content: center; padding: 52px">
+        <div style="text-align: center; max-width: 460px">
+          <p class="eyebrow" style="color: var(--color-accent-400); font-size: 13px; letter-spacing: .3em; margin-bottom: 22px">Day 51 · 04:12 local</p>
+          <p style="font-family: var(--font-heading); font-size: 32px; line-height: 1.3; color: #fff; margin: 0">The first hospital in the region has stopped admitting patients. Nobody decided that. It just happened.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 560px">
+      <p class="scr-name">Simulation complete</p>
+      <p class="scr-route">/display — the number the whole session was building toward</p>
+      <div class="frame" style="background: var(--color-neutral-900); display: flex; flex-direction: column">
+        <div style="background: var(--color-accent-800); padding: 24px 32px; text-align: center">
+          <p class="eyebrow" style="color: var(--color-accent-300); font-size: 13px; letter-spacing: .2em">Simulation complete</p>
+          <h1 style="font-family: var(--font-heading); font-size: 32px; margin: 6px 0 0; color: #fff">What an ideal response would have changed</h1>
+        </div>
+        <div style="padding: 28px 32px; display: flex; flex-direction: column; gap: 18px">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+            <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 20px"><p class="eyebrow" style="color: var(--color-neutral-400); font-size: 12px">Infections preventable</p><p style="font-family: var(--font-body); font-size: 40px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">21,930</p></div>
+            <div style="background: var(--color-accent-800); border-radius: var(--radius-lg); padding: 20px"><p class="eyebrow" style="color: var(--color-accent-300); font-size: 12px">Deaths preventable</p><p style="font-family: var(--font-body); font-size: 40px; font-weight: 800; color: #fff; margin: 4px 0 0; letter-spacing: -.02em">1,842</p></div>
+          </div>
+          <div>
+            <p class="eyebrow" style="color: var(--color-neutral-400); font-size: 13px; margin-bottom: 12px">Chapters of history</p>
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 16px 18px"><p style="font-family: var(--font-heading); font-size: 19px; color: #fff; margin: 0">The Region That Argued for the Uncounted</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); margin: 4px 0 0">AFRO</p></div>
+              <div style="background: var(--color-neutral-800); border-radius: var(--radius-lg); padding: 16px 18px"><p style="font-family: var(--font-heading); font-size: 19px; color: #fff; margin: 0">Six Weeks Behind, All the Way Down</p><p style="font-family: var(--font-body); font-size: 14px; color: var(--color-neutral-400); margin: 4px 0 0">SEARO</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
