@@ -72,8 +72,8 @@ export function CheatCodeWidget() {
   // Ticks locally every second from the server's startedAt timestamp,
   // independent of this page's 15s poll interval — see lib/use-monologue.ts
   // for why that decoupling matters (the poll cadence is far coarser than
-  // the 5s-per-message cadence, so relying on the poll response's own
-  // index/text directly meant most of the 9 messages were never shown).
+  // the per-message cadence, so relying on the poll response's own
+  // index/text directly meant most messages were never shown).
   const monologue = useMonologueMessage(data?.cheat?.monologue?.startedAt);
 
   useBarrelRollEffect(data?.cheat?.barrelRollAt);

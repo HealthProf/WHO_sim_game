@@ -10,7 +10,7 @@ import {
   resolveCheatMonologue,
   computeRevertOverride,
 } from "@/lib/cheat-engine";
-import { tokenize, matchCheatCode, ARROW_GLYPHS } from "@/lib/cheat-codes";
+import { tokenize, matchCheatCode, ARROW_GLYPHS, MONOLOGUE_MESSAGES, MONOLOGUE_MESSAGE_SECONDS } from "@/lib/cheat-codes";
 
 describe("cheat code tokenizing + matching", () => {
   it("treats arrow keys as single tokens and is case-insensitive", () => {
@@ -171,13 +171,16 @@ describe("cheat code engine", () => {
     const pausedGs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
     expect(pausedGs!.simulationStatus).toBe("paused");
 
-    // Fast-forward: resolveCheatMonologue only acts once the full 9-message
+    // Fast-forward: resolveCheatMonologue only acts once the full message
     // sequence has elapsed, so back-date monologueStartedAt instead of
-    // waiting 45 real seconds.
+    // waiting for it in real time. Derived from the actual constants rather
+    // than a hardcoded number so this test doesn't silently under-shoot if
+    // MONOLOGUE_MESSAGE_SECONDS or the message count is ever retuned.
     const { cheatCodeState } = await import("@/lib/db/schema");
+    const totalMonologueMs = MONOLOGUE_MESSAGES.length * MONOLOGUE_MESSAGE_SECONDS * 1000;
     await db
       .update(cheatCodeState)
-      .set({ monologueStartedAt: new Date(Date.now() - 60_000) })
+      .set({ monologueStartedAt: new Date(Date.now() - totalMonologueMs - 5_000) })
       .where(eq(cheatCodeState.sessionId, sessionId));
 
     await resolveCheatMonologue(sessionId);

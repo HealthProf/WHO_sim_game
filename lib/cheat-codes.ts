@@ -131,11 +131,12 @@ export function cheatCodeApplies(code: CheatCodeDef, actorRole: "instructor" | "
   return code.scope === "global" || actorRole === "student";
 }
 
-// The scripted 9-message "Dutch vaccine monopoly" sequence for MONOLOGUE —
-// see the task spec for the source text (adapted from what-if.xkcd.com/53).
-// Each message is shown for MONOLOGUE_MESSAGE_SECONDS on every screen in the
-// session while the whole simulation is paused underneath it.
-export const MONOLOGUE_MESSAGE_SECONDS = 5;
+// The scripted "Dutch vaccine monopoly" sequence for MONOLOGUE — see the
+// task spec for the source text (adapted from what-if.xkcd.com/53), plus a
+// final "just kidding" beat and attribution line. Each message is shown for
+// MONOLOGUE_MESSAGE_SECONDS on every screen in the session while the whole
+// simulation is paused underneath it.
+export const MONOLOGUE_MESSAGE_SECONDS = 10;
 export const MONOLOGUE_MESSAGES: string[] = [
   "The Netherlands has developed a 100% effective vaccine that cannot be copied, sequenced, or reverse-engineered by anyone. Global panic ensues. (Also: mild toilet paper shortage. Always.)",
   "The world responds the way you'd expect: fury, then lawsuits, then — once lawsuits fail to produce a vaccine — much quieter, much more urgent phone calls to The Hague.",
@@ -146,6 +147,7 @@ export const MONOLOGUE_MESSAGES: string[] = [
   "Nations attempting to develop rival vaccines make surprising progress — right up until the Dutch quietly drop prices in that exact country, the research budget quietly disappears, and major pharma houses in that nation immediately go bankrupt and are sold to...the Netherlands.",
   "“Getting vaccinated” and “swearing trade allegiance to the Kingdom of the Netherlands” are now, for most of the planet, the same appointment. The rift between nations who have the vaccine and those who do not has never been wider. There are few holdouts left.",
   "Amsterdam is the de facto capital of a world that never voted for this. Windmills are mandatory rooftop decor in eleven time zones. Maybe we shouldn't have let them make the vaccine.",
+  "Just kidding! Adapted from https://what-if.xkcd.com/53/",
 ];
 
 export const CHEAT_FAIL_WARNING_THRESHOLD = 5;

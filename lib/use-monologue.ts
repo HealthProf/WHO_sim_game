@@ -9,10 +9,11 @@ export interface MonologueMessage {
   text: string;
 }
 
-// Cheat code #6's 9-message sequence needs to advance once every 5s, but
-// dashboard/instructor pages only poll /api/dashboard every 15s (the
-// projector polls /api/display every ~4s, which happens to be close enough
-// to not obviously break, but isn't guaranteed to line up either). Deriving
+// Cheat code #6's scripted message sequence needs to advance once every
+// MONOLOGUE_MESSAGE_SECONDS, but dashboard/instructor pages only poll
+// /api/dashboard every 15s (the projector polls /api/display every ~4s,
+// which happens to be close enough to not obviously break, but isn't
+// guaranteed to line up either). Deriving
 // the current message purely from the last poll response meant most
 // messages were simply never rendered — the client only ever showed
 // whichever one happened to be "current" at the moment of a poll.

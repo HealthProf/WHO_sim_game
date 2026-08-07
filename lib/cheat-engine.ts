@@ -253,7 +253,8 @@ async function applyRevertToZero(sessionId: string, actor: Actor): Promise<void>
 
 // MONOLOGUE pauses the whole simulation the instant it's matched (no
 // success screen — see the task spec) and resumes it automatically once
-// resolveCheatMonologue (below) sees the 9-message sequence has finished.
+// resolveCheatMonologue (below) sees the scripted message sequence has
+// finished.
 async function applyMonologueInstant(sessionId: string): Promise<void> {
   const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs) return;
@@ -418,14 +419,15 @@ export async function getRevertOverridesForSession(
 export interface CheatDisplayState {
   godModeActive: boolean;
   barrelRollAt: string | null;
-  // startedAt lets the client compute which of the 9 messages is current
-  // and re-derive it locally every second (see lib/use-monologue.ts),
-  // rather than only being able to show whatever message happened to be
-  // current at the moment of the last poll — dashboard/instructor pages
-  // poll every 15s, far coarser than the 5s-per-message cadence, so relying
-  // on index/text/secondsRemaining alone silently skipped most of the
-  // sequence. Those three fields are kept as the snapshot-at-poll-time
-  // fallback (e.g. for a first paint before the client's own clock ticks).
+  // startedAt lets the client compute which message is current and
+  // re-derive it locally every second (see lib/use-monologue.ts), rather
+  // than only being able to show whatever message happened to be current at
+  // the moment of the last poll — dashboard/instructor pages poll every
+  // 15s, far coarser than the MONOLOGUE_MESSAGE_SECONDS-per-message
+  // cadence, so relying on index/text/secondsRemaining alone silently
+  // skipped most of the sequence. Those three fields are kept as the
+  // snapshot-at-poll-time fallback (e.g. for a first paint before the
+  // client's own clock ticks).
   monologue: { index: number; total: number; text: string; secondsRemaining: number; startedAt: string } | null;
 }
 
