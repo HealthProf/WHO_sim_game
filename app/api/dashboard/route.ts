@@ -5,11 +5,12 @@ import { and, eq, desc } from "drizzle-orm";
 import { requireActor } from "@/lib/session-context";
 import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
-import { getTeamAnnouncements } from "@/lib/announcements";
+import { getTeamAnnouncements, getActiveGlobalAnnouncement } from "@/lib/announcements";
 import { projectForward } from "@/lib/projection";
 import { computeSimClock } from "@/lib/sim-clock";
 import { computeFinalResults } from "@/lib/final-results";
 import { POLL_BACKOFF_MS } from "@/lib/config";
+import { getCheatDisplayState, getRevertOverridesForSession } from "@/lib/cheat-engine";
 
 // Polled every ~15s by team dashboards (see 07-open-questions.md Q4). Returns
 // the shared Global Situation Summary for every region, plus the requesting
@@ -46,15 +47,21 @@ export async function GET(req: NextRequest) {
   const allModelState = await db.query.modelState.findMany({ where: eq(modelState.sessionId, sessionId) });
   const globalRt = await computeGlobalRt(sessionId);
 
+  // Cheat code #5's "revert to zero" — a purely cosmetic taper applied here,
+  // never to the underlying model_state row (see lib/cheat-engine.ts).
+  const gameDaysPerRealMinute = gs?.gameDaysPerRealMinute && gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
+  const revertOverrides = await getRevertOverridesForSession(sessionId, gameDaysPerRealMinute);
+
   const sharedSummary = allRegions.map((r) => {
     const s = allModelState.find((m) => m.regionId === r.id)!;
+    const override = revertOverrides[r.id];
     return {
       regionId: r.id,
       fullName: r.fullName,
-      confirmedCases: s.confirmedCases,
+      confirmedCases: override ? override.confirmedCases : s.confirmedCases,
       estimatedTrueCasesLow: s.estimatedTrueCasesLow,
       estimatedTrueCasesHigh: s.estimatedTrueCasesHigh,
-      deaths: s.deaths,
+      deaths: override ? override.deaths : s.deaths,
       rt: s.rt,
       hospitalCapacityPct: s.hospitalCapacityPct,
       surveillanceIndex: s.surveillanceIndex,
@@ -68,8 +75,11 @@ export async function GET(req: NextRequest) {
     const s = allModelState.find((m) => m.regionId === actor!.regionId);
     const r = allRegions.find((r) => r.id === actor!.regionId);
     if (s && r) {
+      const override = revertOverrides[actor!.regionId];
       ownRegion = {
         ...s,
+        confirmedCases: override ? override.confirmedCases : s.confirmedCases,
+        deaths: override ? override.deaths : s.deaths,
         profileMarkdown: r.profileMarkdown,
         roleTitle: r.roleTitle,
         hqLocation: r.hqLocation,
@@ -108,6 +118,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const cheat = await getCheatDisplayState(sessionId);
+  // Reused so the instructor console (which has no per-team announcement
+  // watcher) can surface the same "announced globally" cheat-code messages
+  // the projector shows — see components/cheat-code-widget.tsx.
+  const activeGlobalAnnouncement = await getActiveGlobalAnnouncement(sessionId);
+
   return NextResponse.json({
     globalState: gs,
     stateVersion: gs?.stateVersion,
@@ -118,6 +134,8 @@ export async function GET(req: NextRequest) {
     ownRegion,
     notifications,
     announcements,
+    activeGlobalAnnouncement,
+    cheat,
     ghostPreview,
     actor,
   });

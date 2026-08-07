@@ -176,3 +176,19 @@ body {
 .animate-fade-in-slow {
   animation: fadeIn 1.5s ease-in;
 }
+
+/* Cheat code #3 ("do a barrel roll") — applied to <html> itself (see
+   lib/use-barrel-roll.ts) so the whole screen turns, projector included. */
+@keyframes cheatBarrelRoll {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-barrel-roll {
+  animation: cheatBarrelRoll 1.4s ease-in-out;
+  transform-origin: 50% 50%;
+}

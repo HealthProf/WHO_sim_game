@@ -17,6 +17,7 @@ import { runAutoplayer } from "./autoplayer/run";
 import { TICK_THROTTLE_SECONDS, IDLE_TICK_CUTOFF_MINUTES } from "./config";
 import { computeDeadlineAt } from "./deadline-window";
 import { reapStale } from "./reaper";
+import { resolveCheatMonologue, resolveCheatRegionReverts } from "./cheat-engine";
 
 export { computeDeadlineAt };
 
@@ -41,6 +42,10 @@ export async function processDeadlines(sessionId: string) {
   // or running — it's a global sweep, throttled by its own shared marker,
   // and every poll is a convenient place to opportunistically trigger it.
   await reapStale().catch((e) => console.error("[tick] reapStale failed:", e));
+  // Must run even while simulationStatus is "paused" — that's the monologue
+  // cheat's own doing, and only this call can ever flip it back — so it
+  // runs before the running-status gate below rather than after it.
+  await resolveCheatMonologue(sessionId).catch((e) => console.error("[tick] resolveCheatMonologue failed:", e));
 
   const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs || gs.simulationStatus !== "running") {
@@ -76,6 +81,7 @@ export async function processDeadlines(sessionId: string) {
   await processBudgetCycleTimers(sessionId).catch((e) => console.error("[tick] processBudgetCycleTimers failed:", e));
   await checkSocialMilestones(sessionId).catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
   await runAutoplayer(sessionId).catch((e) => console.error("[tick] runAutoplayer failed:", e));
+  await resolveCheatRegionReverts(sessionId).catch((e) => console.error("[tick] resolveCheatRegionReverts failed:", e));
 
   const now = new Date();
   let remindersSent = 0;

@@ -9,6 +9,7 @@ import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import type { SummaryRound } from "@/lib/summary-report";
 import type { FinalResults } from "@/lib/final-results";
 import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
+import { useBarrelRollEffect } from "@/lib/use-barrel-roll";
 
 interface DisplaySnapVote {
   question: string;
@@ -48,6 +49,11 @@ interface DisplayData extends GlobalClockFields {
   finalResults: FinalResults | null;
   teamChapters: TeamChapter[] | null;
   worldHealth: { index: number; label: string };
+  cheat: {
+    godModeActive: boolean;
+    barrelRollAt: string | null;
+    monologue: { index: number; total: number; text: string; secondsRemaining: number } | null;
+  } | null;
 }
 
 // The projector is the app's one dark, full-bleed, no-navigation surface —
@@ -72,6 +78,8 @@ export default function PublicDisplayPage() {
   // there, so a slow poll cycle can never cause it to be missed or cut
   // short (see lib/announcements.ts getActiveGlobalAnnouncement).
   const [announcementSeen, setAnnouncementSeen] = useState<{ id: number; seenAt: number } | null>(null);
+
+  useBarrelRollEffect(data?.cheat?.barrelRollAt);
 
   // Item 6's live feed: newest on top, and a new item stays visibly
   // highlighted for a while after it first appears rather than blending
@@ -309,6 +317,17 @@ export default function PublicDisplayPage() {
             </div>
           </div>
         ))}
+
+      {data.cheat?.monologue && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black px-16">
+          <p
+            key={data.cheat.monologue.index}
+            className="max-w-5xl animate-fade-in-slow text-center text-3xl font-medium leading-relaxed text-white xl:text-5xl"
+          >
+            {data.cheat.monologue.text}
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-1 gap-0 min-h-0">
         {/* Left: real-time key metrics — stat tiles plus a bar per region for
