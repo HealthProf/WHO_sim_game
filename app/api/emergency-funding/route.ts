@@ -5,6 +5,7 @@ import { and, eq, inArray, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
 import { tryDeductRegionField, tryDeductWhoHqField } from "@/lib/db-atomic";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // GET: all emergency funding requests (open + recently closed) with their
 // contributions so far — visible to everyone, same transparency model as
@@ -95,6 +96,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "emergency_funding_requested",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { amountRequested },
+  });
+
   return NextResponse.json({ request });
 }
 
@@ -155,6 +166,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "You don't have that much available." }, { status: 400 });
     }
   }
+
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "emergency_funding_contributed",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { requestId, amount, isWhoHq },
+  });
 
   return NextResponse.json({ ok: true });
 }

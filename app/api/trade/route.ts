@@ -4,6 +4,7 @@ import { regionTradeOffers, modelState, teams, teamNotifications, modelStateHist
 import { eq, and, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { tryDeductRegionField, creditRegionField } from "@/lib/db-atomic";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // GET: trade offers involving the requesting team, either side (visible to
 // everyone for transparency, same as coordination/pledges).
@@ -72,6 +73,16 @@ export async function POST(req: NextRequest) {
     message: `${fromTeam.regionId} offers to buy ${amount.toLocaleString()} ${resourceType === "PPE_DAYS" ? "PPE-days" : "antiviral doses"} from you for $${totalPrice.toLocaleString()} — visit Trade to accept or reject.`,
   });
 
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "trade_proposed",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { toRegionId, resourceType, amount, pricePerUnit },
+  });
+
   return NextResponse.json({ offer });
 }
 
@@ -93,6 +104,15 @@ export async function PATCH(req: NextRequest) {
     await db.update(regionTradeOffers).set({ status: "rejected", resolvedAt: new Date() }).where(eq(regionTradeOffers.id, offerId));
     const buyerTeam = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, offer.fromTeamId)) });
     if (buyerTeam) await db.insert(teamNotifications).values({ sessionId, teamId: buyerTeam.id, kind: "trade", message: `Your trade offer was declined.` });
+    await logAnalyticsEvent({
+      sessionId,
+      mode: actor!.mode,
+      eventType: "trade_resolved",
+      actorRole: actor!.role,
+      regionId: actor!.regionId,
+      userId: actor!.userId,
+      metadata: { offerId, action: "reject" },
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -138,6 +158,16 @@ export async function PATCH(req: NextRequest) {
   if (updatedSeller) await db.insert(modelStateHistory).values({ sessionId, regionId: sellerTeam.regionId, day: updatedSeller.day, snapshotJson: updatedSeller, reason });
   await db.insert(teamNotifications).values({ sessionId, teamId: buyerTeam.id, kind: "trade", message: `Trade accepted: ${reason}.` });
   await db.insert(teamNotifications).values({ sessionId, teamId: sellerTeam.id, kind: "trade", message: `Trade accepted: ${reason}.` });
+
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "trade_resolved",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { offerId, action: "accept", resourceType: offer.resourceType, amount: offer.amount, totalPrice: offer.totalPrice },
+  });
 
   return NextResponse.json({ ok: true });
 }

@@ -4,6 +4,7 @@ import { coordinationMessages, teams, eventDispatches, globalFeedItems, teamNoti
 import { and, eq, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { COORDINATION_LEAK_CHANCE as LEAK_CHANCE } from "@/lib/config";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // Coordination mechanism (05-product-requirements.md §6): broadcasts
 // (toTeamId null) are a shared message board, visible to everyone. Targeted
@@ -87,6 +88,19 @@ export async function POST(req: NextRequest) {
       await db.insert(teamNotifications).values(notifyTeamIds.map((teamId) => ({ sessionId, teamId, kind: "leak", message: headline })));
     }
   }
+
+  // Deliberately no message content in the metadata — just shape (broadcast
+  // vs. private, whether it leaked) so this stays action-and-path analytics,
+  // not a copy of what teams actually said to each other.
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "coordination_message_sent",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { broadcast: toTeamId === null, toRegionId, leaked: willLeak },
+  });
 
   return NextResponse.json({ message, leaked: willLeak });
 }

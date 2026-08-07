@@ -23,6 +23,13 @@ export interface Actor {
   regionId: string | null;
   userId: number | null;
   isOwner: boolean;
+  // Threaded through so lib/analytics.ts can gate on it without a second
+  // query — a "region" login is always instructor mode (demo has no region
+  // credentials, see sessionRegionCredentials), but a "user" login's mode
+  // must come from the owned session even when role resolves to
+  // "instructor" (the demo owner not currently occupying a region also gets
+  // role "instructor" — see below).
+  mode: "instructor" | "demo";
 }
 
 async function resolveActor(): Promise<Actor | null> {
@@ -40,6 +47,7 @@ async function resolveActor(): Promise<Actor | null> {
       regionId: user.regionId,
       userId: null,
       isOwner: false,
+      mode: "instructor",
     };
   }
 
@@ -75,6 +83,7 @@ async function resolveActor(): Promise<Actor | null> {
         regionId: team.regionId,
         userId: user.userId,
         isOwner: true,
+        mode: owned.mode,
       };
     }
   }
@@ -86,6 +95,7 @@ async function resolveActor(): Promise<Actor | null> {
     regionId: null,
     userId: user.userId,
     isOwner: true,
+    mode: owned.mode,
   };
 }
 

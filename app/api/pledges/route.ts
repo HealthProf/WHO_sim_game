@@ -4,6 +4,7 @@ import { resourcePledges, teams, eventDispatches, modelState, modelStateHistory,
 import { and, eq, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { clamp } from "@/lib/model-engine";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // Resource pledge ledger (see 07-open-questions.md's original discussion of
 // coordination mechanisms, and lib/db/schema.ts's resourcePledges table):
@@ -120,6 +121,16 @@ export async function POST(req: NextRequest) {
     teamId: toTeam.id,
     kind: "pledge",
     message: `${fromTeam.regionId} pledged you ${amount}${LABEL_BY_RESOURCE[resourceType]}.`,
+  });
+
+  await logAnalyticsEvent({
+    sessionId,
+    mode: actor!.mode,
+    eventType: "pledge_made",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { toRegionId, resourceType, amount },
   });
 
   return NextResponse.json({ pledge });

@@ -9,6 +9,7 @@ import { pushConsequence } from "@/lib/consequences";
 import { maybeAnnounceResolution, announceDecisionRevealed } from "@/lib/announcements";
 import { maybeStakeholderReact } from "@/lib/stakeholders";
 import type { ModelDelta } from "@/lib/db/seed-data/events";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // GET: priority-sorted scoring inbox. Sort key (see design discussion on
 // facilitator triage): mandatory-review flag first, then time remaining on
@@ -73,6 +74,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   try {
     const score = await scoreDecision(actor!.sessionId, body, actor!.userId!);
+    await logAnalyticsEvent({
+      sessionId: actor!.sessionId,
+      mode: actor!.mode,
+      eventType: "score_submitted",
+      actorRole: actor!.role,
+      userId: actor!.userId,
+      metadata: { decisionId: body.decisionId, tier: score.tier, fastPathed: score.fastPathed },
+    });
     return NextResponse.json({ score });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });

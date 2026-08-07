@@ -4,6 +4,7 @@ import { decisions, eventDispatches } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { submitDecision } from "@/lib/decisions";
+import { logAnalyticsEvent } from "@/lib/analytics";
 
 // POST: a team submits a decision for a dispatch targeted at them. Thin
 // auth + validation wrapper over lib/decisions.ts's submitDecision(), which
@@ -32,6 +33,16 @@ export async function POST(req: NextRequest) {
     const status = result.error === "Dispatch not found" || result.error === "Team not found" || result.error === "Event not found" ? 404 : 400;
     return NextResponse.json({ error: result.error }, { status });
   }
+
+  await logAnalyticsEvent({
+    sessionId: actor!.sessionId,
+    mode: actor!.mode,
+    eventType: "decision_submitted",
+    actorRole: actor!.role,
+    regionId: actor!.regionId,
+    userId: actor!.userId,
+    metadata: { eventDispatchId: body.eventDispatchId, structuredChoice: body.structuredChoice ?? null, confidenceLevel },
+  });
 
   return NextResponse.json({ decision: result.decision });
 }
