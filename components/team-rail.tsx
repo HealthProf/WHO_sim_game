@@ -52,9 +52,15 @@ const ROSE_WINDOW_MS = 30_000;
 export function TeamRail({
   regionId,
   demoSession,
+  isAccountHolder,
 }: {
   regionId: string | null | undefined;
   demoSession: { sessionId: string; demoActiveRegionId: string | null } | null;
+  // Only a registered public account (kind "user") has a profile to manage —
+  // a region login handed out for a class session has no users row of its
+  // own (see app/api/account/route.ts), so the Account nav item only shows
+  // up when this is true (the demo owner occupying a region counts).
+  isAccountHolder: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -128,6 +134,7 @@ export function TeamRail({
             <RailContents
               regionId={regionId}
               demoSession={demoSession}
+              isAccountHolder={isAccountHolder}
               dash={dash}
               openDispatch={openDispatch}
               openEvent={openEvent}
@@ -147,6 +154,7 @@ export function TeamRail({
         <RailContents
           regionId={regionId}
           demoSession={demoSession}
+          isAccountHolder={isAccountHolder}
           dash={dash}
           openDispatch={openDispatch}
           openEvent={openEvent}
@@ -164,6 +172,7 @@ export function TeamRail({
 function RailContents({
   regionId,
   demoSession,
+  isAccountHolder,
   dash,
   openDispatch,
   openEvent,
@@ -176,6 +185,7 @@ function RailContents({
 }: {
   regionId: string | null | undefined;
   demoSession: { sessionId: string; demoActiveRegionId: string | null } | null;
+  isAccountHolder: boolean;
   dash: RailDashboardData | undefined;
   openDispatch: RailEventsData["dispatches"][number] | undefined;
   openEvent: RailEventsData["events"][number] | null | undefined;
@@ -247,7 +257,7 @@ function RailContents({
       <nav aria-label="Team navigation">
         <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Go to</p>
         <div className="flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => {
+          {(isAccountHolder ? [...NAV_ITEMS, { label: "Account", href: "/account" }] : NAV_ITEMS).map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { PillButton } from "@/components/ui/pill-button";
 
 interface OwnedSession {
   id: string;
@@ -92,11 +93,11 @@ export default function SessionsPage() {
   const hasMode = (mode: OwnedSession["mode"]) => (owned ?? []).some((s) => s.mode === mode);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-10">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-8 space-y-6">
+    <div className="min-h-screen flex items-center justify-center bg-bg px-4 py-10">
+      <div className="w-full max-w-md rounded-lg bg-bg shadow-lg p-10 space-y-6">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-slate-100 mb-2">Your sessions</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-heading text-[34px] leading-[1.1] text-text mb-2.5">Your sessions</h1>
+          <p className="text-[15px] text-neutral-800 leading-[1.55]">
             You can keep one class session and one solo demo at the same time, and switch between them
             whenever you like — switching never ends the other one.
           </p>
@@ -107,29 +108,44 @@ export default function SessionsPage() {
             {owned.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-slate-700 bg-slate-800/60 px-3 py-2"
+                className={`flex items-center justify-between gap-3 rounded-lg px-4 py-3 ${
+                  s.mode === "instructor" ? "bg-accent-2-100" : "bg-surface"
+                }`}
               >
                 <div className="min-w-0">
-                  <p className="text-sm text-slate-100">{MODE_LABEL[s.mode]}</p>
-                  <p className="text-xs text-slate-500 capitalize">{s.status}</p>
+                  <p
+                    className={`font-heading text-[19px] ${
+                      s.mode === "instructor" ? "text-accent-2-900" : "text-text"
+                    }`}
+                  >
+                    {MODE_LABEL[s.mode]}
+                  </p>
+                  <p
+                    className={`text-[13px] capitalize ${
+                      s.mode === "instructor" ? "text-accent-2-700" : "text-neutral-700"
+                    }`}
+                  >
+                    {s.status}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {s.mode === "instructor" && (
                     <a
                       href={`/sessions/${s.id}/credentials`}
-                      className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700"
+                      className="inline-flex items-center justify-center rounded-full border-2 border-accent-2-400 text-accent-2-800 px-[16px] py-[7px] text-[13px] font-semibold hover:bg-accent-2-200 transition-colors"
                     >
                       Login details
                     </a>
                   )}
-                  <button
+                  <PillButton
                     type="button"
                     onClick={() => switchTo(s)}
                     disabled={loading}
-                    className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-3 py-1 text-xs font-medium text-white"
+                    tone={s.mode === "instructor" ? "sage" : "accent"}
+                    size="sm"
                   >
                     Go to it
-                  </button>
+                  </PillButton>
                 </div>
               </div>
             ))}
@@ -138,15 +154,10 @@ export default function SessionsPage() {
 
         {!hasMode("instructor") && (
           <div>
-            <button
-              type="button"
-              onClick={() => createSession("instructor")}
-              disabled={loading}
-              className="w-full rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium py-2 transition"
-            >
+            <PillButton type="button" onClick={() => createSession("instructor")} disabled={loading} className="w-full">
               {loading ? "Creating…" : "Run a session with my class"}
-            </button>
-            <p className="text-xs text-slate-500 mt-2">
+            </PillButton>
+            <p className="text-[13px] text-neutral-700 mt-2">
               Generates six region logins and a printable credential sheet for a real class.
             </p>
           </div>
@@ -154,22 +165,17 @@ export default function SessionsPage() {
 
         {!hasMode("demo") && (
           <div>
-            <button
-              type="button"
-              onClick={() => createSession("demo")}
-              disabled={loading}
-              className="w-full rounded-md bg-slate-800 border border-slate-700 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-medium py-2 transition"
-            >
+            <PillButton type="button" onClick={() => createSession("demo")} disabled={loading} tone="ghost" className="w-full">
               {loading ? "Creating…" : "Try a solo demo"}
-            </button>
-            <p className="text-xs text-slate-500 mt-2">
+            </PillButton>
+            <p className="text-[13px] text-neutral-700 mt-2">
               Play any region or the instructor yourself — a scripted AI plays every region you&apos;re not, on a
               faster ~10-15 minute clock, so the whole arc plays out solo.
             </p>
           </div>
         )}
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-[14px] text-accent-700">{error}</p>}
       </div>
     </div>
   );
