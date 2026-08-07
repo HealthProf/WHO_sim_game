@@ -32,6 +32,13 @@ type ModalState =
   | { kind: "closed" }
   | { kind: "entering" }
   | { kind: "fail" }
+  // Distinct from "fail" — this is a request that never got a real answer
+  // from the server (network drop, 401, 500, ...), not a wrong guess. Never
+  // downgrade this to "fail": that indistinguishability is exactly what
+  // made a broken deployment (e.g. the cheat_code_* tables missing because
+  // `npm run db:push` hadn't been run against that database yet) look like
+  // "every code is wrong" instead of "the feature is erroring."
+  | { kind: "error"; message: string }
   | { kind: "success"; codeKey: CheatCodeKey; description: string; secondsLeft: number };
 
 const ARROW_KEY_GLYPH: Record<string, string> = {
@@ -75,7 +82,7 @@ export function CheatCodeWidget() {
     if (modal.kind !== "success") return;
     if (modal.secondsLeft <= 0) {
       apiFetch("/api/cheat/execute", { method: "POST", body: JSON.stringify({ codeKey: modal.codeKey }) })
-        .catch(() => {})
+        .catch((e) => console.error("cheat code execute failed:", e))
         .finally(() => {
           qc.invalidateQueries({ queryKey: ["dashboard"] });
           setModal({ kind: "closed" });
@@ -135,10 +142,12 @@ export function CheatCodeWidget() {
       }
       setValue("");
       setModal({ kind: "success", codeKey: result.codeKey!, description: result.description ?? "", secondsLeft: CHEAT_EXECUTE_DELAY_SECONDS });
-    } catch {
+    } catch (err) {
+      // A real request failure (network drop, 401, 500, ...) — never
+      // presented the same as "wrong code," which would otherwise make a
+      // broken deployment look identical to a bad guess.
       setValue("");
-      setModal({ kind: "fail" });
-      setTimeout(() => setModal((m) => (m.kind === "fail" ? { kind: "entering" } : m)), 1500);
+      setModal({ kind: "error", message: err instanceof Error ? err.message : "Something went wrong." });
     }
   }
 
@@ -193,6 +202,13 @@ export function CheatCodeWidget() {
             {modal.kind === "fail" && (
               <div className="py-6 text-center">
                 <p className="text-2xl font-bold text-accent-400">Try Again</p>
+              </div>
+            )}
+
+            {modal.kind === "error" && (
+              <div className="space-y-2 py-6 text-center">
+                <p className="text-lg font-bold text-accent-400">Something went wrong</p>
+                <p className="text-sm text-neutral-300">{modal.message}</p>
               </div>
             )}
 
