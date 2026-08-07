@@ -1,12 +1,22 @@
 name: Database setup / reset
 
 # Manually triggered from the Actions tab in the GitHub UI — no terminal or
-# local install required. Creates all tables (safe to re-run) and applies
-# the fixed seed content + login credentials from
-# lib/db/seed-data/credentials.ts. Requires a repository secret named
+# local install required. Creates all tables and applies the global static
+# seed content (regions and events). Accounts and game sessions are created
+# through the app UI, not seeded. Requires a repository secret named
 # DATABASE_URL pointing at your Neon/Postgres instance.
+#
+# Note the verify step: `drizzle-kit push` exits 0 even when it applied
+# nothing (its interactive prompt can't render without a TTY, so an ambiguous
+# diff fails silently in CI). Verification turns that into a failed job
+# instead of a green one that shipped a broken database.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "DESTRUCTIVE: drop every table first, then rebuild. Needed when push reports a TTY/interactive-prompt error, which means the live schema has diverged too far to update in place. Wipes all accounts, sessions, and game state."
+        type: boolean
+        default: false
 
 jobs:
   db-setup:
@@ -17,9 +27,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm install
+      - name: Drop existing schema (destructive, opt-in)
+        if: ${{ inputs.reset }}
+        env:
+          CONFIRM_DESTRUCTIVE_RESET: "yes"
+        run: npx tsx scripts/reset-schema.ts
       - name: Create/update tables
         run: npx drizzle-kit push --force
-      - name: Seed regions, events, and login accounts
+      - name: Verify every expected table exists
+        run: npx tsx scripts/verify-schema.ts
+      - name: Seed regions and events
         run: npm run db:seed
