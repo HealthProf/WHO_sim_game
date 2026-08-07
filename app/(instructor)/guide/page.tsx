@@ -6,7 +6,7 @@ export default function GuidePage() {
     <div className="flex max-w-3xl flex-col gap-[26px]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-wide text-neutral-600">Facilitator Guide</p>
+          <p className="text-xs uppercase tracking-wide text-neutral-700">Facilitator Guide</p>
           <h1 className="font-heading text-[32px] text-text">Running Operation Veiled Horizon</h1>
         </div>
         <Link href="/guide/checklist" className="whitespace-nowrap text-sm font-medium text-accent-700 hover:text-accent-600">

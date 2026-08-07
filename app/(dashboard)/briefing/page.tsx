@@ -59,7 +59,7 @@ export default function BriefingPage() {
             <section className="space-y-4 rounded-lg bg-surface p-5">
               <div>
                 <h2 className="font-heading text-[21px] text-text">{region.roleTitle}</h2>
-                <p className="text-sm text-neutral-600">{region.hqLocation}</p>
+                <p className="text-sm text-neutral-700">{region.hqLocation}</p>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <Stat label="Fund" value={`$${(region.fundRemaining / 1_000_000).toFixed(1)}M`} />
@@ -71,12 +71,12 @@ export default function BriefingPage() {
                 <Stat label="Starting CFR mult." value={`${region.cfrMultiplier.toFixed(2)}x`} />
               </div>
               <div className="border-t border-divider pt-4">
-                <p className="mb-2 text-xs uppercase tracking-wide text-neutral-600">Briefing</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-neutral-700">Briefing</p>
                 <ProfileSections markdown={region.profileMarkdown} />
               </div>
             </section>
           ) : (
-            <p className="text-neutral-600">Loading your region&apos;s briefing...</p>
+            <p className="text-neutral-700">Loading your region&apos;s briefing...</p>
           )}
         </>
       )}
@@ -85,7 +85,7 @@ export default function BriefingPage() {
         <>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-600">Welcome to</p>
+              <p className="text-xs uppercase tracking-wide text-neutral-700">Welcome to</p>
               <h2 className="font-heading text-[21px] text-text">Operation Veiled Horizon</h2>
             </div>
             <Link href="/orientation/slides" className="whitespace-nowrap text-sm font-medium text-accent-700 hover:text-accent-600">
@@ -111,7 +111,7 @@ export default function BriefingPage() {
             </div>
           </section>
 
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-neutral-700">
             Note: once the simulation is running, regional Rt drifts upward slowly on its own if no fresh containment
             decision has been scored for a while — time itself has a cost, not just individual bad decisions.
           </p>
@@ -145,7 +145,7 @@ export default function BriefingPage() {
               <TierRow tier="CRITICAL_FAILURE" range="< 40%" />
             </div>
           </div>
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-neutral-700">
             You&apos;re never scored on whether a decision felt confident or safe — an INADEQUATE or CRITICAL FAILURE
             tier can still follow a well-argued rationale if the underlying choice doesn&apos;t hold up against the
             evidence, the politics, or the equity impact. That&apos;s deliberate: rationale quality doesn&apos;t
@@ -178,7 +178,7 @@ export default function BriefingPage() {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-md bg-bg p-3">
-      <p className="text-xs text-neutral-600">{label}</p>
+      <p className="text-xs text-neutral-700">{label}</p>
       <p className="text-base font-bold text-text">{value}</p>
     </div>
   );
@@ -200,7 +200,7 @@ function ScoreDimension({ label, weight, body }: { label: string; weight: string
         <p className="font-semibold text-text">{label}</p>
         <p className="text-sm font-bold text-accent-700">{weight}</p>
       </div>
-      <p className="mt-1 text-xs text-neutral-600">{body}</p>
+      <p className="mt-1 text-xs text-neutral-700">{body}</p>
     </div>
   );
 }

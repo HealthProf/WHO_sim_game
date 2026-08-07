@@ -59,17 +59,17 @@ export function MarketApprovalPanel() {
       {market && (
         <div className="grid gap-3 text-sm sm:grid-cols-2">
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-600">PPE stock / current price</p>
+            <p className="text-xs text-neutral-700">PPE stock / current price</p>
             <p className="font-semibold text-text">{market.whoHqPpeStock.toLocaleString()} days — ${market.prices.PPE_DAYS.toLocaleString()}/unit</p>
           </div>
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-600">Antiviral stock / current price</p>
+            <p className="text-xs text-neutral-700">Antiviral stock / current price</p>
             <p className="font-semibold text-text">{market.whoHqAntiviralsStock.toLocaleString()} doses — ${market.prices.ANTIVIRALS.toLocaleString()}/unit</p>
           </div>
         </div>
       )}
       {requests.length === 0 ? (
-        <p className="text-sm text-neutral-600">No purchase requests waiting on approval.</p>
+        <p className="text-sm text-neutral-700">No purchase requests waiting on approval.</p>
       ) : (
         <div className="space-y-2">
           {requests.map((r) => (

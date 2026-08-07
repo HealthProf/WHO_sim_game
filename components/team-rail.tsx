@@ -263,7 +263,7 @@ function RailContents({
               >
                 {item.label}
                 {item.label === "Events" && awaitingCount > 0 && (
-                  <span className="ml-2 rounded-full bg-accent-500 px-2 py-0.5 text-[12px] font-bold text-white">{awaitingCount}</span>
+                  <span className="ml-2 rounded-full bg-accent-700 px-2 py-0.5 text-[12px] font-bold text-white">{awaitingCount}</span>
                 )}
               </Link>
             );

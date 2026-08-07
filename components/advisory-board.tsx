@@ -11,8 +11,8 @@ export function AdvisoryBoard({ eventId }: { eventId: string }) {
 
   return (
     <section className="rounded-lg bg-surface p-4">
-      <p className="mb-1 text-xs uppercase tracking-wide text-neutral-600">Advisory Board Perspectives</p>
-      <p className="mb-3 text-xs text-neutral-600">
+      <p className="mb-1 text-xs uppercase tracking-wide text-neutral-700">Advisory Board Perspectives</p>
+      <p className="mb-3 text-xs text-neutral-700">
         Real advisors disagree. These are not a recommendation — weigh them against the evidence yourself.
       </p>
       <div className="space-y-3">

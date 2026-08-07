@@ -16,7 +16,7 @@ export default async function GlobalViewPage() {
 
   if (!active) {
     return (
-      <p className="text-sm text-neutral-600">
+      <p className="text-sm text-neutral-700">
         No active session. Start one from <a href="/sessions" className="font-medium text-accent-700 hover:text-accent-600">your sessions</a> to
         get a projector display.
       </p>
@@ -45,7 +45,7 @@ export default async function GlobalViewPage() {
         />
       </div>
 
-      <p className="break-all text-xs text-neutral-600">
+      <p className="break-all text-xs text-neutral-700">
         Direct link: <code className="text-neutral-700">{displayPath}</code>
       </p>
     </div>

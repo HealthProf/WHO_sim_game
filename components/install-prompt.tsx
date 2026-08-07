@@ -52,7 +52,7 @@ export function InstallPrompt() {
   if (!deferredPrompt && !showIosHint) return null;
 
   return (
-    <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:max-w-sm z-50 bg-slate-900 border border-slate-700 rounded-xl p-4 shadow-xl text-sm text-slate-200">
+    <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:max-w-sm z-50 rounded-lg border-2 border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-200 shadow-lg">
       {showIosHint ? (
         <p>
           Install this app: tap <span className="font-semibold">Share</span>, then{" "}
@@ -69,13 +69,13 @@ export function InstallPrompt() {
               setDeferredPrompt(null);
               dismiss();
             }}
-            className="shrink-0 rounded-md bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-white font-medium"
+            className="shrink-0 rounded-full bg-accent-700 px-3 py-1.5 font-medium text-white hover:bg-accent-600"
           >
             Install
           </button>
         </div>
       )}
-      <button type="button" onClick={dismiss} className="mt-2 text-xs text-slate-500 hover:text-slate-300">
+      <button type="button" onClick={dismiss} className="mt-2 text-xs text-neutral-500 hover:text-neutral-300">
         Dismiss
       </button>
     </div>

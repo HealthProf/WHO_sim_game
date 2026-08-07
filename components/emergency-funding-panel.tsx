@@ -52,7 +52,7 @@ export function EmergencyFundingPanel() {
     <section className="space-y-3 rounded-lg bg-surface p-5">
       <div className="flex items-center justify-between">
         <h2 className="font-heading text-[21px] text-text">Emergency Funding Requests</h2>
-        <span className="text-xs text-neutral-600">WHO HQ balance: ${(data?.whoHqFund ?? 0).toLocaleString()}</span>
+        <span className="text-xs text-neutral-700">WHO HQ balance: ${(data?.whoHqFund ?? 0).toLocaleString()}</span>
       </div>
       <div className="space-y-2">
         {requests.map((r) => (
@@ -60,8 +60,8 @@ export function EmergencyFundingPanel() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-text">{r.requestingRegionId} requests ${r.amountRequested.toLocaleString()}</p>
-                <p className="text-xs text-neutral-600">{r.reason}</p>
-                <p className="mt-1 text-xs text-neutral-600">${r.totalContributed.toLocaleString()} contributed so far</p>
+                <p className="text-xs text-neutral-700">{r.reason}</p>
+                <p className="mt-1 text-xs text-neutral-700">${r.totalContributed.toLocaleString()} contributed so far</p>
               </div>
               <PillButton size="sm" tone="accent" onClick={() => closeRequest.mutate(r.id)} disabled={closeRequest.isPending} className="shrink-0">
                 Close & Disburse

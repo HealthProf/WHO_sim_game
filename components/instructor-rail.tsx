@@ -224,7 +224,7 @@ function RailContents({
               >
                 {item.label}
                 {item.label === "Scoring" && inboxCount > 0 && (
-                  <span className="ml-2 rounded-full bg-accent-500 px-2 py-0.5 text-[12px] font-bold text-white">{inboxCount}</span>
+                  <span className="ml-2 rounded-full bg-accent-700 px-2 py-0.5 text-[12px] font-bold text-white">{inboxCount}</span>
                 )}
               </Link>
             );

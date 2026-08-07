@@ -59,7 +59,7 @@ export function EmergencyCommitteePanel() {
     <section className="space-y-4 rounded-lg bg-surface p-5">
       <div>
         <h2 className="font-heading text-[21px] text-text">Emergency Committee — Snap Vote</h2>
-        <p className="mt-1 text-xs text-neutral-600">
+        <p className="mt-1 text-xs text-neutral-700">
           A break-glass pacing tool, separate from the scripted event queue — call it any time to force a synchronous
           all-team response and recenter the room. Closing tallies participation/agreement and applies a small model
           effect automatically (near-unanimous eases media pressure; a split vote raises it; non-participating
@@ -91,7 +91,7 @@ export function EmergencyCommitteePanel() {
           className="flex flex-wrap items-end gap-3"
         >
           <div className="min-w-[240px] flex-1">
-            <label className="text-xs text-neutral-600">Question</label>
+            <label className="text-xs text-neutral-700">Question</label>
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -100,7 +100,7 @@ export function EmergencyCommitteePanel() {
             />
           </div>
           <div>
-            <label className="text-xs text-neutral-600">Options (comma-separated)</label>
+            <label className="text-xs text-neutral-700">Options (comma-separated)</label>
             <input
               value={optionsText}
               onChange={(e) => setOptionsText(e.target.value)}
@@ -108,7 +108,7 @@ export function EmergencyCommitteePanel() {
             />
           </div>
           <div>
-            <label className="text-xs text-neutral-600">Duration (seconds)</label>
+            <label className="text-xs text-neutral-700">Duration (seconds)</label>
             <input
               type="number"
               min={30}
@@ -124,7 +124,7 @@ export function EmergencyCommitteePanel() {
       )}
 
       {data?.history && data.history.length > 0 && (
-        <details className="text-xs text-neutral-600">
+        <details className="text-xs text-neutral-700">
           <summary className="cursor-pointer">Recent results ({data.history.length})</summary>
           <div className="mt-2 space-y-1">
             {data.history.map((v) => (

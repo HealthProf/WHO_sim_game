@@ -125,7 +125,7 @@ export default function PledgesPage() {
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-text">Ledger</h2>
-        {isLoading && <p className="text-sm text-neutral-600">Loading...</p>}
+        {isLoading && <p className="text-sm text-neutral-700">Loading...</p>}
         <div className="space-y-2">
           {(data?.pledges ?? []).map((p) => (
             <div key={p.id} className="flex items-center justify-between rounded-lg bg-accent-2-100 p-3 text-sm">
@@ -136,7 +136,7 @@ export default function PledgesPage() {
               <span className="text-xs text-accent-2-700">{new Date(p.createdAt).toLocaleTimeString()}</span>
             </div>
           ))}
-          {data?.pledges.length === 0 && <p className="text-sm text-neutral-600">No pledges yet.</p>}
+          {data?.pledges.length === 0 && <p className="text-sm text-neutral-700">No pledges yet.</p>}
         </div>
       </div>
     </div>

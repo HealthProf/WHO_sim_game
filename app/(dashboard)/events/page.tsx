@@ -38,7 +38,7 @@ export default function EventsPage() {
   });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="events" />;
-  if (isLoading || !data) return <p className="text-neutral-600">Loading events...</p>;
+  if (isLoading || !data) return <p className="text-neutral-700">Loading events...</p>;
 
   const totalGameDays = dash?.globalState.totalGameDays ?? 90;
   const gameDaysPerRealMinute = dash?.globalState.gameDaysPerRealMinute ?? 1.5;
@@ -51,7 +51,7 @@ export default function EventsPage() {
     <div className="flex flex-col gap-[26px]">
       <h1 className="font-heading text-[32px] text-text">Events</h1>
       {dispatchesByEvent.length === 0 ? (
-        <p className="text-neutral-600">No events have been dispatched to your team yet.</p>
+        <p className="text-neutral-700">No events have been dispatched to your team yet.</p>
       ) : (
         <div className="space-y-3">
           {dispatchesByEvent.map((d) => {
@@ -66,7 +66,7 @@ export default function EventsPage() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-semibold text-text">{event?.title ?? d.eventId}</p>
-                    <p className="text-xs text-neutral-600">
+                    <p className="text-xs text-neutral-700">
                       {d.eventId} · Game Day {gameDay}
                     </p>
                   </div>
@@ -95,7 +95,7 @@ function Countdown({ deadlineAt, gameDaysPerRealMinute }: { deadlineAt: string; 
   const seconds = Math.max(0, Math.floor((remaining % 60000) / 1000));
   const gameDaysRemaining = realMsToGameDays(Math.max(0, remaining), gameDaysPerRealMinute);
   return (
-    <p className={`mt-2 text-xs ${expired ? "text-accent-800" : "text-neutral-600"}`}>
+    <p className={`mt-2 text-xs ${expired ? "text-accent-800" : "text-neutral-700"}`}>
       {expired ? "Deadline passed" : `Deadline in ${minutes}m ${seconds}s (≈ ${formatGameDays(gameDaysRemaining)})`}
     </p>
   );

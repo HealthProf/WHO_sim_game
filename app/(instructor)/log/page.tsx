@@ -22,8 +22,8 @@ export default function ActionLogPage() {
           <div key={row.id} className="rounded-lg bg-surface p-3 text-sm">
             <p className="font-semibold text-text">{row.actionType}</p>
             <p className="text-neutral-700">{row.targetDesc}</p>
-            {row.reason && <p className="mt-1 text-xs text-neutral-600">Reason: {row.reason}</p>}
-            <p className="mt-1 text-xs text-neutral-500">{new Date(row.createdAt).toLocaleString()}</p>
+            {row.reason && <p className="mt-1 text-xs text-neutral-700">Reason: {row.reason}</p>}
+            <p className="mt-1 text-xs text-neutral-700">{new Date(row.createdAt).toLocaleString()}</p>
           </div>
         ))}
       </div>

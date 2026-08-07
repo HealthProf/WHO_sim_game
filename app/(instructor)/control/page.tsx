@@ -111,7 +111,7 @@ export default function ControlPage() {
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="events" />;
   if (dashError) return <QueryError error={dashError} onRetry={() => refetchDash()} label="dashboard state" />;
-  if (!data || !dash) return <p className="text-neutral-600">Loading command center...</p>;
+  if (!data || !dash) return <p className="text-neutral-700">Loading command center...</p>;
 
   const status = dash.globalState.simulationStatus;
   const inboxCount = inbox?.inbox.length ?? 0;
@@ -152,7 +152,7 @@ export default function ControlPage() {
       {/* Simulation status controls */}
       <section className="flex flex-wrap items-center gap-4 rounded-lg bg-surface p-5">
         <div>
-          <p className="text-xs uppercase tracking-wide text-neutral-600">Simulation Status</p>
+          <p className="text-xs uppercase tracking-wide text-neutral-700">Simulation Status</p>
           <p className="text-2xl font-bold capitalize text-text">{status.replace("_", " ")}</p>
         </div>
         <div className="ml-auto flex gap-2">
@@ -194,7 +194,7 @@ export default function ControlPage() {
       <section className={`rounded-lg p-5 ${inboxCount > 0 ? "bg-accent-100" : "bg-surface"}`}>
         <div className="flex flex-wrap items-center gap-6">
           <div>
-            <p className={`text-xs uppercase tracking-wide ${inboxCount > 0 ? "text-accent-700" : "text-neutral-600"}`}>Needs Your Attention</p>
+            <p className={`text-xs uppercase tracking-wide ${inboxCount > 0 ? "text-accent-700" : "text-neutral-700"}`}>Needs Your Attention</p>
             <p className={`font-heading text-[21px] ${inboxCount > 0 ? "text-accent-900" : "text-text"}`}>
               {inboxCount === 0
                 ? "Scoring inbox is empty — nothing waiting on you right now."
@@ -217,11 +217,11 @@ export default function ControlPage() {
 
       {/* Active deadlines — every currently-ticking countdown at once */}
       <section className="rounded-lg bg-surface p-5">
-        <p className="mb-3 text-xs uppercase tracking-wide text-neutral-600">
+        <p className="mb-3 text-xs uppercase tracking-wide text-neutral-700">
           Active Deadlines {activeDeadlines.length > 0 && `(${activeDeadlines.length})`}
         </p>
         {activeDeadlines.length === 0 ? (
-          <p className="text-sm text-neutral-600">Nothing awaiting a team response right now.</p>
+          <p className="text-sm text-neutral-700">Nothing awaiting a team response right now.</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {activeDeadlines.map(({ dispatch, event }) => (
@@ -263,8 +263,8 @@ export default function ControlPage() {
         <div className="space-y-6">
           {[...eventsByGameDay.entries()].map(([gameDay, group]) => (
             <div key={gameDay}>
-              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-600">
-                Game Day {gameDay} <span className="normal-case text-neutral-500">(narrative Day {group.narrativeDay})</span>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-700">
+                Game Day {gameDay} <span className="normal-case text-neutral-700">(narrative Day {group.narrativeDay})</span>
               </h3>
               <div className="space-y-3">
                 {group.events.map((e) => {
@@ -294,7 +294,7 @@ export default function ControlPage() {
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="flex flex-wrap items-center gap-2 font-semibold text-text">
-                            {e.title} <span className="text-xs font-normal text-neutral-500">({e.id}, {e.scope})</span>
+                            {e.title} <span className="text-xs font-normal text-neutral-700">({e.id}, {e.scope})</span>
                             <Chip tone={e.isCorePath ? "accent-soft" : "neutral-soft"}>{e.isCorePath ? "Core" : "Optional"}</Chip>
                             {isRestricted && !targetHint && (
                               <Chip tone="neutral-soft">Targeted: {e.suggestedTargetRegions!.join("/")}</Chip>
@@ -305,7 +305,7 @@ export default function ControlPage() {
                               </span>
                             )}
                           </p>
-                          <p className="mt-1 text-xs text-neutral-600">{e.triggerConditionDesc}</p>
+                          <p className="mt-1 text-xs text-neutral-700">{e.triggerConditionDesc}</p>
                           <p className="mt-2 max-w-xl text-xs text-neutral-700">{e.modelDeltaDesc}</p>
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-2">
@@ -325,7 +325,7 @@ export default function ControlPage() {
 
                       {pickerOpen && (
                         <div className="mt-3 space-y-2 rounded-lg bg-bg p-3">
-                          <p className="text-xs text-neutral-600">
+                          <p className="text-xs text-neutral-700">
                             {targetHint && targetHint.length > 0
                               ? `Pre-filled with ${targetHint.join(", ")} — the region(s) that currently satisfy this event's trigger condition. Adjust if you want a different audience.`
                               : isRestricted

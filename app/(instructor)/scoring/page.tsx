@@ -36,7 +36,7 @@ export default function ScoringInboxPage() {
   });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="scoring inbox" />;
-  if (isLoading || !data) return <p className="text-neutral-600">Loading inbox...</p>;
+  if (isLoading || !data) return <p className="text-neutral-700">Loading inbox...</p>;
 
   const oldest = data.inbox.length ? Math.max(...data.inbox.map((i) => i.ageMs)) : 0;
   const fastPathable = data.inbox.filter((i) => !i.mandatoryReview && i.suggestedTier);
@@ -60,9 +60,9 @@ export default function ScoringInboxPage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-semibold text-text">
-                  {item.event?.title ?? "?"} <span className="text-xs font-normal text-neutral-600">({item.team?.regionId})</span>
+                  {item.event?.title ?? "?"} <span className="text-xs font-normal text-neutral-700">({item.team?.regionId})</span>
                 </p>
-                <p className="mt-1 text-xs text-neutral-600">
+                <p className="mt-1 text-xs text-neutral-700">
                   Choice: {item.decision.structuredChoice ?? "-"} - Confidence: {item.decision.confidenceLevel ?? "n/a"} - Suggested
                   tier: {item.suggestedTier ?? "n/a"} - Age: {Math.round(item.ageMs / 60000)}m
                 </p>
@@ -81,7 +81,7 @@ export default function ScoringInboxPage() {
             </div>
           </div>
         ))}
-        {data.inbox.length === 0 && <p className="text-sm text-neutral-600">Inbox is empty.</p>}
+        {data.inbox.length === 0 && <p className="text-sm text-neutral-700">Inbox is empty.</p>}
       </div>
     </div>
   );

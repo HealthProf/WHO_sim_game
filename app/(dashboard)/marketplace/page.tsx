@@ -111,17 +111,17 @@ export default function MarketplacePage() {
         <h2 className="font-heading text-[21px] text-text">WHO HQ Marketplace</h2>
         <div className="grid gap-4 text-sm sm:grid-cols-2">
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-600">PPE (per day-equivalent unit)</p>
+            <p className="text-xs text-neutral-700">PPE (per day-equivalent unit)</p>
             <p className="text-base font-bold text-text">${market?.prices.PPE_DAYS.toLocaleString()}</p>
-            <p className="mt-1 text-xs text-neutral-600">WHO HQ stock: {market?.whoHqPpeStock.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-neutral-700">WHO HQ stock: {market?.whoHqPpeStock.toLocaleString()}</p>
           </div>
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-600">Antivirals (per dose)</p>
+            <p className="text-xs text-neutral-700">Antivirals (per dose)</p>
             <p className="text-base font-bold text-text">${market?.prices.ANTIVIRALS.toLocaleString()}</p>
-            <p className="mt-1 text-xs text-neutral-600">WHO HQ stock: {market?.whoHqAntiviralsStock.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-neutral-700">WHO HQ stock: {market?.whoHqAntiviralsStock.toLocaleString()}</p>
           </div>
         </div>
-        <p className="text-xs text-neutral-600">Prices rise as WHO HQ&apos;s own stock depletes and as the global escalation state worsens — waiting to buy is a real gamble.</p>
+        <p className="text-xs text-neutral-700">Prices rise as WHO HQ&apos;s own stock depletes and as the global escalation state worsens — waiting to buy is a real gamble.</p>
 
         <form
           onSubmit={(e) => {
@@ -145,14 +145,14 @@ export default function MarketplacePage() {
             {buyFromWho.isPending ? "Submitting..." : "Request Purchase"}
           </PillButton>
           {buyAmount && market && (
-            <span className="text-xs text-neutral-600">≈ ${Math.round(Number(buyAmount) * (market.prices[buyResource] ?? 0)).toLocaleString()} total</span>
+            <span className="text-xs text-neutral-700">≈ ${Math.round(Number(buyAmount) * (market.prices[buyResource] ?? 0)).toLocaleString()} total</span>
           )}
         </form>
         {buyError && <p className="text-sm font-medium text-accent-800">{buyError}</p>}
 
         {recentBatch.length > 0 && (
           <div className="space-y-1 text-xs text-neutral-700">
-            <p className="uppercase tracking-wide text-neutral-600">Pending this batch (awaiting instructor approval)</p>
+            <p className="uppercase tracking-wide text-neutral-700">Pending this batch (awaiting instructor approval)</p>
             {recentBatch.map((r) => (
               <p key={r.id}>{r.regionId}: {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()}</p>
             ))}
@@ -228,7 +228,7 @@ export default function MarketplacePage() {
               <Chip tone={tradeStatusTone[o.status as keyof typeof tradeStatusTone] ?? "neutral-soft"}>{o.status}</Chip>
             </div>
           ))}
-          {(!trades || trades.offers.length === 0) && <p className="text-sm text-neutral-600">No trades yet.</p>}
+          {(!trades || trades.offers.length === 0) && <p className="text-sm text-neutral-700">No trades yet.</p>}
         </div>
       </section>
     </div>

@@ -12,7 +12,7 @@ import { PillButton } from "@/components/ui/pill-button";
 export function SummaryReportViewer({ rounds, large = false }: { rounds: SummaryRound[]; large?: boolean }) {
   const [index, setIndex] = useState(0);
 
-  const mutedText = large ? "text-neutral-400" : "text-neutral-600";
+  const mutedText = large ? "text-neutral-400" : "text-neutral-700";
   if (rounds.length === 0) {
     return <p className={large ? `text-2xl ${mutedText}` : mutedText}>No decisions were scored this session.</p>;
   }

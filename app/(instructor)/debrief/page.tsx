@@ -35,7 +35,7 @@ export default function DebriefPage() {
   const { data: summary } = useQuery({ queryKey: ["summary-report"], queryFn: () => apiFetch<{ rounds: SummaryRound[] }>("/api/summary-report") });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="debrief data" />;
-  if (!data) return <p className="text-neutral-600">Loading debrief data...</p>;
+  if (!data) return <p className="text-neutral-700">Loading debrief data...</p>;
 
   return (
     <div className="flex flex-col gap-[26px]">
@@ -74,7 +74,7 @@ export default function DebriefPage() {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-600">
+                <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-700">
                   <th className="py-2 pr-4">Region</th>
                   <th className="py-2 pr-4">Actual Confirmed</th>
                   <th className="py-2 pr-4">Ideal Confirmed</th>
@@ -124,18 +124,18 @@ export default function DebriefPage() {
 
       <section>
         <h2 className="mb-3 font-heading text-[21px] text-text">Round-by-Round Summary</h2>
-        {summary ? <SummaryReportViewer rounds={summary.rounds} /> : <p className="text-neutral-600">Loading...</p>}
+        {summary ? <SummaryReportViewer rounds={summary.rounds} /> : <p className="text-neutral-700">Loading...</p>}
       </section>
 
       <section>
         <h2 className="mb-2 font-heading text-[21px] text-text">Model State Trajectory (full history)</h2>
         <div className="max-h-64 space-y-1 overflow-y-auto text-xs">
           {data.modelStateHistory.map((h) => (
-            <p key={h.id} className="text-neutral-600">
+            <p key={h.id} className="text-neutral-700">
               Day {h.day} - {h.regionId}: Rt {h.snapshotJson.rt?.toFixed(2)}, CFR x{h.snapshotJson.cfrMultiplier?.toFixed(2)} — {h.reason}
             </p>
           ))}
-          {data.modelStateHistory.length === 0 && <p className="text-neutral-500">No scored decisions yet.</p>}
+          {data.modelStateHistory.length === 0 && <p className="text-neutral-700">No scored decisions yet.</p>}
         </div>
       </section>
 
@@ -143,13 +143,13 @@ export default function DebriefPage() {
         <h2 className="mb-2 font-heading text-[21px] text-text">EVT-006 vs EVT-012 Allocation Comparison</h2>
         <div className="grid grid-cols-1 gap-6 text-sm sm:grid-cols-2">
           <div>
-            <p className="mb-1 text-neutral-600">EVT-006 (first tranche)</p>
+            <p className="mb-1 text-neutral-700">EVT-006 (first tranche)</p>
             {data.evt006Allocations.map((a) => (
               <p key={a.regionId} className="text-xs text-neutral-700">{a.regionId}: {a.allocation ? JSON.stringify(a.allocation) : "no submission"}</p>
             ))}
           </div>
           <div>
-            <p className="mb-1 text-neutral-600">EVT-012 (second tranche)</p>
+            <p className="mb-1 text-neutral-700">EVT-012 (second tranche)</p>
             {data.evt012Allocations.map((a) => (
               <p key={a.regionId} className="text-xs text-neutral-700">{a.regionId}: {a.allocation ? JSON.stringify(a.allocation) : "no submission"}</p>
             ))}
@@ -160,7 +160,7 @@ export default function DebriefPage() {
       <section>
         <h2 className="mb-2 font-heading text-[21px] text-text">Most Consequential Decisions</h2>
         {data.mostConsequentialScores.map((s, i) => (
-          <div key={i} className="mb-2 flex items-start gap-2 text-xs text-neutral-600">
+          <div key={i} className="mb-2 flex items-start gap-2 text-xs text-neutral-700">
             <TierChip tier={s.score.tier} /> <span>({s.score.compositePct.toFixed(0)}%) — {s.decision?.rationaleText.slice(0, 140)}...</span>
           </div>
         ))}
@@ -174,14 +174,14 @@ export default function DebriefPage() {
               <p className="text-sm font-semibold text-text">{h.regionId}</p>
               <div>
                 <p className="mb-1 font-medium text-accent-2-700">Strongest</p>
-                {h.strongest.length === 0 && <p className="text-neutral-500">No scored decisions yet.</p>}
+                {h.strongest.length === 0 && <p className="text-neutral-700">No scored decisions yet.</p>}
                 {h.strongest.map((e, i) => (
                   <p key={i} className="text-neutral-700">{e.eventId} — {e.eventTitle} ({e.tier.replace("_", " ")}, {e.compositePct.toFixed(0)}%)</p>
                 ))}
               </div>
               <div>
                 <p className="mb-1 font-medium text-accent-800">Weakest</p>
-                {h.weakest.length === 0 && <p className="text-neutral-500">Not enough distinct decisions.</p>}
+                {h.weakest.length === 0 && <p className="text-neutral-700">Not enough distinct decisions.</p>}
                 {h.weakest.map((e, i) => (
                   <p key={i} className="text-neutral-700">{e.eventId} — {e.eventTitle} ({e.tier.replace("_", " ")}, {e.compositePct.toFixed(0)}%)</p>
                 ))}
@@ -195,7 +195,7 @@ export default function DebriefPage() {
         <h2 className="mb-2 font-heading text-[21px] text-text">Resource Pledge Ledger (per-region totals)</h2>
         <table className="border-collapse text-sm">
           <thead>
-            <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-600">
+            <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-700">
               <th className="py-1 pr-6">Region</th>
               <th className="py-1 pr-6">Pledges Given</th>
               <th className="py-1 pr-6">Pledges Received</th>
@@ -219,7 +219,7 @@ export default function DebriefPage() {
 function FinalStat({ label, value, tone }: { label: string; value: string; tone?: "sage" }) {
   return (
     <div className="rounded-md bg-bg p-3">
-      <p className="text-xs text-neutral-600">{label}</p>
+      <p className="text-xs text-neutral-700">{label}</p>
       <p className={`mt-1 text-xl font-bold ${tone === "sage" ? "text-accent-2-700" : "text-text"}`}>{value}</p>
     </div>
   );

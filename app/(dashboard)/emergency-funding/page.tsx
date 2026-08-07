@@ -108,7 +108,7 @@ export default function EmergencyFundingPage() {
               </div>
               <Chip tone={r.status === "open" ? "accent-solid" : "sage-soft"}>{r.status}</Chip>
             </div>
-            <p className="text-xs text-neutral-600">
+            <p className="text-xs text-neutral-700">
               ${r.totalContributed.toLocaleString()} contributed so far
               {r.contributions.length > 0 && ` (${r.contributions.map((c) => `${c.regionId}: $${c.amount.toLocaleString()}`).join(", ")})`}
             </p>
@@ -134,7 +134,7 @@ export default function EmergencyFundingPage() {
             )}
           </div>
         ))}
-        {data?.requests.length === 0 && <p className="text-sm text-neutral-600">No emergency funding requests yet.</p>}
+        {data?.requests.length === 0 && <p className="text-sm text-neutral-700">No emergency funding requests yet.</p>}
       </section>
     </div>
   );

@@ -9,7 +9,7 @@ export function KeyTerms({ texts }: { texts: string[] }) {
 
   return (
     <section className="rounded-lg bg-surface p-4">
-      <p className="mb-2 text-xs uppercase tracking-wide text-neutral-600">Key Terms</p>
+      <p className="mb-2 text-xs uppercase tracking-wide text-neutral-700">Key Terms</p>
       <dl className="space-y-2 text-sm">
         {terms.map((t) => (
           <div key={t.id}>

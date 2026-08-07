@@ -130,6 +130,20 @@ body {
   outline-offset: 2px;
 }
 
+/* Bar widths (visibility gap, world health, region stat bars, session
+   timeline progress, rail/clock progress) animate on data change via
+   Tailwind's transition-* utilities — this blanket rule mutes that motion
+   for anyone who's asked for less of it, instead of annotating every bar
+   individually. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @keyframes marquee {
   from {
     transform: translateX(100vw);

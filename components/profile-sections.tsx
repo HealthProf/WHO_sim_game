@@ -45,7 +45,7 @@ export function ProfileSections({ markdown }: { markdown: string }) {
     <div className="grid sm:grid-cols-2 gap-3">
       {sections.map((s, i) => (
         <div key={i} className="rounded-md bg-bg p-3">
-          {s.header && <p className="mb-1 text-xs uppercase tracking-wide text-neutral-600">{s.header}</p>}
+          {s.header && <p className="mb-1 text-xs uppercase tracking-wide text-neutral-700">{s.header}</p>}
           <p className="text-sm text-neutral-800">
             <InlineMarkdown text={s.body} />
           </p>

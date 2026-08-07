@@ -103,10 +103,10 @@ export default function CoordinationPage() {
                 {m.leaked && <Chip tone="accent-soft">Leaked</Chip>}
               </div>
               <p className="mt-1 text-text">{m.messageText}</p>
-              <p className="mt-1 text-xs text-neutral-600">{new Date(m.sentAt).toLocaleTimeString()}</p>
+              <p className="mt-1 text-xs text-neutral-700">{new Date(m.sentAt).toLocaleTimeString()}</p>
             </div>
           ))}
-        {data?.messages.length === 0 && <p className="text-sm text-neutral-600">No messages yet.</p>}
+        {data?.messages.length === 0 && <p className="text-sm text-neutral-700">No messages yet.</p>}
       </div>
     </div>
   );

@@ -73,9 +73,9 @@ export function DirectorTimeline({ state, events, dispatches }: { state: GlobalC
       <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
         {acts.map((a, i) => (
           <div key={a.narrativeDay} className={`rounded-md p-2 ${i === currentActIndex ? "border-2 border-accent bg-accent-100" : "bg-bg"}`}>
-            <p className={i === currentActIndex ? "text-accent-700" : "text-neutral-600"}>Act {a.narrativeDay}</p>
+            <p className={i === currentActIndex ? "text-accent-700" : "text-neutral-700"}>Act {a.narrativeDay}</p>
             <p className={`font-bold ${i === currentActIndex ? "text-accent-900" : "text-text"}`}>{a.dispatchedCount}/{a.totalCore} dispatched</p>
-            <p className="text-neutral-600">{a.scoredCount}/{a.totalCore} scored</p>
+            <p className="text-neutral-700">{a.scoredCount}/{a.totalCore} scored</p>
           </div>
         ))}
       </div>

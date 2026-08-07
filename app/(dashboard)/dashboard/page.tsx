@@ -87,7 +87,7 @@ export default function DashboardPage() {
   });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="situation room" />;
-  if (isLoading || !data) return <p className="text-neutral-600">Loading situation room...</p>;
+  if (isLoading || !data) return <p className="text-neutral-700">Loading situation room...</p>;
 
   const openDispatch = (events?.dispatches ?? []).find((d) => d.status === "dispatched");
   const openEvent = openDispatch ? events?.events.find((e) => e.id === openDispatch.eventId) : null;
@@ -113,7 +113,7 @@ export default function DashboardPage() {
           </span>
         </div>
       </div>
-      <p className="-mt-4 text-xs text-neutral-600">
+      <p className="-mt-4 text-xs text-neutral-700">
         Rt drifts upward slowly on its own while the sim is running and no fresh containment decision has landed — idle time has a cost too.
       </p>
 
@@ -155,7 +155,7 @@ export default function DashboardPage() {
                 <Stat label="Population happiness" value={data.ownRegion.populationHappinessIndex} />
               </div>
               <details className="text-sm text-neutral-800">
-                <summary className="cursor-pointer text-neutral-600">Full regional profile</summary>
+                <summary className="cursor-pointer text-neutral-700">Full regional profile</summary>
                 <div className="mt-3">
                   <ProfileSections markdown={data.ownRegion.profileMarkdown} />
                 </div>
@@ -174,7 +174,7 @@ export default function DashboardPage() {
           {data.notifications.length > 0 ? (
             <RecentDevelopments notifications={data.notifications} />
           ) : (
-            <p className="text-sm text-neutral-600">Nothing new yet.</p>
+            <p className="text-sm text-neutral-700">Nothing new yet.</p>
           )}
           {data.ghostPreview && <CounterfactualGhost ghostPreview={data.ghostPreview} />}
         </>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-md bg-bg p-3">
-      <p className="text-xs text-neutral-600">{label}</p>
+      <p className="text-xs text-neutral-700">{label}</p>
       <p className="text-base font-bold text-text">{value}</p>
     </div>
   );
@@ -211,7 +211,7 @@ function VisibilityGapCard({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="mt-2 flex justify-between text-xs text-neutral-600">
+      <div className="mt-2 flex justify-between text-xs text-neutral-700">
         <span>
           confirmed: <span className="font-bold text-text">{summary.confirmedCases.toLocaleString()}</span>
         </span>
@@ -240,12 +240,12 @@ function ProjectionCard({
       <div className={`grid grid-cols-1 gap-3 ${full ? "sm:grid-cols-3" : "sm:grid-cols-3"}`}>
         {projection.points.map((p) => (
           <div key={p.narrativeDay} className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-600">{p.narrativeDay === 0 ? "Now" : `+${p.narrativeDay}d`}</p>
+            <p className="text-xs text-neutral-700">{p.narrativeDay === 0 ? "Now" : `+${p.narrativeDay}d`}</p>
             <p className="mt-1 text-[24px] font-bold text-accent-2-900">{p.confirmedCases.toLocaleString()}</p>
-            <p className="text-xs text-neutral-600">confirmed</p>
+            <p className="text-xs text-neutral-700">confirmed</p>
             {p.narrativeDay > 0 && (
               <p className="mt-0.5 text-sm font-bold text-accent-2-800">
-                +{p.deaths.toLocaleString()} <span className="text-xs font-normal text-neutral-600">projected deaths</span>
+                +{p.deaths.toLocaleString()} <span className="text-xs font-normal text-neutral-700">projected deaths</span>
               </p>
             )}
           </div>
@@ -269,7 +269,7 @@ function RegionsTable({
     <section className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-600">
+          <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-700">
             <th className="py-[7px] pr-[10px]">Region</th>
             <th className="py-[7px] pr-[10px]">Confirmed</th>
             <th className="py-[7px] pr-[10px]">Deaths</th>

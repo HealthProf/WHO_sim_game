@@ -10,7 +10,7 @@ const toneClass: Record<ChipTone, string> = {
   "accent-soft": "bg-accent-200 text-accent-700",
   "sage-soft": "bg-accent-2-200 text-accent-2-800",
   "neutral-soft": "bg-neutral-200 text-neutral-800",
-  "neutral-outline": "border border-divider text-neutral-600",
+  "neutral-outline": "border border-divider text-neutral-700",
 };
 
 export function Chip({ tone = "neutral-soft", className = "", children }: { tone?: ChipTone; className?: string; children: React.ReactNode }) {

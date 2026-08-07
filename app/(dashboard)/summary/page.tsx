@@ -48,19 +48,19 @@ export default function TeamSummaryPage() {
           <p className="text-sm text-neutral-300">{data.myChapter.narrative}</p>
           <div className="grid grid-cols-2 gap-3 pt-2 text-sm sm:grid-cols-4">
             <div className="rounded-md bg-neutral-800 p-3">
-              <p className="text-xs text-neutral-500">Decisions Scored</p>
+              <p className="text-xs text-neutral-400">Decisions Scored</p>
               <p className="text-lg font-bold text-white">{data.myChapter.totalDecisions}</p>
             </div>
             <div className="rounded-md bg-neutral-800 p-3">
-              <p className="text-xs text-neutral-500">Optimal Calls</p>
+              <p className="text-xs text-neutral-400">Optimal Calls</p>
               <p className="text-lg font-bold text-accent-2-400">{data.myChapter.tierCounts.OPTIMAL ?? 0}</p>
             </div>
             <div className="rounded-md bg-neutral-800 p-3">
-              <p className="text-xs text-neutral-500">Final Deaths</p>
+              <p className="text-xs text-neutral-400">Final Deaths</p>
               <p className="text-lg font-bold text-white">{data.myChapter.actualDeaths.toLocaleString()}</p>
             </div>
             <div className="rounded-md bg-neutral-800 p-3">
-              <p className="text-xs text-neutral-500">Deaths Prevented vs. Ideal</p>
+              <p className="text-xs text-neutral-400">Deaths Prevented vs. Ideal</p>
               <p className="text-lg font-bold text-accent-400">{data.myChapter.deathsPrevented.toLocaleString()}</p>
             </div>
           </div>
@@ -78,17 +78,17 @@ export default function TeamSummaryPage() {
       {data?.finalResults && (
         <section className="space-y-3 rounded-lg bg-surface p-5">
           <h2 className="font-heading text-[21px] text-text">Final Results: Actual vs. Ideal Playthrough</h2>
-          <p className="text-xs text-neutral-600">
+          <p className="text-xs text-neutral-700">
             &quot;Ideal&quot; is a parallel shadow simulation that received only the best-tier consequence at every
             decision point across every region — a realistic ceiling on what this session could have achieved.
           </p>
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div className="rounded-md bg-bg p-3">
-              <p className="text-xs text-neutral-600">World Confirmed (actual)</p>
+              <p className="text-xs text-neutral-700">World Confirmed (actual)</p>
               <p className="text-lg font-bold text-text">{data.finalResults.totalActualConfirmed.toLocaleString()}</p>
             </div>
             <div className="rounded-md bg-bg p-3">
-              <p className="text-xs text-neutral-600">World Deaths (actual)</p>
+              <p className="text-xs text-neutral-700">World Deaths (actual)</p>
               <p className="text-lg font-bold text-text">{data.finalResults.totalActualDeaths.toLocaleString()}</p>
             </div>
             <div className="rounded-md bg-accent-100 p-3">
@@ -101,7 +101,7 @@ export default function TeamSummaryPage() {
             </div>
           </div>
           {myRegionResult && (
-            <p className="text-xs text-neutral-600">
+            <p className="text-xs text-neutral-700">
               Your region ({myRegionResult.regionId}): {myRegionResult.actualConfirmed.toLocaleString()} confirmed /{" "}
               {myRegionResult.actualDeaths.toLocaleString()} deaths actual, vs. {myRegionResult.optimalConfirmed.toLocaleString()} /{" "}
               {myRegionResult.optimalDeaths.toLocaleString()} under an ideal playthrough.
@@ -114,7 +114,7 @@ export default function TeamSummaryPage() {
         <section className="grid gap-4 rounded-lg bg-surface p-5 text-sm sm:grid-cols-2">
           <div>
             <p className="mb-2 font-semibold text-accent-2-700">Your 3 Strongest Decisions</p>
-            {data.myHighlights.strongest.length === 0 && <p className="text-xs text-neutral-600">No scored decisions yet.</p>}
+            {data.myHighlights.strongest.length === 0 && <p className="text-xs text-neutral-700">No scored decisions yet.</p>}
             {data.myHighlights.strongest.map((e, i) => (
               <div key={i} className="mb-1.5 flex items-center gap-2">
                 <TierChip tier={e.tier} />
@@ -124,7 +124,7 @@ export default function TeamSummaryPage() {
           </div>
           <div>
             <p className="mb-2 font-semibold text-accent-800">Your 3 Weakest Decisions</p>
-            {data.myHighlights.weakest.length === 0 && <p className="text-xs text-neutral-600">Not enough distinct decisions yet.</p>}
+            {data.myHighlights.weakest.length === 0 && <p className="text-xs text-neutral-700">Not enough distinct decisions yet.</p>}
             {data.myHighlights.weakest.map((e, i) => (
               <div key={i} className="mb-1.5 flex items-center gap-2">
                 <TierChip tier={e.tier} />
@@ -136,7 +136,7 @@ export default function TeamSummaryPage() {
       )}
 
       {isLoading || !data ? (
-        <p className="text-neutral-600">Loading summary...</p>
+        <p className="text-neutral-700">Loading summary...</p>
       ) : (
         <SummaryReportViewer rounds={data.rounds} />
       )}

@@ -51,7 +51,7 @@ export default function ScoreDecisionPage() {
 
   const item = data?.inbox.find((i) => i.decision.id === decisionId);
   if (queryError) return <QueryError error={queryError} onRetry={() => refetch()} label="submission" />;
-  if (!item) return <p className="text-neutral-600">Loading submission...</p>;
+  if (!item) return <p className="text-neutral-700">Loading submission...</p>;
 
   const rawCompositePct = ((evidenceScore * 0.4 + politicalScore * 0.3 + equityScore * 0.3) / 4) * 100;
   const rawTier = rawCompositePct >= 85 ? "OPTIMAL" : rawCompositePct >= 65 ? "ADEQUATE" : rawCompositePct >= 40 ? "INADEQUATE" : "CRITICAL_FAILURE";
@@ -65,17 +65,17 @@ export default function ScoreDecisionPage() {
     <div className="flex max-w-2xl flex-col gap-6">
       <div>
         <h1 className="font-heading text-[30px] text-text">{item.event?.title}</h1>
-        <p className="text-xs text-neutral-600">{item.team?.regionId} - suggested tier from structured choice: {item.suggestedTier ?? "n/a"}</p>
+        <p className="text-xs text-neutral-700">{item.team?.regionId} - suggested tier from structured choice: {item.suggestedTier ?? "n/a"}</p>
       </div>
 
       <section className="space-y-2 rounded-lg bg-surface p-4 text-sm text-text">
-        <p><span className="text-neutral-600">Choice: </span>{item.decision.structuredChoice ?? "-"}</p>
+        <p><span className="text-neutral-700">Choice: </span>{item.decision.structuredChoice ?? "-"}</p>
         {item.decision.resourceAllocationJson && (
-          <p><span className="text-neutral-600">Allocation: </span>{JSON.stringify(item.decision.resourceAllocationJson)}</p>
+          <p><span className="text-neutral-700">Allocation: </span>{JSON.stringify(item.decision.resourceAllocationJson)}</p>
         )}
-        <p><span className="text-neutral-600">Coordinated with: </span>{(item.decision.coordinatedWithTeamsJson ?? []).join(", ") || "none reported"}</p>
-        <p><span className="text-neutral-600">Confidence wager: </span>{confidence ?? "not provided"}</p>
-        <p className="whitespace-pre-wrap"><span className="text-neutral-600">Rationale: </span>{item.decision.rationaleText}</p>
+        <p><span className="text-neutral-700">Coordinated with: </span>{(item.decision.coordinatedWithTeamsJson ?? []).join(", ") || "none reported"}</p>
+        <p><span className="text-neutral-700">Confidence wager: </span>{confidence ?? "not provided"}</p>
+        <p className="whitespace-pre-wrap"><span className="text-neutral-700">Rationale: </span>{item.decision.rationaleText}</p>
       </section>
 
       <section className="space-y-2 rounded-lg bg-surface p-4 text-xs text-neutral-700">
@@ -99,7 +99,7 @@ export default function ScoreDecisionPage() {
         <p className="text-sm text-text">
           Raw composite: <span className="font-semibold">{rawCompositePct.toFixed(1)}%</span>
           {calibrationAdjustment !== 0 && (
-            <span className="text-neutral-600"> {calibrationAdjustment > 0 ? "+" : ""}{calibrationAdjustment} calibration ({confidence} confidence, {rawTier.toLowerCase()} call)</span>
+            <span className="text-neutral-700"> {calibrationAdjustment > 0 ? "+" : ""}{calibrationAdjustment} calibration ({confidence} confidence, {rawTier.toLowerCase()} call)</span>
           )}
           {" "}→ Final: <span className="font-semibold">{compositePct.toFixed(1)}%</span> - Tier: <TierChip tier={tier} />
         </p>

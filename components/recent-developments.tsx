@@ -19,14 +19,14 @@ export function RecentDevelopments({ notifications }: { notifications: { id: num
     leak: "Leak",
   };
   const kindColor: Record<string, string> = {
-    consequence: "text-neutral-600",
+    consequence: "text-neutral-700",
     snap_vote: "text-accent-700",
     pledge: "text-accent-2-700",
     market: "text-accent-700",
     trade: "text-accent-700",
-    budget_cycle: "text-neutral-600",
+    budget_cycle: "text-neutral-700",
     emergency_funding: "text-accent-700",
-    decision_revealed: "text-neutral-600",
+    decision_revealed: "text-neutral-700",
     stakeholder: "text-accent-2-700",
     interjection: "text-accent-700",
     leak: "text-accent-800",
@@ -38,11 +38,11 @@ export function RecentDevelopments({ notifications }: { notifications: { id: num
       <div className="max-h-56 space-y-2 overflow-y-auto">
         {notifications.map((n) => (
           <div key={n.id} className="text-sm">
-            <span className={`mr-2 text-xs font-semibold uppercase ${kindColor[n.kind] ?? "text-neutral-600"}`}>
+            <span className={`mr-2 text-xs font-semibold uppercase ${kindColor[n.kind] ?? "text-neutral-700"}`}>
               {kindLabel[n.kind] ?? n.kind}
             </span>
             <span className="text-neutral-800">{n.message}</span>
-            <span className="ml-2 text-xs text-neutral-500">{new Date(n.createdAt).toLocaleTimeString()}</span>
+            <span className="ml-2 text-xs text-neutral-700">{new Date(n.createdAt).toLocaleTimeString()}</span>
           </div>
         ))}
       </div>

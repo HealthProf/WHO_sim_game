@@ -372,7 +372,7 @@ export default function PublicDisplayPage() {
                   }`}
                 >
                   <p>{f.text}</p>
-                  <p className="mt-1 text-[11px] tabular-nums text-neutral-500">
+                  <p className={`mt-1 text-[11px] tabular-nums ${isNew ? "text-accent-300" : "text-neutral-400"}`}>
                     {ageSeconds < 60 ? `${ageSeconds}s ago` : `${Math.floor(ageSeconds / 60)}m ago`}
                   </p>
                 </div>
@@ -388,7 +388,7 @@ export default function PublicDisplayPage() {
 function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg bg-neutral-800 p-4">
-      <p className="text-xs uppercase tracking-wide text-neutral-500">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-neutral-400">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums xl:text-3xl">{value}</p>
     </div>
   );
@@ -409,7 +409,7 @@ function RegionBarPanel({
 }) {
   return (
     <div className="rounded-lg bg-neutral-800 p-4">
-      <p className="mb-3 text-xs uppercase tracking-wide text-neutral-500">{title}</p>
+      <p className="mb-3 text-xs uppercase tracking-wide text-neutral-400">{title}</p>
       <div className="space-y-2">
         {regions.map((r) => {
           const value = valueOf(r);

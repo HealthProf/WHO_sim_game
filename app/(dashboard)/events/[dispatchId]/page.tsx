@@ -79,11 +79,11 @@ export default function EventDetailPage() {
   });
 
   if (queryError) return <QueryError error={queryError} onRetry={() => refetch()} label="event" />;
-  if (isLoading || !data) return <p className="text-neutral-600">Loading...</p>;
+  if (isLoading || !data) return <p className="text-neutral-700">Loading...</p>;
 
   const dispatch = data.dispatches.find((d) => d.id === dispatchId);
   const event = data.events.find((e) => e.id === dispatch?.eventId);
-  if (!dispatch || !event) return <p className="text-neutral-600">Event not found.</p>;
+  if (!dispatch || !event) return <p className="text-neutral-700">Event not found.</p>;
 
   const allocationTotal = Object.values(allocation).reduce((a, b) => a + b, 0);
   const alreadyResolved = dispatch.status === "scored" || dispatch.status === "closed";
@@ -138,7 +138,7 @@ export default function EventDetailPage() {
                             : "cursor-pointer border-divider"
                       }`}
                     >
-                      <span className={`font-heading text-lg ${selected ? "text-accent-700" : "text-neutral-600"}`}>{opt.label}</span>
+                      <span className={`font-heading text-lg ${selected ? "text-accent-700" : "text-neutral-700"}`}>{opt.label}</span>
                       <span className="flex-1 text-sm">
                         <input
                           type="radio"
@@ -150,7 +150,7 @@ export default function EventDetailPage() {
                           className="sr-only"
                         />
                         <span className={selected ? "font-semibold text-accent-900" : "text-text"}>{opt.text}</span>
-                        <span className="mt-1 block text-xs text-neutral-600">{formatCost(opt.cost)}</span>
+                        <span className="mt-1 block text-xs text-neutral-700">{formatCost(opt.cost)}</span>
                         <span className="mt-1 block text-xs text-neutral-700">{opt.impactDesc}</span>
                         {blockedReason && <span className="mt-1 block text-xs font-medium text-accent-700">Can&apos;t afford this option — {blockedReason}</span>}
                       </span>
@@ -211,7 +211,7 @@ export default function EventDetailPage() {
 
           <div>
             <p className="mb-2 text-sm font-semibold text-text">How confident is your team in this decision?</p>
-            <p className="mb-2 text-xs text-neutral-600">
+            <p className="mb-2 text-xs text-neutral-700">
               This isn&apos;t scored on whether you were confident — it&apos;s scored on whether your confidence matched the
               outcome. Flagging real uncertainty is never penalized.
             </p>

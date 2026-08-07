@@ -15,11 +15,13 @@ export function SegmentedControl<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={`inline-flex items-center gap-1.5 self-start rounded-full bg-neutral-200 p-[5px] text-sm ${className}`}>
+    <div role="tablist" className={`inline-flex items-center gap-1.5 self-start rounded-full bg-neutral-200 p-[5px] text-sm ${className}`}>
       {options.map((opt) => (
         <button
           key={opt.value}
           type="button"
+          role="tab"
+          aria-selected={opt.value === value}
           onClick={() => onChange(opt.value)}
           className={
             opt.value === value
