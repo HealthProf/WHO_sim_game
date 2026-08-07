@@ -125,6 +125,11 @@ export interface OwnedSessionSummary {
   sessionId: string;
   mode: "instructor" | "demo";
   demoActiveRegionId: string | null;
+  // Drives the projector display link in the instructor console. Safe to hand
+  // to the owner's own UI — it's the same unguessable token the credential
+  // sheet already prints, and the display route is deliberately public so a
+  // projector can show it without logging in.
+  displayToken: string;
 }
 
 export async function ownedActiveSession(): Promise<OwnedSessionSummary | null> {
@@ -137,5 +142,10 @@ export async function ownedActiveSession(): Promise<OwnedSessionSummary | null> 
     orderBy: desc(gameSessions.lastActivityAt),
   });
   if (!owned) return null;
-  return { sessionId: owned.id, mode: owned.mode, demoActiveRegionId: owned.demoActiveRegionId };
+  return {
+    sessionId: owned.id,
+    mode: owned.mode,
+    demoActiveRegionId: owned.demoActiveRegionId,
+    displayToken: owned.displayToken,
+  };
 }
