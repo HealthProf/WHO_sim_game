@@ -11,6 +11,7 @@ import { computeFinalResults } from "@/lib/final-results";
 import { computeAllTeamChapters } from "@/lib/team-chapter";
 import { computeWorldHealth } from "@/lib/world-health";
 import { POLL_BACKOFF_MS } from "@/lib/config";
+import { getCheatDisplayState, getRevertOverridesForSession } from "@/lib/cheat-engine";
 
 // Public-safe read-only endpoint for the projector display. No auth — gated
 // instead by an unguessable displayToken (crypto.randomBytes(24), see
@@ -54,13 +55,19 @@ export async function GET(req: NextRequest) {
     limit: 30,
   });
 
+  // Cheat code #5's "revert to zero" — a purely cosmetic taper applied here,
+  // never to the underlying model_state row (see lib/cheat-engine.ts).
+  const gameDaysPerRealMinute = gs?.gameDaysPerRealMinute && gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
+  const revertOverrides = await getRevertOverridesForSession(sessionId, gameDaysPerRealMinute);
+
   const publicRegionData = allRegions.map((r) => {
     const s = allModelState.find((m) => m.regionId === r.id)!;
+    const override = revertOverrides[r.id];
     return {
       regionId: r.id,
       fullName: r.fullName,
-      confirmedCases: s.confirmedCases,
-      deaths: s.deaths,
+      confirmedCases: override ? override.confirmedCases : s.confirmedCases,
+      deaths: override ? override.deaths : s.deaths,
       rt: s.rt,
       populationWeight: r.populationWeight,
     };
@@ -71,8 +78,11 @@ export async function GET(req: NextRequest) {
   const teamChapters = gs?.simulationStatus === "completed" ? await computeAllTeamChapters(sessionId) : null;
   const globalAvgHappiness = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.populationHappinessIndex, 0) / allModelState.length) : 0;
   const globalAvgPublicTrust = allModelState.length ? Math.round(allModelState.reduce((s, m) => s + m.publicTrustIndex, 0) / allModelState.length) : 0;
-  const totalConfirmed = allModelState.reduce((s, m) => s + m.confirmedCases, 0);
-  const totalDeaths = allModelState.reduce((s, m) => s + m.deaths, 0);
+  // Summed from the (possibly cheat-overridden) publicRegionData, not
+  // allModelState directly, so the "displayed" illusion of cheat #5 carries
+  // through to the world totals too.
+  const totalConfirmed = publicRegionData.reduce((s, m) => s + m.confirmedCases, 0);
+  const totalDeaths = publicRegionData.reduce((s, m) => s + m.deaths, 0);
   const worldHealth = computeWorldHealth({ avgPublicTrust: globalAvgPublicTrust, avgHappiness: globalAvgHappiness, escalationState: gs?.escalationState ?? "GREEN", globalRt });
   // Public display never reveals live vote breakdowns while a vote is open
   // (same herd-voting concern as the team-facing endpoint) — only the
@@ -80,6 +90,7 @@ export async function GET(req: NextRequest) {
   // it's closed.
   const snapVote = await getSnapVoteState(sessionId, { forInstructor: false });
   const activeAnnouncement = await getActiveGlobalAnnouncement(sessionId);
+  const cheat = await getCheatDisplayState(sessionId);
 
   // Public-safe deadline countdowns: event title + time remaining only, no
   // region attribution (which regions have/haven't responded stays on the
@@ -130,5 +141,6 @@ export async function GET(req: NextRequest) {
     snapVote: snapVote.current,
     activeDeadlines,
     activeAnnouncement,
+    cheat,
   });
 }

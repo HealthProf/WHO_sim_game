@@ -1027,6 +1027,106 @@ export const analyticsEvents = pgTable(
 // reaper deletes an archived session that was never explicitly completed —
 // upserted on sessionId so either path can supersede the other with the
 // latest numbers. Never written for demo sessions.
+// Easter-egg cheat codes (see components/cheat-code-widget.tsx) — deliberately
+// undocumented in any UI copy. cheatCodeAttempts tracks consecutive *failed*
+// entries per actor so five bad guesses trigger a global "someone's trying
+// cheat codes" callout (see lib/cheat-engine.ts); it resets to 0 on both a
+// correct entry and after the callout fires, so it's "every 5 failures", not
+// a lifetime counter. cheatCodeRedemptions is a plain audit/idempotency log
+// (e.g. the one-time $30M grant checks it before crediting again).
+export const cheatCodeAttempts = pgTable(
+  "cheat_code_attempts",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    actorKey: text("actor_key").notNull(), // "instructor" | region code
+    failCount: integer("fail_count").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("cheat_code_attempts_session_actor_uniq").on(t.sessionId, t.actorKey),
+    index("cheat_code_attempts_session_idx").on(t.sessionId),
+  ]
+);
+
+export const cheatCodeRedemptions = pgTable(
+  "cheat_code_redemptions",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    code: text("code").notNull(), // internal key, e.g. "FUNDS_30M" — see lib/cheat-codes.ts
+    actorKey: text("actor_key").notNull(),
+    regionId: text("region_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    // Only ever inserted for one-time-per-actor codes (currently FUNDS_30M) —
+    // guarded with onConflictDoNothing() at the insert site so a repeat
+    // redemption attempt is a safe no-op rather than a thrown constraint
+    // error. Repeatable codes (GOD_MODE, BARREL_ROLL, ...) never insert here
+    // at all, so this constraint never applies to them.
+    uniqueIndex("cheat_code_redemptions_session_code_actor_uniq").on(t.sessionId, t.code, t.actorKey),
+    index("cheat_code_redemptions_session_idx").on(t.sessionId),
+  ]
+);
+
+// Session-wide cheat effects — one row per session. godModeActive is purely
+// informational (the actual effect is sessionState.intensityMultiplier,
+// which the cheat sets directly, bypassing the tempo dial's normal
+// MIN/MAX_INTENSITY_MULTIPLIER clamp — see app/api/cheat/execute/route.ts).
+// barrelRollAt is a broadcast timestamp: every poller (dashboard, instructor
+// console, projector) that hasn't already animated this exact timestamp
+// plays the roll once, client-side. monologueStartedAt/monologuePrevStatus
+// back the "one shot to rule them all" full-game pause — see
+// lib/cheat-engine.ts resolveCheatMonologue.
+export const cheatCodeState = pgTable("cheat_code_state", {
+  sessionId: text("session_id")
+    .primaryKey()
+    .references(() => gameSessions.id),
+  godModeActive: boolean("god_mode_active").notNull().default(false),
+  barrelRollAt: timestamp("barrel_roll_at"),
+  monologueActive: boolean("monologue_active").notNull().default(false),
+  monologueStartedAt: timestamp("monologue_started_at"),
+  monologuePrevStatus: simStatusEnum("monologue_prev_status"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Per-region cheat effect: the "revert to zero over 14 game days" code.
+// Deliberately never touches modelState's real deaths/confirmedCases (the
+// activating user is only ever promised a *displayed* reversion) — this row
+// just holds the taper's starting point and phase, and app/api/dashboard +
+// app/api/display's response mapping computes the overridden display numbers
+// from it on every poll (see lib/cheat-engine.ts computeRevertOverride).
+// revertPhase: "counting_down" (tapering toward zero) -> "revealed_winner"
+// (holds at zero for the 5s "you won" beat) -> the row is cleared
+// (revertActive=false) once "Just Kidding!" fires and real numbers resume.
+export const cheatRegionEffects = pgTable(
+  "cheat_region_effects",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => gameSessions.id),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => regions.id),
+    revertActive: boolean("revert_active").notNull().default(false),
+    revertStartedAt: timestamp("revert_started_at"),
+    revertStartConfirmed: integer("revert_start_confirmed"),
+    revertStartDeaths: integer("revert_start_deaths"),
+    revertPhase: text("revert_phase"), // "counting_down" | "revealed_winner"
+    revertPhaseAt: timestamp("revert_phase_at"),
+  },
+  (t) => [
+    uniqueIndex("cheat_region_effects_session_region_uniq").on(t.sessionId, t.regionId),
+    index("cheat_region_effects_session_idx").on(t.sessionId),
+  ]
+);
+
 export const gameSessionSnapshots = pgTable("game_session_snapshots", {
   sessionId: text("session_id").primaryKey(),
   reason: text("reason").notNull(), // "completed" | "reaped"

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { ownedActiveSession } from "@/lib/session-context";
 import { TeamAnnouncementWatcher } from "@/components/team-announcement-watcher";
 import { TeamRail } from "@/components/team-rail";
+import { CheatCodeWidget } from "@/components/cheat-code-widget";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -11,6 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen flex-col bg-bg text-text lg:flex-row">
       <TeamAnnouncementWatcher />
+      <CheatCodeWidget />
       <TeamRail
         regionId={session?.user?.regionId}
         demoSession={demoSession}
