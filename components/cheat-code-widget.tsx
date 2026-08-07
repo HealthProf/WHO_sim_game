@@ -5,12 +5,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { ARROW_GLYPHS, CHEAT_EXECUTE_DELAY_SECONDS, type CheatCodeKey } from "@/lib/cheat-codes";
 import { useBarrelRollEffect } from "@/lib/use-barrel-roll";
+import { useMonologueMessage } from "@/lib/use-monologue";
 
 interface CheatDashboardData {
   cheat: {
     godModeActive: boolean;
     barrelRollAt: string | null;
-    monologue: { index: number; total: number; text: string; secondsRemaining: number } | null;
+    monologue: { index: number; total: number; text: string; secondsRemaining: number; startedAt: string } | null;
   };
   // Team dashboards already get cheat-triggered global messages via the
   // persistent per-team announcement modal (components/team-announcement-
@@ -67,6 +68,13 @@ export function CheatCodeWidget() {
     queryFn: () => apiFetch<CheatDashboardData>("/api/dashboard"),
     refetchInterval: 15000,
   });
+
+  // Ticks locally every second from the server's startedAt timestamp,
+  // independent of this page's 15s poll interval — see lib/use-monologue.ts
+  // for why that decoupling matters (the poll cadence is far coarser than
+  // the 5s-per-message cadence, so relying on the poll response's own
+  // index/text directly meant most of the 9 messages were never shown).
+  const monologue = useMonologueMessage(data?.cheat?.monologue?.startedAt);
 
   useBarrelRollEffect(data?.cheat?.barrelRollAt);
 
@@ -232,7 +240,7 @@ export function CheatCodeWidget() {
         <GlobalAnnouncementToast key={data.activeGlobalAnnouncement.id} announcement={data.activeGlobalAnnouncement} />
       )}
 
-      {data?.cheat?.monologue && <MonologueOverlay monologue={data.cheat.monologue} />}
+      {monologue && <MonologueOverlay monologue={monologue} />}
     </>
   );
 }

@@ -10,6 +10,7 @@ import type { SummaryRound } from "@/lib/summary-report";
 import type { FinalResults } from "@/lib/final-results";
 import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
 import { useBarrelRollEffect } from "@/lib/use-barrel-roll";
+import { useMonologueMessage } from "@/lib/use-monologue";
 
 interface DisplaySnapVote {
   question: string;
@@ -52,7 +53,7 @@ interface DisplayData extends GlobalClockFields {
   cheat: {
     godModeActive: boolean;
     barrelRollAt: string | null;
-    monologue: { index: number; total: number; text: string; secondsRemaining: number } | null;
+    monologue: { index: number; total: number; text: string; secondsRemaining: number; startedAt: string } | null;
   } | null;
 }
 
@@ -80,6 +81,9 @@ export default function PublicDisplayPage() {
   const [announcementSeen, setAnnouncementSeen] = useState<{ id: number; seenAt: number } | null>(null);
 
   useBarrelRollEffect(data?.cheat?.barrelRollAt);
+  // Ticks locally every second from the server's startedAt timestamp,
+  // independent of this page's poll interval — see lib/use-monologue.ts.
+  const monologue = useMonologueMessage(data?.cheat?.monologue?.startedAt);
 
   // Item 6's live feed: newest on top, and a new item stays visibly
   // highlighted for a while after it first appears rather than blending
@@ -318,13 +322,13 @@ export default function PublicDisplayPage() {
           </div>
         ))}
 
-      {data.cheat?.monologue && (
+      {monologue && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black px-16">
           <p
-            key={data.cheat.monologue.index}
+            key={monologue.index}
             className="max-w-5xl animate-fade-in-slow text-center text-3xl font-medium leading-relaxed text-white xl:text-5xl"
           >
-            {data.cheat.monologue.text}
+            {monologue.text}
           </p>
         </div>
       )}

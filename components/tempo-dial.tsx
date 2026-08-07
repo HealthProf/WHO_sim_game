@@ -21,6 +21,14 @@ export function TempoDial({ intensityMultiplier }: { intensityMultiplier: number
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard"] }),
   });
 
+  // The five notches only cover the normal 0.5x-2.0x range the PATCH route
+  // clamps manual adjustments to (see MIN/MAX_INTENSITY_MULTIPLIER in
+  // lib/config.ts) — but the God Mode cheat code writes 5x directly to the
+  // database, bypassing that clamp entirely, so the actual value can land
+  // well outside every notch. Without this, an off-dial value highlighted
+  // nothing at all, silently looking identical to "nothing happened."
+  const matchedNotch = NOTCHES.some((n) => Math.abs(intensityMultiplier - n.value) < 0.01);
+
   return (
     <section className="rounded-lg bg-surface p-5">
       <div className="mb-3 flex items-center justify-between">
@@ -45,6 +53,11 @@ export function TempoDial({ intensityMultiplier }: { intensityMultiplier: number
           );
         })}
       </div>
+      {!matchedNotch && (
+        <p className="mt-2 text-xs font-medium text-accent-700">
+          Currently {intensityMultiplier.toFixed(2)}x — outside the normal range. Pick a notch above to reset it.
+        </p>
+      )}
     </section>
   );
 }
