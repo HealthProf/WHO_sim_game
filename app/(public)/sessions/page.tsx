@@ -27,7 +27,14 @@ export default function SessionsPage() {
     // Role is a property of session ownership (see lib/auth.ts) — force the
     // JWT to re-resolve it now that this account owns a session, so
     // requireInstructorActor() on the next page load succeeds immediately.
-    await update();
+    //
+    // The argument is load-bearing: next-auth's update() only POSTs to the
+    // session endpoint when it has data to send (see its useSession update
+    // implementation). Called with no argument it issues a plain GET, which
+    // Auth.js treats as a session read — the jwt callback then runs without
+    // trigger === "update", the role is never re-resolved, and every
+    // subsequent API call 401s.
+    await update({});
     if (mode === "instructor") {
       router.push(`/sessions/${json.sessionId}/credentials`);
     } else {
