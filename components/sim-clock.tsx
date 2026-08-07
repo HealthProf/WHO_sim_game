@@ -25,15 +25,15 @@ export function SimClock({ state, size = "md" }: { state: GlobalClockFields; siz
   return (
     <div className="flex items-center gap-6">
       <div>
-        <p className={`${labelClass} text-slate-400 uppercase tracking-wide`}>In-Game Day</p>
-        <p className={`${valueClass} font-semibold tabular-nums`}>{formatSimClock(clock)}</p>
-        <div className={`${barWidth} h-1 bg-slate-700 rounded-full mt-1 overflow-hidden`}>
-          <div className="h-full bg-blue-500" style={{ width: `${clock.gameDayFraction * 100}%` }} />
+        <p className={`${labelClass} uppercase tracking-wide text-neutral-500`}>In-Game Day</p>
+        <p className={`${valueClass} font-bold tabular-nums text-white`}>{formatSimClock(clock)}</p>
+        <div className={`${barWidth} mt-1 h-1 overflow-hidden rounded-full bg-neutral-700`}>
+          <div className="h-full bg-accent-400" style={{ width: `${clock.gameDayFraction * 100}%` }} />
         </div>
       </div>
       <div>
-        <p className={`${labelClass} text-slate-400 uppercase tracking-wide`}>Real Elapsed</p>
-        <p className={`${valueClass} font-semibold tabular-nums`}>
+        <p className={`${labelClass} uppercase tracking-wide text-neutral-500`}>Real Elapsed</p>
+        <p className={`${valueClass} font-bold tabular-nums text-white`}>
           {clock.running ? formatRealElapsed(clock.realElapsedMs) : `${formatRealElapsed(clock.realElapsedMs)} (paused)`}
         </p>
       </div>

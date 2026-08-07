@@ -50,10 +50,14 @@ interface DisplayData extends GlobalClockFields {
   worldHealth: { index: number; label: string };
 }
 
+// The projector is the app's one dark, full-bleed, no-navigation surface —
+// always dark regardless of the light system elsewhere, per the handoff.
+// Escalation severity climbs through the neutral -> accent ramp (never a
+// second hue) so it stays legible next to everything else on this screen.
 const escalationBg: Record<string, string> = {
-  GREEN: "bg-emerald-700",
-  AMBER: "bg-amber-600",
-  RED: "bg-red-700",
+  GREEN: "bg-neutral-800",
+  AMBER: "bg-accent-700",
+  RED: "bg-accent-900",
 };
 
 export default function PublicDisplayPage() {
@@ -148,9 +152,9 @@ export default function PublicDisplayPage() {
   // instead of an indefinite "Loading..." screen.
   if (!data) {
     return (
-      <div className="h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-400 text-3xl text-center px-8">
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-neutral-900 px-8 text-center text-3xl text-neutral-400">
         <p>{lastError ? "Couldn't reach the server" : "Loading situation room..."}</p>
-        {lastError && <p className="text-lg text-red-400">{lastError} — retrying every 10s</p>}
+        {lastError && <p className="text-lg text-accent-400">{lastError} — retrying every 10s</p>}
       </div>
     );
   }
@@ -161,48 +165,48 @@ export default function PublicDisplayPage() {
   const isStale = lastSuccessAt !== null && now - lastSuccessAt > 40000;
 
   const staleBanner = isStale && (
-    <div className="shrink-0 bg-red-900 text-white text-center py-1.5 text-sm font-medium">
+    <div className="shrink-0 bg-accent-900 py-1.5 text-center text-sm font-medium text-white">
       Connection to the server may be lost — last updated {Math.round((now - lastSuccessAt!) / 1000)}s ago, still retrying
     </div>
   );
 
   if (data.simulationStatus === "completed" && data.rounds) {
     return (
-      <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-neutral-900 text-white">
         {staleBanner}
-        <header className="shrink-0 px-8 py-6 bg-slate-800 text-center">
-          <h1 className="text-4xl xl:text-5xl font-bold tracking-wide">SIMULATION COMPLETE — SUMMARY REPORT</h1>
+        <header className="shrink-0 bg-neutral-800 px-8 py-6 text-center">
+          <h1 className="font-heading text-4xl tracking-wide xl:text-5xl">SIMULATION COMPLETE — SUMMARY REPORT</h1>
         </header>
-        <div className="flex-1 min-h-0 overflow-y-auto p-8 space-y-8">
+        <div className="min-h-0 flex-1 space-y-8 overflow-y-auto p-8">
           {data.finalResults && (
-            <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
-              <h2 className="text-2xl font-bold">Final Results: Actual vs. Ideal Playthrough</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <section className="space-y-4 rounded-lg bg-neutral-800 p-6">
+              <h2 className="font-heading text-2xl">Final Results: Actual vs. Ideal Playthrough</h2>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <StatTile label="Actual Confirmed" value={data.finalResults.totalActualConfirmed.toLocaleString()} />
                 <StatTile label="Actual Deaths" value={data.finalResults.totalActualDeaths.toLocaleString()} />
                 <StatTile label="Ideal Confirmed" value={data.finalResults.totalOptimalConfirmed.toLocaleString()} />
                 <StatTile label="Ideal Deaths" value={data.finalResults.totalOptimalDeaths.toLocaleString()} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-amber-950/40 border border-amber-700 rounded-lg p-4">
-                  <p className="text-sm uppercase tracking-wide text-amber-300">Infections Preventable</p>
-                  <p className="text-4xl font-bold mt-1">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
+                <div className="rounded-lg bg-accent-900 p-4">
+                  <p className="text-sm uppercase tracking-wide text-accent-300">Infections Preventable</p>
+                  <p className="mt-1 text-4xl font-bold">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
                 </div>
-                <div className="bg-red-950/40 border border-red-700 rounded-lg p-4">
-                  <p className="text-sm uppercase tracking-wide text-red-300">Deaths Preventable</p>
-                  <p className="text-4xl font-bold mt-1">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
+                <div className="rounded-lg bg-accent-900 p-4">
+                  <p className="text-sm uppercase tracking-wide text-accent-300">Deaths Preventable</p>
+                  <p className="mt-1 text-4xl font-bold">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
                 </div>
               </div>
             </section>
           )}
           {data.teamChapters && data.teamChapters.length > 0 && (
             <section className="space-y-4">
-              <h2 className="text-2xl font-bold">Chapters of History</h2>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <h2 className="font-heading text-2xl">Chapters of History</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {data.teamChapters.map((c) => (
-                  <div key={c.regionId} className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-5 space-y-2">
+                  <div key={c.regionId} className="space-y-2 rounded-lg bg-neutral-800 p-5">
                     <p className="text-xl font-bold text-white">{c.headline}</p>
-                    <p className="text-sm text-slate-300">{c.narrative}</p>
+                    <p className="text-sm text-neutral-300">{c.narrative}</p>
                   </div>
                 ))}
               </div>
@@ -220,12 +224,12 @@ export default function PublicDisplayPage() {
   const sortedRegionsByCases = [...data.regions].sort((a, b) => b.confirmedCases - a.confirmedCases);
 
   return (
-    <div className="h-screen w-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-neutral-900 text-white">
       {staleBanner}
-      <header className={`shrink-0 px-8 py-5 flex flex-wrap items-center justify-between gap-4 ${escalationBg[data.escalationState]}`}>
-        <h1 className="text-3xl xl:text-4xl font-bold tracking-wide">OPERATION VEILED HORIZON</h1>
+      <header className={`flex shrink-0 flex-wrap items-center justify-between gap-4 px-8 py-5 ${escalationBg[data.escalationState]}`}>
+        <h1 className="font-heading text-3xl tracking-wide xl:text-4xl">OPERATION VEILED HORIZON</h1>
         <SimClock state={data} size="lg" />
-        <div className="flex items-center gap-8 text-xl xl:text-2xl font-semibold">
+        <div className="flex items-center gap-8 text-xl font-semibold xl:text-2xl">
           <span>{data.escalationState}</span>
           <span>Global Rt {data.globalRt.toFixed(2)}</span>
           <span>Media Pressure {data.mediaPressureIndex}</span>
@@ -234,48 +238,49 @@ export default function PublicDisplayPage() {
 
       {/* Item 12's "single world health bar" — one shared composite number
           (see lib/world-health.ts) the whole room watches together, instead
-          of six regions' worth of stats competing for attention. Color
-          bands green->amber->red across the fill, with the index and its
-          descriptor as a direct label rather than color alone. */}
-      <div className="shrink-0 bg-slate-900 border-b border-slate-800 px-8 py-3 flex items-center gap-4">
-        <span className="text-xs uppercase tracking-widest text-slate-400 shrink-0">World Health</span>
-        <div className="flex-1 h-4 bg-slate-800 rounded-full overflow-hidden">
+          of six regions' worth of stats competing for attention. The fill
+          climbs the neutral -> accent-2 -> accent ramp (good = sage, bad =
+          terracotta) with the index and its descriptor as a direct label
+          rather than color alone. */}
+      <div className="flex shrink-0 items-center gap-4 border-b border-neutral-800 bg-neutral-900 px-8 py-3">
+        <span className="shrink-0 text-xs uppercase tracking-widest text-neutral-500">World Health</span>
+        <div className="h-4 flex-1 overflow-hidden rounded-full bg-neutral-800">
           <div
             className={`h-full rounded-full transition-all duration-1000 ${
-              data.worldHealth.index >= 55 ? "bg-emerald-500" : data.worldHealth.index >= 35 ? "bg-amber-500" : "bg-red-600"
+              data.worldHealth.index >= 55 ? "bg-accent-2-500" : data.worldHealth.index >= 35 ? "bg-accent-500" : "bg-accent-800"
             }`}
             style={{ width: `${Math.max(3, data.worldHealth.index)}%` }}
           />
         </div>
-        <span className="text-lg font-bold tabular-nums shrink-0">{data.worldHealth.index}/100</span>
-        <span className="text-sm text-slate-400 shrink-0 w-32">{data.worldHealth.label}</span>
+        <span className="shrink-0 text-lg font-bold tabular-nums">{data.worldHealth.index}/100</span>
+        <span className="w-32 shrink-0 text-sm text-neutral-500">{data.worldHealth.label}</span>
       </div>
 
       {data.snapVote && (
-        <div className="shrink-0 bg-red-800 px-8 py-4 flex items-center justify-between gap-6">
+        <div className="flex shrink-0 items-center justify-between gap-6 bg-accent-800 px-8 py-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-red-200 font-semibold">Emergency Committee — Snap Vote</p>
-            <p className="text-xl xl:text-2xl font-bold text-white">{data.snapVote.question}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-accent-200">Emergency Committee — Snap Vote</p>
+            <p className="text-xl font-bold text-white xl:text-2xl">{data.snapVote.question}</p>
           </div>
-          <div className="text-right shrink-0">
-            <p className="text-3xl xl:text-4xl font-bold tabular-nums text-white">
+          <div className="shrink-0 text-right">
+            <p className="text-3xl font-bold tabular-nums text-white xl:text-4xl">
               {Math.max(0, Math.ceil((new Date(data.snapVote.closesAt).getTime() - now) / 1000))}s
             </p>
-            <p className="text-sm text-red-200">{data.snapVote.respondedCount}/{data.snapVote.totalTeams} regions responded</p>
+            <p className="text-sm text-accent-200">{data.snapVote.respondedCount}/{data.snapVote.totalTeams} regions responded</p>
           </div>
         </div>
       )}
 
       {data.activeDeadlines.length > 0 && (
-        <div className="shrink-0 bg-slate-900 border-b border-slate-800 px-8 py-2 flex items-center gap-6 overflow-x-auto">
-          <span className="text-xs uppercase tracking-wide text-slate-500 shrink-0">Active Deadlines</span>
+        <div className="flex shrink-0 items-center gap-6 overflow-x-auto border-b border-neutral-800 bg-neutral-900 px-8 py-2">
+          <span className="shrink-0 text-xs uppercase tracking-wide text-neutral-500">Active Deadlines</span>
           {data.activeDeadlines.map((d) => {
             const remainingMs = Math.max(0, new Date(d.deadlineAt).getTime() - now);
             const minutes = Math.floor(remainingMs / 60000);
             const seconds = Math.floor((remainingMs % 60000) / 1000);
             return (
-              <span key={d.eventTitle} className="text-sm text-slate-300 shrink-0 whitespace-nowrap">
-                {d.eventTitle}: <span className="text-amber-400 font-semibold tabular-nums">{minutes}m {String(seconds).padStart(2, "0")}s</span>
+              <span key={d.eventTitle} className="shrink-0 whitespace-nowrap text-sm text-neutral-300">
+                {d.eventTitle}: <span className="font-semibold tabular-nums text-accent-400">{minutes}m {String(seconds).padStart(2, "0")}s</span>
               </span>
             );
           })}
@@ -291,28 +296,28 @@ export default function PublicDisplayPage() {
           // Text fades in slowly rather than popping, so the room has a
           // beat of silence before it can read anything.
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black px-16">
-            <div className="max-w-5xl w-full text-center animate-fade-in-slow">
-              <p className="text-sm uppercase tracking-[0.3em] text-red-500 font-semibold mb-6">{data.activeAnnouncement.title}</p>
-              <p className="text-4xl xl:text-6xl font-bold text-white leading-snug">{data.activeAnnouncement.message}</p>
+            <div className="w-full max-w-5xl animate-fade-in-slow text-center">
+              <p className="mb-6 text-sm font-semibold uppercase tracking-[0.3em] text-accent-500">{data.activeAnnouncement.title}</p>
+              <p className="text-4xl font-bold leading-snug text-white xl:text-6xl">{data.activeAnnouncement.message}</p>
             </div>
           </div>
         ) : (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-12 pointer-events-none">
-            <div className="max-w-4xl w-full rounded-2xl border-4 border-blue-500 bg-blue-950 p-10 text-center shadow-2xl">
-              <p className="text-lg uppercase tracking-widest text-blue-300 font-semibold mb-3">{data.activeAnnouncement.title}</p>
-              <p className="text-3xl xl:text-4xl font-bold text-white leading-snug">{data.activeAnnouncement.message}</p>
+          <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-12">
+            <div className="w-full max-w-4xl rounded-2xl border-4 border-accent bg-accent-900 p-10 text-center shadow-2xl">
+              <p className="mb-3 text-lg font-semibold uppercase tracking-widest text-accent-300">{data.activeAnnouncement.title}</p>
+              <p className="text-3xl font-bold leading-snug text-white xl:text-4xl">{data.activeAnnouncement.message}</p>
             </div>
           </div>
         ))}
 
-      <div className="flex-1 min-h-0 flex gap-0">
+      <div className="flex flex-1 gap-0 min-h-0">
         {/* Left: real-time key metrics — stat tiles plus a bar per region for
             each of confirmed cases, deaths, and Rt. Bars carry a direct
             region-code + value label rather than relying on color alone to
             tell regions apart (the brand palette fails a strict CVD check at
             6 hues — see dataviz skill palette validation). */}
-        <div className="flex-1 min-w-0 overflow-y-auto p-6 space-y-6">
-          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="min-w-0 flex-1 space-y-6 overflow-y-auto p-6">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
             <StatTile label="Total Confirmed" value={data.totalConfirmed.toLocaleString()} />
             <StatTile label="Total Deaths" value={data.totalDeaths.toLocaleString()} />
             <StatTile label="Global Rt" value={data.globalRt.toFixed(2)} />
@@ -347,13 +352,13 @@ export default function PublicDisplayPage() {
             their own (last 30 stay scrollable) but flash a highlight for a
             while right after they first arrive, so the room's eyes are
             drawn to genuinely new developments. */}
-        <div className="w-[420px] xl:w-[480px] shrink-0 border-l border-slate-800 bg-slate-900/60 flex flex-col min-h-0">
-          <p className="shrink-0 px-4 py-3 text-xs uppercase tracking-wide text-slate-400 border-b border-slate-800">
+        <div className="flex min-h-0 w-[420px] shrink-0 flex-col border-l border-neutral-800 bg-neutral-900 xl:w-[480px]">
+          <p className="shrink-0 border-b border-neutral-800 px-4 py-3 text-xs uppercase tracking-wide text-neutral-500">
             Live Feed
           </p>
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
             {data.feedItems.length === 0 && (
-              <p className="text-slate-500 text-sm">Awaiting the first dispatched update from the facilitator...</p>
+              <p className="text-sm text-neutral-500">Awaiting the first dispatched update from the facilitator...</p>
             )}
             {data.feedItems.map((f) => {
               const arrivedAt = arrivalMap[f.id] ?? 0;
@@ -362,12 +367,12 @@ export default function PublicDisplayPage() {
               return (
                 <div
                   key={f.id}
-                  className={`rounded-lg px-3 py-2.5 text-sm leading-snug transition-colors duration-1000 ${
-                    isNew ? "bg-amber-500/20 border border-amber-500/60 text-amber-100" : "bg-slate-800/60 border border-transparent text-slate-200"
+                  className={`rounded-lg border px-3 py-2.5 text-sm leading-snug transition-colors duration-1000 ${
+                    isNew ? "border-accent-500/60 bg-accent-500/20 text-accent-100" : "border-transparent bg-neutral-800 text-neutral-200"
                   }`}
                 >
                   <p>{f.text}</p>
-                  <p className="text-[11px] text-slate-500 mt-1 tabular-nums">
+                  <p className="mt-1 text-[11px] tabular-nums text-neutral-500">
                     {ageSeconds < 60 ? `${ageSeconds}s ago` : `${Math.floor(ageSeconds / 60)}m ago`}
                   </p>
                 </div>
@@ -382,9 +387,9 @@ export default function PublicDisplayPage() {
 
 function StatTile({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="text-2xl xl:text-3xl font-bold tabular-nums mt-1">{value}</p>
+    <div className="rounded-lg bg-neutral-800 p-4">
+      <p className="text-xs uppercase tracking-wide text-neutral-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums xl:text-3xl">{value}</p>
     </div>
   );
 }
@@ -403,16 +408,16 @@ function RegionBarPanel({
   format: (v: number) => string;
 }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-      <p className="text-xs uppercase tracking-wide text-slate-500 mb-3">{title}</p>
+    <div className="rounded-lg bg-neutral-800 p-4">
+      <p className="mb-3 text-xs uppercase tracking-wide text-neutral-500">{title}</p>
       <div className="space-y-2">
         {regions.map((r) => {
           const value = valueOf(r);
           const pct = Math.max(2, Math.round((value / max) * 100));
           return (
             <div key={r.regionId} className="flex items-center gap-3">
-              <span className="w-14 shrink-0 text-xs font-semibold text-slate-300">{r.regionId}</span>
-              <div className="flex-1 h-5 bg-slate-800 rounded overflow-hidden">
+              <span className="w-14 shrink-0 text-xs font-semibold text-neutral-300">{r.regionId}</span>
+              <div className="h-5 flex-1 overflow-hidden rounded bg-neutral-700">
                 <div className="h-full rounded" style={{ width: `${pct}%`, background: regionColors[r.regionId] }} />
               </div>
               <span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums">{format(value)}</span>
