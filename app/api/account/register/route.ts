@@ -3,21 +3,12 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { REGIONS } from "@/lib/regions";
+import { usernameError } from "@/lib/reserved-usernames";
 import { generateSecret } from "@/lib/ids";
 import { checkRateLimit, clientIpFrom } from "@/lib/rate-limit";
 
-// Reserved usernames from the old fixed-login prototype — rejected outright,
-// plus near-misses (non-alphanumeric characters stripped, lowercased) so
-// "in-structor" or "AFRO!" can't sneak past a literal string comparison.
-const RESERVED = new Set(["instructor", ...REGIONS.map((r) => r.toLowerCase())]);
-function normalizeForReservedCheck(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
 const bodySchema = z.object({
   username: z.string().min(3).max(32),
-  password: z.string().min(8).max(200).optional(), // omitted = generate one
   name: z.string().min(1).max(100),
   email: z.string().email().max(200).optional().or(z.literal("")),
   institution: z.string().max(200).optional(),
@@ -55,23 +46,17 @@ async function handleRegister(req: NextRequest) {
   }
   const { username: rawUsername, name, email, institution } = parsed.data;
 
-  if (rawUsername.includes("@")) {
-    return NextResponse.json({ error: "Usernames can't contain \"@\" — that's reserved so region-login usernames (e.g. \"afro-7f3k9q\") never collide with a public account." }, { status: 400 });
-  }
-  if (rawUsername.includes("-")) {
-    return NextResponse.json({ error: "Usernames can't contain \"-\" — that pattern is reserved for generated per-session region logins (e.g. \"afro-7f3k9q\")." }, { status: 400 });
-  }
-  if (RESERVED.has(normalizeForReservedCheck(rawUsername))) {
-    return NextResponse.json({ error: "That username is reserved. Please choose another." }, { status: 400 });
+  const usernameIssue = usernameError(rawUsername);
+  if (usernameIssue) {
+    return NextResponse.json({ error: usernameIssue }, { status: 400 });
   }
 
   const username = rawUsername.toLowerCase().trim();
 
-  // Generate a strong password by default; the caller can supply their own
-  // via the "set my own instead" toggle on the registration form.
-  const generatedPassword = parsed.data.password ? null : generateSecret(12);
-  const password = parsed.data.password ?? generatedPassword!;
-  const passwordHash = await bcrypt.hash(password, 10);
+  // Always generate the password — there's no "set my own" option on
+  // registration. The account can change it any time from the Account page.
+  const generatedPassword = generateSecret(12);
+  const passwordHash = await bcrypt.hash(generatedPassword, 10);
 
   // No pre-check SELECT for an existing username — that was a second
   // sequential round trip to the DB before the INSERT, which on the Neon

@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { label: "Debrief", href: "/debrief" },
   { label: "Action log", href: "/log" },
   { label: "Guide", href: "/guide" },
+  { label: "Account", href: "/account" },
 ];
 
 export function InstructorRail({

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { QrCode } from "@/components/qr-code";
+import { PillButton, PillLink } from "@/components/ui/pill-button";
 
 interface Credential {
   regionId: string;
@@ -26,69 +27,66 @@ export default function SessionCredentialsPage() {
       .catch(() => setError("Couldn't load this session's credentials."));
   }, [params.id]);
 
-  if (error) return <div className="max-w-2xl mx-auto p-8 text-sm text-red-400">{error}</div>;
-  if (!credentials) return <div className="max-w-2xl mx-auto p-8 text-sm text-slate-400">Loading…</div>;
+  if (error) return <div className="max-w-2xl mx-auto p-8 text-[15px] text-accent-700">{error}</div>;
+  if (!credentials) return <div className="max-w-2xl mx-auto p-8 text-[15px] text-neutral-700">Loading…</div>;
 
   return (
     <div className="max-w-2xl mx-auto p-8 print:text-black">
-      <div className="flex items-center justify-between mb-6 print:hidden">
-        <h1 className="text-xl font-semibold text-slate-100">Session credentials</h1>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
-          >
+      <div className="flex items-start justify-between gap-4 mb-6 print:hidden">
+        <div>
+          <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-accent-700 mb-1.5">
+            Hand one row to each team
+          </p>
+          <h1 className="font-heading text-[32px] text-text">Session credentials</h1>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <PillButton type="button" onClick={() => window.print()} tone="ghost">
             Print
-          </button>
-          <a
-            href="/control"
-            className="rounded-md bg-blue-600 hover:bg-blue-500 px-3 py-2 text-sm text-white font-medium transition"
-          >
-            Go to Command Center
-          </a>
+          </PillButton>
+          <PillLink href="/control">Command Center</PillLink>
         </div>
       </div>
 
-      <p className="text-sm text-slate-400 mb-4 print:text-black">
+      <p className="text-[15px] text-neutral-800 mb-4 print:text-black leading-[1.55]">
         Hand each region&apos;s login to the team staffing it. Passwords are shown here for as long as the session is
         running — this page can be revisited any time to reprint them.
       </p>
 
-      <div className="flex items-center gap-4 bg-slate-900 border border-slate-800 rounded-lg p-4 mb-6 print:hidden">
+      <div className="flex items-center gap-[18px] bg-accent-2-100 rounded-lg p-5 mb-6 print:hidden">
         <QrCode value={typeof window !== "undefined" ? `${window.location.origin}/login` : "/login"} size={112} />
-        <div className="text-sm text-slate-300">
-          <p className="font-medium text-slate-100 mb-1">On phones, install before logging in</p>
-          <p className="text-slate-400">
+        <div className="text-[15px]">
+          <p className="font-heading text-[19px] text-accent-2-900 mb-1">On phones, install before logging in</p>
+          <p className="text-[13px] text-accent-2-700 leading-[1.5]">
             Have each team scan this code and add the site to their home screen (Share → Add to Home Screen on
-            iPhone) <span className="font-medium text-slate-300">before</span> they log in. On iOS, installing after
-            login starts a separate, signed-out session — installing first avoids that.
+            iPhone) <b>before</b> they log in. On iOS, installing after login starts a separate, signed-out session —
+            installing first avoids that.
           </p>
         </div>
       </div>
 
-      <table className="w-full text-sm border-collapse mb-8">
+      <table className="w-full text-[15px] border-collapse mb-8">
         <thead>
-          <tr className="text-left text-slate-400 border-b border-slate-800">
-            <th className="py-2 pr-4">Region</th>
-            <th className="py-2 pr-4">Username</th>
-            <th className="py-2">Password</th>
+          <tr className="text-left text-neutral-700 border-b-2 border-divider">
+            <th className="py-2 pr-4 text-[12px] font-medium">Region</th>
+            <th className="py-2 pr-4 text-[12px] font-medium">Username</th>
+            <th className="py-2 text-[12px] font-medium">Password</th>
           </tr>
         </thead>
         <tbody>
           {credentials.map((c) => (
-            <tr key={c.regionId} className="border-b border-slate-800 text-slate-200">
-              <td className="py-2 pr-4 font-medium">{c.regionId}</td>
-              <td className="py-2 pr-4 font-mono">{c.username}</td>
-              <td className="py-2 font-mono">{c.password ?? "(cleared after the session completed)"}</td>
+            <tr key={c.regionId} className="border-b border-divider text-text">
+              <td className="py-2.5 pr-4 font-bold">{c.regionId}</td>
+              <td className="py-2.5 pr-4 font-mono">{c.username}</td>
+              <td className="py-2.5 font-mono">{c.password ?? "(cleared after the session completed)"}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
       {displayToken && (
-        <p className="text-sm text-slate-400 print:text-black">
-          Projector display (no login required): <code>/display/{displayToken}</code>
+        <p className="text-[13px] text-neutral-700 print:text-black">
+          Projector display (no login required):{" "}
+          <code className="font-mono bg-surface rounded-md px-2 py-0.5">/display/{displayToken}</code>
         </p>
       )}
     </div>
