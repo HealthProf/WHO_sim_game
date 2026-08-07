@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/fetcher";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import { QueryError } from "@/components/query-error";
 import { regionColors } from "@/lib/who-region-map";
+import { TierChip } from "@/components/ui/chip";
 import type { SummaryRound } from "@/lib/summary-report";
 import type { FinalResults } from "@/lib/final-results";
 import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
@@ -34,46 +35,46 @@ export default function DebriefPage() {
   const { data: summary } = useQuery({ queryKey: ["summary-report"], queryFn: () => apiFetch<{ rounds: SummaryRound[] }>("/api/summary-report") });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="debrief data" />;
-  if (!data) return <p className="text-slate-400">Loading debrief data...</p>;
+  if (!data) return <p className="text-neutral-600">Loading debrief data...</p>;
 
   return (
-    <div className="space-y-8">
-      <h2 className="text-lg font-semibold">After-Action Debrief</h2>
+    <div className="flex flex-col gap-[26px]">
+      <h1 className="font-heading text-[32px] text-text">After-Action Debrief</h1>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-5">
+      <section className="space-y-5 rounded-lg bg-surface p-6">
         <div>
-          <h3 className="text-xl font-semibold">Final Results: Actual vs. Ideal Playthrough</h3>
-          <p className="text-sm text-slate-400 mt-1">
+          <h2 className="font-heading text-[21px] text-text">Final Results: Actual vs. Ideal Playthrough</h2>
+          <p className="mt-1 text-sm text-neutral-700">
             &quot;Actual&quot; is what really happened in this session. &quot;Ideal&quot; is a parallel shadow simulation that
             received only the OPTIMAL-tier consequence at every decision point — a realistic ceiling on how much
             better this outcome could have been, not a theoretical zero.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <FinalStat label="Actual Confirmed" value={data.finalResults.totalActualConfirmed.toLocaleString()} />
           <FinalStat label="Actual Deaths" value={data.finalResults.totalActualDeaths.toLocaleString()} />
-          <FinalStat label="Ideal Confirmed" value={data.finalResults.totalOptimalConfirmed.toLocaleString()} tone="emerald" />
-          <FinalStat label="Ideal Deaths" value={data.finalResults.totalOptimalDeaths.toLocaleString()} tone="emerald" />
+          <FinalStat label="Ideal Confirmed" value={data.finalResults.totalOptimalConfirmed.toLocaleString()} tone="sage" />
+          <FinalStat label="Ideal Deaths" value={data.finalResults.totalOptimalDeaths.toLocaleString()} tone="sage" />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-amber-950/40 border border-amber-800 rounded-lg p-4">
-            <p className="text-xs uppercase tracking-wide text-amber-300">Infections That Could Have Been Prevented</p>
-            <p className="text-3xl font-bold mt-1">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="rounded-lg bg-accent-100 p-4">
+            <p className="text-xs uppercase tracking-wide text-accent-700">Infections That Could Have Been Prevented</p>
+            <p className="mt-1 text-3xl font-bold text-accent-900">{data.finalResults.totalInfectionsPrevented.toLocaleString()}</p>
           </div>
-          <div className="bg-red-950/40 border border-red-800 rounded-lg p-4">
-            <p className="text-xs uppercase tracking-wide text-red-300">Deaths That Could Have Been Prevented</p>
-            <p className="text-3xl font-bold mt-1">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
+          <div className="rounded-lg bg-accent-100 p-4">
+            <p className="text-xs uppercase tracking-wide text-accent-700">Deaths That Could Have Been Prevented</p>
+            <p className="mt-1 text-3xl font-bold text-accent-900">{data.finalResults.totalDeathsPrevented.toLocaleString()}</p>
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-medium text-slate-300 mb-2">Per-Region Breakdown</p>
+          <p className="mb-2 text-sm font-medium text-text">Per-Region Breakdown</p>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+            <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="text-left text-slate-400 border-b border-slate-800">
+                <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-600">
                   <th className="py-2 pr-4">Region</th>
                   <th className="py-2 pr-4">Actual Confirmed</th>
                   <th className="py-2 pr-4">Ideal Confirmed</th>
@@ -85,17 +86,17 @@ export default function DebriefPage() {
               </thead>
               <tbody>
                 {data.finalResults.regions.map((r) => (
-                  <tr key={r.regionId} className="border-b border-slate-900">
-                    <td className="py-2 pr-4 font-medium">
-                      <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ background: regionColors[r.regionId] }} />
+                  <tr key={r.regionId} className="border-b border-divider">
+                    <td className="py-2 pr-4 font-semibold text-text">
+                      <span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ background: regionColors[r.regionId] }} />
                       {r.regionId}
                     </td>
                     <td className="py-2 pr-4">{r.actualConfirmed.toLocaleString()}</td>
-                    <td className="py-2 pr-4 text-emerald-400">{r.optimalConfirmed.toLocaleString()}</td>
-                    <td className="py-2 pr-4 text-amber-400 font-semibold">{r.infectionsPrevented.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-accent-2-700">{r.optimalConfirmed.toLocaleString()}</td>
+                    <td className="py-2 pr-4 font-semibold text-accent-700">{r.infectionsPrevented.toLocaleString()}</td>
                     <td className="py-2 pr-4">{r.actualDeaths.toLocaleString()}</td>
-                    <td className="py-2 pr-4 text-emerald-400">{r.optimalDeaths.toLocaleString()}</td>
-                    <td className="py-2 pr-4 text-red-400 font-semibold">{r.deathsPrevented.toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-accent-2-700">{r.optimalDeaths.toLocaleString()}</td>
+                    <td className="py-2 pr-4 font-semibold text-accent-800">{r.deathsPrevented.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -105,16 +106,16 @@ export default function DebriefPage() {
       </section>
 
       <section>
-        <h3 className="font-medium mb-3">Chapters of History</h3>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <h2 className="mb-3 font-heading text-[21px] text-text">Chapters of History</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.teamChapters.map((c) => (
-            <div key={c.regionId} className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-5 space-y-2">
+            <div key={c.regionId} className="space-y-2 rounded-lg bg-neutral-900 p-5">
               <p className="text-lg font-bold text-white">{c.headline}</p>
-              <p className="text-xs text-slate-300">{c.narrative}</p>
-              <div className="flex gap-4 text-xs text-slate-400 pt-1">
+              <p className="text-xs text-neutral-300">{c.narrative}</p>
+              <div className="flex gap-4 pt-1 text-xs text-neutral-400">
                 <span>{c.totalDecisions} decisions</span>
-                <span className="text-emerald-400">{c.tierCounts.OPTIMAL ?? 0} optimal</span>
-                <span className="text-red-400">{c.deathsPrevented.toLocaleString()} deaths preventable</span>
+                <span className="text-accent-2-400">{c.tierCounts.OPTIMAL ?? 0} optimal</span>
+                <span className="text-accent-400">{c.deathsPrevented.toLocaleString()} deaths preventable</span>
               </div>
             </div>
           ))}
@@ -122,68 +123,67 @@ export default function DebriefPage() {
       </section>
 
       <section>
-        <h3 className="font-medium mb-3">Round-by-Round Summary</h3>
-        {summary ? <SummaryReportViewer rounds={summary.rounds} /> : <p className="text-slate-400">Loading...</p>}
+        <h2 className="mb-3 font-heading text-[21px] text-text">Round-by-Round Summary</h2>
+        {summary ? <SummaryReportViewer rounds={summary.rounds} /> : <p className="text-neutral-600">Loading...</p>}
       </section>
 
       <section>
-        <h3 className="font-medium mb-2">Model State Trajectory (full history)</h3>
-        <div className="max-h-64 overflow-y-auto text-xs space-y-1">
+        <h2 className="mb-2 font-heading text-[21px] text-text">Model State Trajectory (full history)</h2>
+        <div className="max-h-64 space-y-1 overflow-y-auto text-xs">
           {data.modelStateHistory.map((h) => (
-            <p key={h.id} className="text-slate-400">
+            <p key={h.id} className="text-neutral-600">
               Day {h.day} - {h.regionId}: Rt {h.snapshotJson.rt?.toFixed(2)}, CFR x{h.snapshotJson.cfrMultiplier?.toFixed(2)} — {h.reason}
             </p>
           ))}
-          {data.modelStateHistory.length === 0 && <p className="text-slate-500">No scored decisions yet.</p>}
+          {data.modelStateHistory.length === 0 && <p className="text-neutral-500">No scored decisions yet.</p>}
         </div>
       </section>
 
       <section>
-        <h3 className="font-medium mb-2">EVT-006 vs EVT-012 Allocation Comparison</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
+        <h2 className="mb-2 font-heading text-[21px] text-text">EVT-006 vs EVT-012 Allocation Comparison</h2>
+        <div className="grid grid-cols-1 gap-6 text-sm sm:grid-cols-2">
           <div>
-            <p className="text-slate-400 mb-1">EVT-006 (first tranche)</p>
+            <p className="mb-1 text-neutral-600">EVT-006 (first tranche)</p>
             {data.evt006Allocations.map((a) => (
-              <p key={a.regionId} className="text-xs text-slate-300">{a.regionId}: {a.allocation ? JSON.stringify(a.allocation) : "no submission"}</p>
+              <p key={a.regionId} className="text-xs text-neutral-700">{a.regionId}: {a.allocation ? JSON.stringify(a.allocation) : "no submission"}</p>
             ))}
           </div>
           <div>
-            <p className="text-slate-400 mb-1">EVT-012 (second tranche)</p>
+            <p className="mb-1 text-neutral-600">EVT-012 (second tranche)</p>
             {data.evt012Allocations.map((a) => (
-              <p key={a.regionId} className="text-xs text-slate-300">{a.regionId}: {a.allocation ? JSON.stringify(a.allocation) : "no submission"}</p>
+              <p key={a.regionId} className="text-xs text-neutral-700">{a.regionId}: {a.allocation ? JSON.stringify(a.allocation) : "no submission"}</p>
             ))}
           </div>
         </div>
       </section>
 
       <section>
-        <h3 className="font-medium mb-2">Most Consequential Decisions</h3>
+        <h2 className="mb-2 font-heading text-[21px] text-text">Most Consequential Decisions</h2>
         {data.mostConsequentialScores.map((s, i) => (
-          <div key={i} className="text-xs text-slate-400 mb-2">
-            <span className={s.score.tier === "OPTIMAL" ? "text-emerald-400" : "text-red-400"}>{s.score.tier}</span> ({s.score.compositePct.toFixed(0)}%) —{" "}
-            {s.decision?.rationaleText.slice(0, 140)}...
+          <div key={i} className="mb-2 flex items-start gap-2 text-xs text-neutral-600">
+            <TierChip tier={s.score.tier} /> <span>({s.score.compositePct.toFixed(0)}%) — {s.decision?.rationaleText.slice(0, 140)}...</span>
           </div>
         ))}
       </section>
 
       <section>
-        <h3 className="font-medium mb-3">Per-Team Highlights (3 strongest / 3 weakest)</h3>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <h2 className="mb-3 font-heading text-[21px] text-text">Per-Team Highlights (3 strongest / 3 weakest)</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.teamHighlights.map((h) => (
-            <div key={h.regionId} className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-xs space-y-2">
-              <p className="font-semibold text-sm">{h.regionId}</p>
+            <div key={h.regionId} className="space-y-2 rounded-lg bg-surface p-4 text-xs">
+              <p className="text-sm font-semibold text-text">{h.regionId}</p>
               <div>
-                <p className="text-emerald-400 font-medium mb-1">Strongest</p>
-                {h.strongest.length === 0 && <p className="text-slate-600">No scored decisions yet.</p>}
+                <p className="mb-1 font-medium text-accent-2-700">Strongest</p>
+                {h.strongest.length === 0 && <p className="text-neutral-500">No scored decisions yet.</p>}
                 {h.strongest.map((e, i) => (
-                  <p key={i} className="text-slate-300">{e.eventId} — {e.eventTitle} ({e.tier.replace("_", " ")}, {e.compositePct.toFixed(0)}%)</p>
+                  <p key={i} className="text-neutral-700">{e.eventId} — {e.eventTitle} ({e.tier.replace("_", " ")}, {e.compositePct.toFixed(0)}%)</p>
                 ))}
               </div>
               <div>
-                <p className="text-red-400 font-medium mb-1">Weakest</p>
-                {h.weakest.length === 0 && <p className="text-slate-600">Not enough distinct decisions.</p>}
+                <p className="mb-1 font-medium text-accent-800">Weakest</p>
+                {h.weakest.length === 0 && <p className="text-neutral-500">Not enough distinct decisions.</p>}
                 {h.weakest.map((e, i) => (
-                  <p key={i} className="text-slate-300">{e.eventId} — {e.eventTitle} ({e.tier.replace("_", " ")}, {e.compositePct.toFixed(0)}%)</p>
+                  <p key={i} className="text-neutral-700">{e.eventId} — {e.eventTitle} ({e.tier.replace("_", " ")}, {e.compositePct.toFixed(0)}%)</p>
                 ))}
               </div>
             </div>
@@ -192,10 +192,10 @@ export default function DebriefPage() {
       </section>
 
       <section>
-        <h3 className="font-medium mb-2">Resource Pledge Ledger (per-region totals)</h3>
-        <table className="text-sm border-collapse">
+        <h2 className="mb-2 font-heading text-[21px] text-text">Resource Pledge Ledger (per-region totals)</h2>
+        <table className="border-collapse text-sm">
           <thead>
-            <tr className="text-left text-slate-400 border-b border-slate-800">
+            <tr className="border-b-2 border-divider text-left text-[12px] font-medium text-neutral-600">
               <th className="py-1 pr-6">Region</th>
               <th className="py-1 pr-6">Pledges Given</th>
               <th className="py-1 pr-6">Pledges Received</th>
@@ -203,8 +203,8 @@ export default function DebriefPage() {
           </thead>
           <tbody>
             {Object.entries(data.pledgeTotals).map(([regionId, totals]) => (
-              <tr key={regionId} className="border-b border-slate-900">
-                <td className="py-1 pr-6 font-medium">{regionId}</td>
+              <tr key={regionId} className="border-b border-divider">
+                <td className="py-1 pr-6 font-semibold text-text">{regionId}</td>
                 <td className="py-1 pr-6">{totals.given}</td>
                 <td className="py-1 pr-6">{totals.received}</td>
               </tr>
@@ -216,11 +216,11 @@ export default function DebriefPage() {
   );
 }
 
-function FinalStat({ label, value, tone }: { label: string; value: string; tone?: "emerald" }) {
+function FinalStat({ label, value, tone }: { label: string; value: string; tone?: "sage" }) {
   return (
-    <div className="bg-slate-800/50 rounded-lg p-3">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={`text-xl font-bold mt-1 ${tone === "emerald" ? "text-emerald-400" : ""}`}>{value}</p>
+    <div className="rounded-md bg-bg p-3">
+      <p className="text-xs text-neutral-600">{label}</p>
+      <p className={`mt-1 text-xl font-bold ${tone === "sage" ? "text-accent-2-700" : "text-text"}`}>{value}</p>
     </div>
   );
 }

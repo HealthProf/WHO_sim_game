@@ -13,7 +13,8 @@ import { DeadlineCountdown } from "@/components/deadline-countdown";
 import { DirectorTimeline } from "@/components/director-timeline";
 import { TempoDial } from "@/components/tempo-dial";
 import { InterjectionPanel } from "@/components/interjection-panel";
-import Link from "next/link";
+import { Chip, type ChipTone } from "@/components/ui/chip";
+import { PillButton, PillLink } from "@/components/ui/pill-button";
 import { REGIONS as ALL_REGIONS } from "@/lib/regions";
 
 interface EventFull {
@@ -71,11 +72,11 @@ interface InboxItem {
   ageMs: number;
 }
 
-const statusChipColor: Record<string, string> = {
-  dispatched: "bg-amber-900/60 text-amber-300",
-  responded: "bg-blue-900/60 text-blue-300",
-  scored: "bg-emerald-900/60 text-emerald-300",
-  closed: "bg-slate-800 text-slate-400",
+const statusChipTone: Record<string, ChipTone> = {
+  dispatched: "accent-soft",
+  responded: "neutral-soft",
+  scored: "sage-soft",
+  closed: "neutral-outline",
 };
 
 export default function ControlPage() {
@@ -110,7 +111,7 @@ export default function ControlPage() {
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="events" />;
   if (dashError) return <QueryError error={dashError} onRetry={() => refetchDash()} label="dashboard state" />;
-  if (!data || !dash) return <p className="text-slate-400">Loading command center...</p>;
+  if (!data || !dash) return <p className="text-neutral-600">Loading command center...</p>;
 
   const status = dash.globalState.simulationStatus;
   const inboxCount = inbox?.inbox.length ?? 0;
@@ -145,40 +146,42 @@ export default function ControlPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-[26px]">
+      <h1 className="font-heading text-[32px] text-text">Command</h1>
+
       {/* Simulation status controls */}
-      <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-wrap items-center gap-4">
+      <section className="flex flex-wrap items-center gap-4 rounded-lg bg-surface p-5">
         <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wide">Simulation Status</p>
-          <p className="text-2xl font-semibold capitalize">{status.replace("_", " ")}</p>
+          <p className="text-xs uppercase tracking-wide text-neutral-600">Simulation Status</p>
+          <p className="text-2xl font-bold capitalize text-text">{status.replace("_", " ")}</p>
         </div>
         <div className="ml-auto flex gap-2">
           {status !== "running" && (
-            <button onClick={() => setStatus.mutate("running")} className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2">
+            <PillButton tone="sage" onClick={() => setStatus.mutate("running")}>
               {status === "not_started" ? "Start Simulation" : "Resume"}
-            </button>
+            </PillButton>
           )}
           {status === "running" && (
-            <button onClick={() => setStatus.mutate("paused")} className="rounded-md bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium px-4 py-2">
+            <PillButton tone="accent" onClick={() => setStatus.mutate("paused")}>
               Pause
-            </button>
+            </PillButton>
           )}
           {status !== "completed" && (
-            <button
+            <PillButton
+              tone="ghost"
               onClick={() => {
                 if (window.confirm("End the game now? This is reversible with Reopen, but every screen will switch to the summary report.")) {
                   setStatus.mutate("completed");
                 }
               }}
-              className="rounded-md bg-red-700 hover:bg-red-600 text-white text-sm font-medium px-4 py-2"
             >
               End Game
-            </button>
+            </PillButton>
           )}
           {status === "completed" && (
-            <button onClick={() => setStatus.mutate("running")} className="rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2">
+            <PillButton tone="accent" onClick={() => setStatus.mutate("running")}>
               Reopen
-            </button>
+            </PillButton>
           )}
         </div>
       </section>
@@ -188,45 +191,45 @@ export default function ControlPage() {
       <InterjectionPanel />
 
       {/* Needs your attention */}
-      <section className={`rounded-xl p-5 border ${inboxCount > 0 ? "bg-amber-950/40 border-amber-700" : "bg-slate-900 border-slate-800"}`}>
+      <section className={`rounded-lg p-5 ${inboxCount > 0 ? "bg-accent-100" : "bg-surface"}`}>
         <div className="flex flex-wrap items-center gap-6">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Needs Your Attention</p>
-            <p className="text-lg font-semibold">
+            <p className={`text-xs uppercase tracking-wide ${inboxCount > 0 ? "text-accent-700" : "text-neutral-600"}`}>Needs Your Attention</p>
+            <p className={`font-heading text-[21px] ${inboxCount > 0 ? "text-accent-900" : "text-text"}`}>
               {inboxCount === 0
                 ? "Scoring inbox is empty — nothing waiting on you right now."
                 : `${inboxCount} submission${inboxCount === 1 ? "" : "s"} awaiting scoring`}
             </p>
           </div>
           {inboxCount > 0 && (
-            <div className="flex gap-6 text-sm text-slate-300">
+            <div className="flex gap-6 text-sm text-accent-800">
               <span>Oldest: {Math.round(oldestMs / 60000)}m</span>
-              {mandatoryCount > 0 && <span className="text-red-400 font-semibold">{mandatoryCount} mandatory review</span>}
+              {mandatoryCount > 0 && <span className="font-semibold">{mandatoryCount} mandatory review</span>}
             </div>
           )}
           {inboxCount > 0 && (
-            <Link href="/scoring" className="ml-auto rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2">
+            <PillLink href="/scoring" tone="accent" className="ml-auto">
               Go to Scoring Inbox
-            </Link>
+            </PillLink>
           )}
         </div>
       </section>
 
       {/* Active deadlines — every currently-ticking countdown at once */}
-      <section className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <p className="text-xs uppercase tracking-wide text-slate-400 mb-3">
+      <section className="rounded-lg bg-surface p-5">
+        <p className="mb-3 text-xs uppercase tracking-wide text-neutral-600">
           Active Deadlines {activeDeadlines.length > 0 && `(${activeDeadlines.length})`}
         </p>
         {activeDeadlines.length === 0 ? (
-          <p className="text-sm text-slate-500">Nothing awaiting a team response right now.</p>
+          <p className="text-sm text-neutral-600">Nothing awaiting a team response right now.</p>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {activeDeadlines.map(({ dispatch, event }) => (
-              <div key={dispatch.id} className="bg-slate-800/60 rounded-lg px-3 py-2 flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">
+              <div key={dispatch.id} className="flex items-center justify-between gap-2 rounded-md bg-bg px-3 py-2 text-sm">
+                <span className="truncate text-text">
                   {event!.title} {dispatch.targetTeamId ? `(${teamsByRegionId.get(dispatch.targetTeamId) ?? "?"})` : ""}
                 </span>
-                <DeadlineCountdown deadlineAt={dispatch.deadlineAt!} className="text-amber-400 font-medium shrink-0 tabular-nums" />
+                <DeadlineCountdown deadlineAt={dispatch.deadlineAt!} className="shrink-0 font-medium tabular-nums text-accent-700" />
               </div>
             ))}
           </div>
@@ -240,18 +243,18 @@ export default function ControlPage() {
 
       {/* Event queue, grouped by day */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Event Queue</h2>
-          <div className="flex items-center gap-2 text-xs">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-heading text-[21px] text-text">Event Queue</h2>
+          <div className="flex items-center gap-1.5 rounded-full bg-neutral-200 p-[5px] text-xs">
             <button
               onClick={() => setCoreOnly(false)}
-              className={`rounded-full px-3 py-1 font-medium ${!coreOnly ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"}`}
+              className={!coreOnly ? "rounded-full bg-bg px-4 py-1.5 font-bold text-text shadow-sm" : "rounded-full px-4 py-1.5 text-neutral-700"}
             >
               All 16 events
             </button>
             <button
               onClick={() => setCoreOnly(true)}
-              className={`rounded-full px-3 py-1 font-medium ${coreOnly ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400"}`}
+              className={coreOnly ? "rounded-full bg-bg px-4 py-1.5 font-bold text-text shadow-sm" : "rounded-full px-4 py-1.5 text-neutral-700"}
             >
               Core path only (~60min)
             </button>
@@ -260,21 +263,14 @@ export default function ControlPage() {
         <div className="space-y-6">
           {[...eventsByGameDay.entries()].map(([gameDay, group]) => (
             <div key={gameDay}>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                Game Day {gameDay} <span className="text-slate-600 normal-case">(narrative Day {group.narrativeDay})</span>
+              <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-neutral-600">
+                Game Day {gameDay} <span className="normal-case text-neutral-500">(narrative Day {group.narrativeDay})</span>
               </h3>
               <div className="space-y-3">
                 {group.events.map((e) => {
                   const dispatches = data.dispatches.filter((d) => d.eventId === e.id);
                   const chain = data.chainStatus[e.id];
                   const allScored = dispatches.length > 0 && dispatches.every((d) => d.status === "scored" || d.status === "closed");
-                  const borderColor = !chain?.ok
-                    ? "border-slate-800"
-                    : allScored
-                      ? "border-emerald-800"
-                      : dispatches.length > 0
-                        ? "border-blue-800"
-                        : "border-slate-800";
 
                   // For GLOBAL/MULTI events dispatched to every team, show a
                   // per-region checklist (not just a count) so the
@@ -294,49 +290,42 @@ export default function ControlPage() {
                   const pickerOpen = pickerOpenFor === e.id;
 
                   return (
-                    <div key={e.id} className={`bg-slate-900 border ${borderColor} rounded-lg p-4`}>
+                    <div key={e.id} className={`rounded-lg p-4 ${allScored ? "bg-accent-2-100" : "bg-surface"}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <p className="font-medium flex items-center gap-2 flex-wrap">
-                            {e.title} <span className="text-xs text-slate-500">({e.id}, {e.scope})</span>
-                            <span
-                              className={`text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 ${
-                                e.isCorePath ? "bg-blue-950 text-blue-300" : "bg-slate-800 text-slate-400"
-                              }`}
-                            >
-                              {e.isCorePath ? "Core" : "Optional"}
-                            </span>
+                          <p className="flex flex-wrap items-center gap-2 font-semibold text-text">
+                            {e.title} <span className="text-xs font-normal text-neutral-500">({e.id}, {e.scope})</span>
+                            <Chip tone={e.isCorePath ? "accent-soft" : "neutral-soft"}>{e.isCorePath ? "Core" : "Optional"}</Chip>
                             {isRestricted && !targetHint && (
-                              <span className="text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 bg-purple-950 text-purple-300">
-                                Targeted: {e.suggestedTargetRegions!.join("/")}
-                              </span>
+                              <Chip tone="neutral-soft">Targeted: {e.suggestedTargetRegions!.join("/")}</Chip>
                             )}
                             {targetHint && targetHint.length > 0 && (
-                              <span className="text-[10px] uppercase font-semibold rounded-full px-2 py-0.5 bg-amber-950 text-amber-300" title="Computed live from current game state">
-                                Currently qualifies: {targetHint.join("/")}
+                              <span title="Computed live from current game state">
+                                <Chip tone="accent-soft">Currently qualifies: {targetHint.join("/")}</Chip>
                               </span>
                             )}
                           </p>
-                          <p className="text-xs text-slate-500 mt-1">{e.triggerConditionDesc}</p>
-                          <p className="text-xs text-slate-400 mt-2 max-w-xl">{e.modelDeltaDesc}</p>
+                          <p className="mt-1 text-xs text-neutral-600">{e.triggerConditionDesc}</p>
+                          <p className="mt-2 max-w-xl text-xs text-neutral-700">{e.modelDeltaDesc}</p>
                         </div>
-                        <div className="flex flex-col gap-2 items-end shrink-0">
-                          <button
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          <PillButton
+                            size="sm"
+                            tone="accent"
                             disabled={!chain?.ok}
                             onClick={() => (pickerOpen ? setPickerOpenFor(null) : openPicker(e.id, targetHint ?? e.suggestedTargetRegions))}
-                            className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-1.5"
                             title={!chain?.ok ? `Blocked by: ${chain?.blockedBy.join(", ")}` : ""}
                           >
                             {dispatches.length > 0 ? "Re-dispatch" : "Dispatch Now"}
-                          </button>
-                          {!chain?.ok && <span className="text-xs text-red-400">Blocked: {chain.blockedBy.join(", ")}</span>}
-                          {allScored && <span className="text-xs text-emerald-400 font-semibold">All scored</span>}
+                          </PillButton>
+                          {!chain?.ok && <span className="text-xs text-accent-700">Blocked: {chain.blockedBy.join(", ")}</span>}
+                          {allScored && <span className="text-xs font-semibold text-accent-2-700">All scored</span>}
                         </div>
                       </div>
 
                       {pickerOpen && (
-                        <div className="mt-3 bg-slate-800/60 rounded-lg p-3 space-y-2">
-                          <p className="text-xs text-slate-400">
+                        <div className="mt-3 space-y-2 rounded-lg bg-bg p-3">
+                          <p className="text-xs text-neutral-600">
                             {targetHint && targetHint.length > 0
                               ? `Pre-filled with ${targetHint.join(", ")} — the region(s) that currently satisfy this event's trigger condition. Adjust if you want a different audience.`
                               : isRestricted
@@ -345,7 +334,7 @@ export default function ControlPage() {
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {ALL_REGIONS.map((r) => (
-                              <label key={r} className="flex items-center gap-1.5 text-xs bg-slate-900 border border-slate-700 rounded-full px-3 py-1 cursor-pointer">
+                              <label key={r} className="flex cursor-pointer items-center gap-1.5 rounded-full border-2 border-divider px-3 py-1 text-xs">
                                 <input
                                   type="checkbox"
                                   checked={selectedRegions.includes(r)}
@@ -359,20 +348,22 @@ export default function ControlPage() {
                               </label>
                             ))}
                           </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => setSelectedRegions([...ALL_REGIONS])} className="text-xs text-blue-400 hover:text-blue-300">
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => setSelectedRegions([...ALL_REGIONS])} className="text-xs font-medium text-accent-700 hover:text-accent-600">
                               Select all
                             </button>
-                            <button onClick={() => setSelectedRegions([])} className="text-xs text-blue-400 hover:text-blue-300">
+                            <button onClick={() => setSelectedRegions([])} className="text-xs font-medium text-accent-700 hover:text-accent-600">
                               Clear
                             </button>
-                            <button
+                            <PillButton
+                              size="sm"
+                              tone="sage"
                               disabled={selectedRegions.length === 0 || dispatchEvent.isPending}
                               onClick={() => dispatchEvent.mutate({ eventId: e.id, targetRegionIds: selectedRegions })}
-                              className="ml-auto rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-medium px-3 py-1.5"
+                              className="ml-auto"
                             >
                               Confirm Dispatch to {selectedRegions.length || 0} region{selectedRegions.length === 1 ? "" : "s"}
-                            </button>
+                            </PillButton>
                           </div>
                         </div>
                       )}
@@ -381,12 +372,11 @@ export default function ControlPage() {
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {allRegionIds.map((regionId) => {
                             const d = dispatchedRegions.get(regionId);
-                            const colorClass = d ? statusChipColor[d.status] ?? "bg-slate-800 text-slate-400" : "bg-slate-900 text-slate-600 border border-slate-800";
                             return (
-                              <span key={regionId} className={`rounded-full px-2.5 py-1 text-xs font-medium ${colorClass}`}>
+                              <Chip key={regionId} tone={d ? statusChipTone[d.status] ?? "neutral-soft" : "neutral-outline"}>
                                 {regionId}
                                 {d?.revealedToPublic ? " ✓" : ""}
-                              </span>
+                              </Chip>
                             );
                           })}
                         </div>
@@ -395,20 +385,20 @@ export default function ControlPage() {
                       {dispatches.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {dispatches.map((d) => (
-                            <div key={d.id} className="flex items-center gap-2 bg-slate-800/60 rounded-full px-3 py-1 text-xs">
-                              <span>
+                            <div key={d.id} className="flex items-center gap-2 rounded-full bg-bg px-3 py-1 text-xs">
+                              <span className="text-text">
                                 #{d.id} {d.targetTeamId ? `(${teamsByRegionId.get(d.targetTeamId) ?? "?"})` : ""} · {d.status}
                               </span>
-                              {d.status === "dispatched" && d.deadlineAt && <DeadlineCountdown deadlineAt={d.deadlineAt} className="text-amber-300 tabular-nums" />}
+                              {d.status === "dispatched" && d.deadlineAt && <DeadlineCountdown deadlineAt={d.deadlineAt} className="text-accent-700 tabular-nums" />}
                               {!d.revealedToPublic && (
                                 <button
                                   onClick={() => pushToGlobal.mutate({ dispatchId: d.id, headline: `${e.title} — now live` })}
-                                  className="text-blue-400 hover:text-blue-300"
+                                  className="font-medium text-accent-700 hover:text-accent-600"
                                 >
                                   Push to Global Display
                                 </button>
                               )}
-                              {d.revealedToPublic && <span className="text-emerald-400">on display</span>}
+                              {d.revealedToPublic && <span className="text-accent-2-700">on display</span>}
                             </div>
                           ))}
                         </div>

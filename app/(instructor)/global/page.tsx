@@ -16,8 +16,8 @@ export default async function GlobalViewPage() {
 
   if (!active) {
     return (
-      <p className="text-sm text-slate-400">
-        No active session. Start one from <a href="/sessions" className="text-blue-400 hover:text-blue-300">your sessions</a> to
+      <p className="text-sm text-neutral-600">
+        No active session. Start one from <a href="/sessions" className="font-medium text-accent-700 hover:text-accent-600">your sessions</a> to
         get a projector display.
       </p>
     );
@@ -26,27 +26,27 @@ export default async function GlobalViewPage() {
   const displayPath = `/display/${active.displayToken}`;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">Global View</h2>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-heading text-[32px] text-text">Global View</h1>
+          <p className="text-sm text-neutral-700">
             What the room sees. No login required — anyone with the link can display it.
           </p>
         </div>
-        <OpenDisplayButton displayToken={active.displayToken} />
+        <OpenDisplayButton displayToken={active.displayToken} className="shrink-0 rounded-full border-2 border-divider px-3 py-1 text-sm text-text hover:bg-surface" />
       </div>
 
-      <div className="rounded-md border border-slate-800 bg-slate-900 overflow-hidden">
+      <div className="overflow-hidden rounded-lg bg-neutral-900">
         <iframe
           src={displayPath}
           title="Projector display"
-          className="w-full aspect-video block"
+          className="block aspect-video w-full"
         />
       </div>
 
-      <p className="text-xs text-slate-500 break-all">
-        Direct link: <code className="text-slate-400">{displayPath}</code>
+      <p className="break-all text-xs text-neutral-600">
+        Direct link: <code className="text-neutral-700">{displayPath}</code>
       </p>
     </div>
   );

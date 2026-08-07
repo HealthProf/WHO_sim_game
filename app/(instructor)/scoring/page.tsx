@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
-import Link from "next/link";
+import { PillButton, PillLink } from "@/components/ui/pill-button";
 
 interface InboxItem {
   decision: { id: number; teamId: number; submittedAt: string; structuredChoice: string | null; confidenceLevel: string | null };
@@ -36,64 +36,52 @@ export default function ScoringInboxPage() {
   });
 
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="scoring inbox" />;
-  if (isLoading || !data) return <p className="text-slate-400">Loading inbox...</p>;
+  if (isLoading || !data) return <p className="text-neutral-600">Loading inbox...</p>;
 
   const oldest = data.inbox.length ? Math.max(...data.inbox.map((i) => i.ageMs)) : 0;
   const fastPathable = data.inbox.filter((i) => !i.mandatoryReview && i.suggestedTier);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          Scoring Inbox — {data.inbox.length} awaiting, oldest {Math.round(oldest / 60000)}m
-        </h2>
+    <div className="flex flex-col gap-[26px]">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="font-heading text-[32px] text-text">
+          Scoring — {data.inbox.length} awaiting, oldest {Math.round(oldest / 60000)}m
+        </h1>
         {fastPathable.length > 0 && (
-          <button
-            onClick={() => bulkAccept.mutate(fastPathable.map((i) => i.decision.id))}
-            className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-3 py-1.5"
-          >
+          <PillButton size="sm" tone="sage" onClick={() => bulkAccept.mutate(fastPathable.map((i) => i.decision.id))}>
             Accept all suggested ({fastPathable.length})
-          </button>
+          </PillButton>
         )}
       </div>
 
       <div className="space-y-3">
         {data.inbox.map((item) => (
-          <div
-            key={item.decision.id}
-            className={`bg-slate-900 border rounded-lg p-4 ${item.mandatoryReview ? "border-red-600" : "border-slate-800"}`}
-          >
+          <div key={item.decision.id} className={`rounded-lg p-4 ${item.mandatoryReview ? "bg-accent-100" : "bg-surface"}`}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="font-medium">
-                  {item.event?.title ?? "?"} <span className="text-xs text-slate-500">({item.team?.regionId})</span>
+                <p className="font-semibold text-text">
+                  {item.event?.title ?? "?"} <span className="text-xs font-normal text-neutral-600">({item.team?.regionId})</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="mt-1 text-xs text-neutral-600">
                   Choice: {item.decision.structuredChoice ?? "-"} - Confidence: {item.decision.confidenceLevel ?? "n/a"} - Suggested
                   tier: {item.suggestedTier ?? "n/a"} - Age: {Math.round(item.ageMs / 60000)}m
                 </p>
-                {item.mandatoryReview && <p className="text-xs text-red-400 mt-1 font-semibold">MANDATORY REVIEW — cannot fast-path</p>}
+                {item.mandatoryReview && <p className="mt-1 text-xs font-semibold text-accent-800">MANDATORY REVIEW — cannot fast-path</p>}
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex shrink-0 gap-2">
                 {!item.mandatoryReview && item.suggestedTier && (
-                  <button
-                    onClick={() => acceptOne.mutate(item.decision.id)}
-                    className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5"
-                  >
+                  <PillButton size="sm" tone="sage" onClick={() => acceptOne.mutate(item.decision.id)}>
                     Accept Suggested
-                  </button>
+                  </PillButton>
                 )}
-                <Link
-                  href={`/scoring/${item.decision.id}`}
-                  className="rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5"
-                >
+                <PillLink href={`/scoring/${item.decision.id}`} size="sm" tone="accent">
                   Score Manually
-                </Link>
+                </PillLink>
               </div>
             </div>
           </div>
         ))}
-        {data.inbox.length === 0 && <p className="text-slate-500 text-sm">Inbox is empty.</p>}
+        {data.inbox.length === 0 && <p className="text-sm text-neutral-600">Inbox is empty.</p>}
       </div>
     </div>
   );

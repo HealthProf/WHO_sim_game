@@ -49,33 +49,33 @@ export function DirectorTimeline({ state, events, dispatches }: { state: GlobalC
   const progressPct = Math.min(100, (clock.gameDay / totalGameDays) * 100);
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-slate-200">Session Timeline</h2>
+    <section className="rounded-lg bg-surface p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-bold text-text">Session Timeline</h2>
         {behindActs.length > 0 ? (
-          <span className="text-xs font-semibold text-amber-400">
+          <span className="rounded-full bg-accent-200 px-3 py-1 text-xs font-bold uppercase tracking-wide text-accent-700">
             Behind on Act {behindActs.map((a) => a.narrativeDay).join(", ")} — {behindActs.reduce((s, a) => s + (a.totalCore - a.dispatchedCount), 0)} core event(s) not yet dispatched
           </span>
         ) : (
-          <span className="text-xs font-semibold text-emerald-400">On track</span>
+          <span className="rounded-full bg-accent-2-200 px-3 py-1 text-xs font-bold uppercase tracking-wide text-accent-2-800">On track</span>
         )}
       </div>
 
-      <div className="relative h-2 bg-slate-800 rounded-full mb-3">
-        <div className="absolute inset-y-0 left-0 bg-blue-600 rounded-full" style={{ width: `${progressPct}%` }} />
+      <div className="relative mb-3 h-2.5 rounded-full bg-neutral-300">
+        <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${progressPct}%` }} />
         {acts.map((a, i) => (
-          <div key={a.narrativeDay} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2" style={{ left: `${(a.gameDayStart / totalGameDays) * 100}%` }}>
-            <div className={`w-3 h-3 rounded-full border-2 ${i <= currentActIndex ? "bg-blue-500 border-blue-300" : "bg-slate-700 border-slate-600"}`} />
+          <div key={a.narrativeDay} className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${(a.gameDayStart / totalGameDays) * 100}%` }}>
+            <div className={`h-3.5 w-3.5 rounded-full border-[3px] border-bg ${i <= currentActIndex ? "bg-accent-700" : "bg-neutral-400"}`} />
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+      <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
         {acts.map((a, i) => (
-          <div key={a.narrativeDay} className={`rounded-lg p-2 ${i === currentActIndex ? "bg-blue-950/60 border border-blue-800" : "bg-slate-800/40"}`}>
-            <p className="text-slate-400">Act {a.narrativeDay}</p>
-            <p className="font-semibold text-slate-100">{a.dispatchedCount}/{a.totalCore} dispatched</p>
-            <p className="text-slate-500">{a.scoredCount}/{a.totalCore} scored</p>
+          <div key={a.narrativeDay} className={`rounded-md p-2 ${i === currentActIndex ? "border-2 border-accent bg-accent-100" : "bg-bg"}`}>
+            <p className={i === currentActIndex ? "text-accent-700" : "text-neutral-600"}>Act {a.narrativeDay}</p>
+            <p className={`font-bold ${i === currentActIndex ? "text-accent-900" : "text-text"}`}>{a.dispatchedCount}/{a.totalCore} dispatched</p>
+            <p className="text-neutral-600">{a.scoredCount}/{a.totalCore} scored</p>
           </div>
         ))}
       </div>

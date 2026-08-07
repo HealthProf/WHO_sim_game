@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { REGIONS } from "@/lib/regions";
+import { PillButton } from "@/components/ui/pill-button";
 
 interface BudgetCycleData {
   cycle: { id: number; cycleNumber: number; status: string; mode: string | null; closesAt: string | null } | null;
@@ -44,27 +45,27 @@ export function BudgetCyclePanel() {
   }
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-      <h2 className="text-lg font-semibold">Budget Cycle #{cycle.cycleNumber}</h2>
+    <section className="space-y-3 rounded-lg bg-surface p-5">
+      <h2 className="font-heading text-[21px] text-text">Budget Cycle #{cycle.cycleNumber}</h2>
       {cycle.status === "pending_instructor" && (
         <div className="space-y-3">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-neutral-700">
             Due now — every 14 narrative days. Standard disbursement per region: {Object.entries(data.defaults).map(([r, amt]) => `${r} $${amt.toLocaleString()}`).join(", ")}.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => pickMode.mutate({ mode: "default" })} disabled={pickMode.isPending} className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2">
+            <PillButton tone="sage" onClick={() => pickMode.mutate({ mode: "default" })} disabled={pickMode.isPending}>
               Push Default to All
-            </button>
-            <button onClick={openCustom} className="rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium px-4 py-2">
+            </PillButton>
+            <PillButton tone="ghost" onClick={openCustom}>
               Adjust Amounts
-            </button>
-            <button onClick={() => pickMode.mutate({ mode: "snap_vote" })} disabled={pickMode.isPending} className="rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2">
+            </PillButton>
+            <PillButton tone="accent" onClick={() => pickMode.mutate({ mode: "snap_vote" })} disabled={pickMode.isPending}>
               Snap Decision (accept or request more)
-            </button>
+            </PillButton>
           </div>
           {customOpen && (
-            <div className="bg-slate-800/60 rounded-lg p-3 space-y-2">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="space-y-2 rounded-lg bg-bg p-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {REGIONS.map((r) => (
                   <label key={r} className="text-xs">
                     {r}
@@ -73,31 +74,32 @@ export function BudgetCyclePanel() {
                       min={0}
                       value={customAmounts[r] ?? ""}
                       onChange={(e) => setCustomAmounts({ ...customAmounts, [r]: e.target.value })}
-                      className="mt-1 w-full rounded-md bg-slate-900 border border-slate-700 px-2 py-1"
+                      className="mt-1 w-full rounded-full border-2 border-divider bg-surface px-3 py-1"
                     />
                   </label>
                 ))}
               </div>
-              <button
+              <PillButton
+                size="sm"
+                tone="sage"
                 onClick={() =>
                   pickMode.mutate({ mode: "custom", amounts: Object.fromEntries(REGIONS.map((r) => [r, Number(customAmounts[r]) || 0])) })
                 }
                 disabled={pickMode.isPending}
-                className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-1.5"
               >
                 Confirm & Push Custom Amounts
-              </button>
+              </PillButton>
             </div>
           )}
         </div>
       )}
       {cycle.status === "collecting_responses" && (
-        <p className="text-sm text-amber-400">
+        <p className="text-sm font-medium text-accent-700">
           Regions are deciding whether to accept the default or request more ({data.responses?.length ?? 0}/6 responded so far).
         </p>
       )}
       {cycle.status === "collecting_donations" && (
-        <p className="text-sm text-purple-400">
+        <p className="text-sm font-medium text-neutral-700">
           A region requested more — other regions are deciding whether to donate part of their disbursement ({data.donations?.length ?? 0} donations so far).
         </p>
       )}
