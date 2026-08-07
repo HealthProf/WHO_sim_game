@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
 import { REGIONS } from "@/lib/regions";
+import { PillButton } from "@/components/ui/pill-button";
 
 interface Pledge {
   id: number;
@@ -62,10 +63,10 @@ export default function PledgesPage() {
   const otherRegions = REGIONS.filter((r) => r !== ownRegion);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="flex max-w-2xl flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold">Resource Pledges</h2>
-        <p className="text-sm text-slate-400 mt-1">
+        <h1 className="font-heading text-[32px] text-text">Pledges</h1>
+        <p className="mt-1 text-sm text-neutral-700">
           Pledge PPE, funds, antivirals, or HCW surge capacity directly to another region. This actually transfers the
           resource between live ledgers (not just a note in a rationale field) and is visible to everyone, same as
           the coordination log.
@@ -77,12 +78,16 @@ export default function PledgesPage() {
           e.preventDefault();
           if (toRegionId && Number(amount) > 0) pledge.mutate();
         }}
-        className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3"
+        className="space-y-3 rounded-lg bg-surface p-4"
       >
-        <div className="grid sm:grid-cols-3 gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-sm">
             To region
-            <select value={toRegionId} onChange={(e) => setToRegionId(e.target.value)} className="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2">
+            <select
+              value={toRegionId}
+              onChange={(e) => setToRegionId(e.target.value)}
+              className="mt-1 w-full rounded-full border-2 border-divider bg-bg px-4 py-2"
+            >
               <option value="" disabled>Select region</option>
               {otherRegions.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -91,7 +96,11 @@ export default function PledgesPage() {
           </label>
           <label className="text-sm">
             Resource
-            <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} className="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2">
+            <select
+              value={resourceType}
+              onChange={(e) => setResourceType(e.target.value)}
+              className="mt-1 w-full rounded-full border-2 border-divider bg-bg px-4 py-2"
+            >
               {RESOURCE_OPTIONS.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
@@ -104,34 +113,30 @@ export default function PledgesPage() {
               min={1}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="mt-1 w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2"
+              className="mt-1 w-full rounded-full border-2 border-divider bg-bg px-4 py-2"
             />
           </label>
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <button
-          type="submit"
-          disabled={pledge.isPending}
-          className="rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2"
-        >
+        {error && <p className="text-sm font-medium text-accent-800">{error}</p>}
+        <PillButton type="submit" disabled={pledge.isPending} tone="sage">
           {pledge.isPending ? "Pledging..." : "Pledge Resources"}
-        </button>
+        </PillButton>
       </form>
 
       <div>
-        <h3 className="text-sm font-semibold text-slate-300 mb-2">Ledger</h3>
-        {isLoading && <p className="text-slate-400 text-sm">Loading...</p>}
+        <h2 className="mb-2 text-sm font-semibold text-text">Ledger</h2>
+        {isLoading && <p className="text-sm text-neutral-600">Loading...</p>}
         <div className="space-y-2">
           {(data?.pledges ?? []).map((p) => (
-            <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm flex items-center justify-between">
+            <div key={p.id} className="flex items-center justify-between rounded-lg bg-accent-2-100 p-3 text-sm">
               <span>
-                <span className="font-medium">{p.fromRegionId}</span> → <span className="font-medium">{p.toRegionId}</span>:{" "}
-                {p.amount.toLocaleString()} {RESOURCE_OPTIONS.find((r) => r.value === p.resourceType)?.label ?? p.resourceType}
+                <span className="font-semibold text-accent-2-900">{p.fromRegionId}</span> → <span className="font-semibold text-accent-2-900">{p.toRegionId}</span>:{" "}
+                <span className="text-accent-2-800">{p.amount.toLocaleString()} {RESOURCE_OPTIONS.find((r) => r.value === p.resourceType)?.label ?? p.resourceType}</span>
               </span>
-              <span className="text-xs text-slate-500">{new Date(p.createdAt).toLocaleTimeString()}</span>
+              <span className="text-xs text-accent-2-700">{new Date(p.createdAt).toLocaleTimeString()}</span>
             </div>
           ))}
-          {data?.pledges.length === 0 && <p className="text-slate-500 text-sm">No pledges yet.</p>}
+          {data?.pledges.length === 0 && <p className="text-sm text-neutral-600">No pledges yet.</p>}
         </div>
       </div>
     </div>

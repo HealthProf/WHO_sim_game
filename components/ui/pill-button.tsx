@@ -5,12 +5,15 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 // buttons. `tone` picks which ramp fills it; per the handoff's contrast
 // rules, any fill carrying white text must be the -700 step (or darker) of
 // its ramp, never the bare --color-accent.
-type Tone = "accent" | "sage" | "ghost";
+type Tone = "accent" | "sage" | "ghost" | "ghost-dark";
 
 const toneClass: Record<Tone, string> = {
   accent: "bg-accent-700 text-white hover:bg-accent-600 active:bg-accent-800",
   sage: "bg-accent-2-700 text-white hover:bg-accent-2-600 active:bg-accent-2-800",
   ghost: "border-2 border-divider text-text hover:bg-surface active:bg-neutral-200",
+  // For use on dark grounds (the rail, the projector) instead of fighting
+  // the light `ghost` tone's border/text colors with override classes.
+  "ghost-dark": "border-2 border-neutral-700 text-neutral-300 hover:bg-neutral-800 active:bg-neutral-700",
 };
 
 const baseClass =

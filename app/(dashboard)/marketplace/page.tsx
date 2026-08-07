@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { QueryError } from "@/components/query-error";
 import { REGIONS } from "@/lib/regions";
+import { Chip } from "@/components/ui/chip";
+import { PillButton } from "@/components/ui/pill-button";
 
 interface MarketData {
   prices: { PPE_DAYS: number; ANTIVIRALS: number };
@@ -92,32 +94,34 @@ export default function MarketplacePage() {
   const incomingOffers = (trades?.offers ?? []).filter((o) => o.toRegionId === ownRegion && o.status === "pending");
   const recentBatch = (market?.requests ?? []).filter((r) => r.status === "pending");
 
+  const tradeStatusTone = { accepted: "sage-soft", rejected: "neutral-outline", pending: "accent-soft" } as const;
+
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="flex max-w-4xl flex-col gap-[26px]">
       <div>
-        <h2 className="text-lg font-semibold">Marketplace</h2>
-        <p className="text-sm text-slate-400 mt-1">
+        <h1 className="font-heading text-[32px] text-text">Marketplace</h1>
+        <p className="mt-1 text-sm text-neutral-700">
           Buy PPE or antivirals from WHO HQ at the current adaptive price (requires instructor approval — other
           regions get a 30-second heads-up to submit their own request before it&apos;s processed), or trade directly
           with another region. Trades are accept/reject only, no counter-offers.
         </p>
       </div>
 
-      <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <h3 className="font-medium">WHO HQ Marketplace</h3>
-        <div className="grid sm:grid-cols-2 gap-4 text-sm">
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <p className="text-xs text-slate-500">PPE (per day-equivalent unit)</p>
-            <p className="text-base font-semibold">${market?.prices.PPE_DAYS.toLocaleString()}</p>
-            <p className="text-xs text-slate-500 mt-1">WHO HQ stock: {market?.whoHqPpeStock.toLocaleString()}</p>
+      <section className="space-y-4 rounded-lg bg-surface p-5">
+        <h2 className="font-heading text-[21px] text-text">WHO HQ Marketplace</h2>
+        <div className="grid gap-4 text-sm sm:grid-cols-2">
+          <div className="rounded-md bg-bg p-3">
+            <p className="text-xs text-neutral-600">PPE (per day-equivalent unit)</p>
+            <p className="text-base font-bold text-text">${market?.prices.PPE_DAYS.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-neutral-600">WHO HQ stock: {market?.whoHqPpeStock.toLocaleString()}</p>
           </div>
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <p className="text-xs text-slate-500">Antivirals (per dose)</p>
-            <p className="text-base font-semibold">${market?.prices.ANTIVIRALS.toLocaleString()}</p>
-            <p className="text-xs text-slate-500 mt-1">WHO HQ stock: {market?.whoHqAntiviralsStock.toLocaleString()}</p>
+          <div className="rounded-md bg-bg p-3">
+            <p className="text-xs text-neutral-600">Antivirals (per dose)</p>
+            <p className="text-base font-bold text-text">${market?.prices.ANTIVIRALS.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-neutral-600">WHO HQ stock: {market?.whoHqAntiviralsStock.toLocaleString()}</p>
           </div>
         </div>
-        <p className="text-xs text-slate-500">Prices rise as WHO HQ&apos;s own stock depletes and as the global escalation state worsens — waiting to buy is a real gamble.</p>
+        <p className="text-xs text-neutral-600">Prices rise as WHO HQ&apos;s own stock depletes and as the global escalation state worsens — waiting to buy is a real gamble.</p>
 
         <form
           onSubmit={(e) => {
@@ -128,27 +132,27 @@ export default function MarketplacePage() {
         >
           <label className="text-sm">
             Resource
-            <select value={buyResource} onChange={(e) => setBuyResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block rounded-md bg-slate-800 border border-slate-700 px-2 py-2">
+            <select value={buyResource} onChange={(e) => setBuyResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="PPE_DAYS">PPE (days)</option>
               <option value="ANTIVIRALS">Antivirals (doses)</option>
             </select>
           </label>
           <label className="text-sm">
             Amount
-            <input type="number" min={1} value={buyAmount} onChange={(e) => setBuyAmount(e.target.value)} className="mt-1 block rounded-md bg-slate-800 border border-slate-700 px-2 py-2 w-32" />
+            <input type="number" min={1} value={buyAmount} onChange={(e) => setBuyAmount(e.target.value)} className="mt-1 block w-32 rounded-full border-2 border-divider bg-bg px-4 py-2" />
           </label>
-          <button type="submit" disabled={buyFromWho.isPending} className="rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2">
+          <PillButton type="submit" disabled={buyFromWho.isPending} tone="accent">
             {buyFromWho.isPending ? "Submitting..." : "Request Purchase"}
-          </button>
+          </PillButton>
           {buyAmount && market && (
-            <span className="text-xs text-slate-400">≈ ${Math.round(Number(buyAmount) * (market.prices[buyResource] ?? 0)).toLocaleString()} total</span>
+            <span className="text-xs text-neutral-600">≈ ${Math.round(Number(buyAmount) * (market.prices[buyResource] ?? 0)).toLocaleString()} total</span>
           )}
         </form>
-        {buyError && <p className="text-sm text-red-400">{buyError}</p>}
+        {buyError && <p className="text-sm font-medium text-accent-800">{buyError}</p>}
 
         {recentBatch.length > 0 && (
-          <div className="text-xs text-slate-400 space-y-1">
-            <p className="text-slate-500 uppercase tracking-wide">Pending this batch (awaiting instructor approval)</p>
+          <div className="space-y-1 text-xs text-neutral-700">
+            <p className="uppercase tracking-wide text-neutral-600">Pending this batch (awaiting instructor approval)</p>
             {recentBatch.map((r) => (
               <p key={r.id}>{r.regionId}: {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()}</p>
             ))}
@@ -157,34 +161,34 @@ export default function MarketplacePage() {
       </section>
 
       {incomingOffers.length > 0 && (
-        <section className="bg-amber-950/40 border border-amber-700 rounded-xl p-5 space-y-3">
-          <h3 className="font-medium text-amber-300">Incoming Trade Offers</h3>
+        <section className="space-y-3 rounded-lg bg-accent-100 p-5">
+          <h2 className="font-heading text-[21px] text-accent-900">Incoming Trade Offers</h2>
           {incomingOffers.map((o) => (
-            <div key={o.id} className="flex items-center justify-between gap-3 text-sm bg-slate-900/60 rounded-lg p-3">
-              <span>
+            <div key={o.id} className="flex items-center justify-between gap-3 rounded-lg bg-bg p-3 text-sm">
+              <span className="text-text">
                 {o.fromRegionId} offers ${o.totalPrice.toLocaleString()} for {o.amount.toLocaleString()} {RESOURCE_LABEL[o.resourceType]}
               </span>
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => respondTrade.mutate({ offerId: o.id, action: "accept" })} className="rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5">Accept</button>
-                <button onClick={() => respondTrade.mutate({ offerId: o.id, action: "reject" })} className="rounded-md bg-red-700 hover:bg-red-600 text-white text-xs px-3 py-1.5">Reject</button>
+              <div className="flex shrink-0 gap-2">
+                <PillButton size="sm" tone="sage" onClick={() => respondTrade.mutate({ offerId: o.id, action: "accept" })}>Accept</PillButton>
+                <PillButton size="sm" tone="ghost" onClick={() => respondTrade.mutate({ offerId: o.id, action: "reject" })}>Reject</PillButton>
               </div>
             </div>
           ))}
         </section>
       )}
 
-      <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-        <h3 className="font-medium">Propose a Direct Trade</h3>
+      <section className="space-y-4 rounded-lg bg-surface p-5">
+        <h2 className="font-heading text-[21px] text-text">Propose a Direct Trade</h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (tradeTo && Number(tradeAmount) > 0 && Number(tradePrice) > 0) proposeTrade.mutate();
           }}
-          className="grid sm:grid-cols-4 gap-3"
+          className="grid gap-3 sm:grid-cols-4"
         >
           <label className="text-sm">
             From region
-            <select value={tradeTo} onChange={(e) => setTradeTo(e.target.value)} className="mt-1 block w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2">
+            <select value={tradeTo} onChange={(e) => setTradeTo(e.target.value)} className="mt-1 block w-full rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="" disabled>Select region</option>
               {REGIONS.filter((r) => r !== ownRegion).map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -193,38 +197,38 @@ export default function MarketplacePage() {
           </label>
           <label className="text-sm">
             Resource
-            <select value={tradeResource} onChange={(e) => setTradeResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2">
+            <select value={tradeResource} onChange={(e) => setTradeResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block w-full rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="PPE_DAYS">PPE (days)</option>
               <option value="ANTIVIRALS">Antivirals (doses)</option>
             </select>
           </label>
           <label className="text-sm">
             Amount
-            <input type="number" min={1} value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value)} className="mt-1 block w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2" />
+            <input type="number" min={1} value={tradeAmount} onChange={(e) => setTradeAmount(e.target.value)} className="mt-1 block w-full rounded-full border-2 border-divider bg-bg px-4 py-2" />
           </label>
           <label className="text-sm">
             Price per unit
-            <input type="number" min={1} value={tradePrice} onChange={(e) => setTradePrice(e.target.value)} className="mt-1 block w-full rounded-md bg-slate-800 border border-slate-700 px-2 py-2" />
+            <input type="number" min={1} value={tradePrice} onChange={(e) => setTradePrice(e.target.value)} className="mt-1 block w-full rounded-full border-2 border-divider bg-bg px-4 py-2" />
           </label>
-          <button type="submit" disabled={proposeTrade.isPending} className="sm:col-span-4 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2">
+          <PillButton type="submit" disabled={proposeTrade.isPending} tone="accent" className="sm:col-span-4">
             {proposeTrade.isPending ? "Sending..." : "Propose Trade"}
-          </button>
+          </PillButton>
         </form>
-        {tradeError && <p className="text-sm text-red-400">{tradeError}</p>}
+        {tradeError && <p className="text-sm font-medium text-accent-800">{tradeError}</p>}
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-slate-300 mb-2">Recent Trades</h3>
+        <h2 className="mb-2 text-sm font-semibold text-text">Recent Trades</h2>
         <div className="space-y-2">
           {(trades?.offers ?? []).map((o) => (
-            <div key={o.id} className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-sm flex items-center justify-between">
-              <span>
+            <div key={o.id} className="flex items-center justify-between rounded-lg bg-surface p-3 text-sm">
+              <span className="text-text">
                 {o.fromRegionId} → {o.toRegionId}: {o.amount.toLocaleString()} {RESOURCE_LABEL[o.resourceType]} for ${o.totalPrice.toLocaleString()}
               </span>
-              <span className={`text-xs uppercase ${o.status === "accepted" ? "text-emerald-400" : o.status === "rejected" ? "text-red-400" : "text-amber-400"}`}>{o.status}</span>
+              <Chip tone={tradeStatusTone[o.status as keyof typeof tradeStatusTone] ?? "neutral-soft"}>{o.status}</Chip>
             </div>
           ))}
-          {(!trades || trades.offers.length === 0) && <p className="text-slate-500 text-sm">No trades yet.</p>}
+          {(!trades || trades.offers.length === 0) && <p className="text-sm text-neutral-600">No trades yet.</p>}
         </div>
       </section>
     </div>
