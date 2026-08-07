@@ -418,17 +418,26 @@ export async function getRevertOverridesForSession(
 export interface CheatDisplayState {
   godModeActive: boolean;
   barrelRollAt: string | null;
-  monologue: { index: number; total: number; text: string; secondsRemaining: number } | null;
+  // startedAt lets the client compute which of the 9 messages is current
+  // and re-derive it locally every second (see lib/use-monologue.ts),
+  // rather than only being able to show whatever message happened to be
+  // current at the moment of the last poll — dashboard/instructor pages
+  // poll every 15s, far coarser than the 5s-per-message cadence, so relying
+  // on index/text/secondsRemaining alone silently skipped most of the
+  // sequence. Those three fields are kept as the snapshot-at-poll-time
+  // fallback (e.g. for a first paint before the client's own clock ticks).
+  monologue: { index: number; total: number; text: string; secondsRemaining: number; startedAt: string } | null;
 }
 
 export async function getCheatDisplayState(sessionId: string): Promise<CheatDisplayState> {
   const state = await db.query.cheatCodeState.findFirst({ where: eq(cheatCodeState.sessionId, sessionId) });
   let monologue: CheatDisplayState["monologue"] = null;
   if (state?.monologueActive && state.monologueStartedAt) {
-    const elapsedSec = (Date.now() - new Date(state.monologueStartedAt).getTime()) / 1000;
+    const startedAt = new Date(state.monologueStartedAt);
+    const elapsedSec = (Date.now() - startedAt.getTime()) / 1000;
     const index = Math.min(MONOLOGUE_MESSAGES.length - 1, Math.max(0, Math.floor(elapsedSec / MONOLOGUE_MESSAGE_SECONDS)));
     const secondsRemaining = Math.max(0, Math.ceil(MONOLOGUE_MESSAGES.length * MONOLOGUE_MESSAGE_SECONDS - elapsedSec));
-    monologue = { index, total: MONOLOGUE_MESSAGES.length, text: MONOLOGUE_MESSAGES[index], secondsRemaining };
+    monologue = { index, total: MONOLOGUE_MESSAGES.length, text: MONOLOGUE_MESSAGES[index], secondsRemaining, startedAt: startedAt.toISOString() };
   }
   return {
     godModeActive: state?.godModeActive ?? false,
