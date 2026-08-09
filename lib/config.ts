@@ -31,6 +31,19 @@ export const DRAMATIC_MOMENT_AUTO_DISMISS_SECONDS = 18;
 // session minutes/days later never replays a stale roll.
 export const BARREL_ROLL_BROADCAST_WINDOW_SECONDS = 15;
 
+// --- Scenario Overview slide deck (lib/use-scenario-overview.ts) ---
+// scenarioOverviewStartedAt is set this many seconds in the future, not to
+// "now", when the deck is triggered (session creation, the credential
+// sheet's button, a reset). Every connected client discovers the trigger
+// asynchronously — a poll cycle, a page load after login — and without this
+// buffer that discovery latency ate directly into slide 1's on-screen time,
+// sometimes down to just a couple of seconds. Comfortably covers a normal
+// DB round-trip + client poll/render without feeling like a laggy delay
+// before anything appears (a client that discovers the deck before this
+// instant just shows slide 1 immediately — see the hook's negative-elapsed
+// clamp — rather than a blank screen).
+export const SCENARIO_OVERVIEW_PREROLL_SECONDS = 4;
+
 // --- Tempo dial / drama dial (item 9) ---
 export const MIN_INTENSITY_MULTIPLIER = 0.5;
 export const MAX_INTENSITY_MULTIPLIER = 2.0;

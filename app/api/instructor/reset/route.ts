@@ -32,6 +32,7 @@ import {
 } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
+import { SCENARIO_OVERVIEW_PREROLL_SECONDS } from "@/lib/config";
 
 // Resets *this session* to a fresh start: wipes every in-progress-game row
 // scoped to it (dispatches, decisions, scores, model history, coordination
@@ -142,8 +143,10 @@ export async function POST() {
       // get this (unlike session creation, where only demo mode starts the
       // deck immediately — Class Session mode's equivalent trigger is the
       // instructor's button, which isn't available at the exact moment of
-      // a reset the way it is at creation-then-credential-sheet time).
-      scenarioOverviewStartedAt: new Date(),
+      // a reset the way it is at creation-then-credential-sheet time). Set
+      // a few seconds in the future, not "now" — see
+      // SCENARIO_OVERVIEW_PREROLL_SECONDS's comment in lib/config.ts.
+      scenarioOverviewStartedAt: new Date(Date.now() + SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000),
       updatedAt: new Date(),
     })
     .where(eq(sessionState.sessionId, sessionId));
