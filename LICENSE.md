@@ -1,8 +1,19 @@
-PolyForm Noncommercial License 1.0.0
+# License
+
+**Operation Veiled Horizon**
+Copyright (c) 2026 Timothy Curry. All rights reserved.
+
+This software is licensed under the **PolyForm Noncommercial License 1.0.0**, reproduced in full in Part I below, together with the **Supplemental Terms** in Part II.
+
+Part I is the unmodified text of PolyForm Noncommercial License 1.0.0. Part II contains additional terms, notices, and disclaimers specific to this software. In the event of any conflict between Part I and Part II, Part I governs the copyright and patent grants; Part II governs attribution, trademark, modification disclosure, and scope-of-use representations.
+
+Required Notice: Copyright (c) 2026 Timothy Curry — Operation Veiled Horizon
+
+---
+
+# Part I — PolyForm Noncommercial License 1.0.0
 
 <https://polyformproject.org/licenses/noncommercial/1.0.0>
-
-Copyright (c) 2026 Timothy Curry
 
 ## Acceptance
 
@@ -132,3 +143,81 @@ software under these terms.
 of your licenses.
 
 **trademark** means trademarks, service marks, and similar rights.
+
+---
+
+# Part II — Supplemental Terms
+
+These Supplemental Terms apply in addition to the PolyForm Noncommercial License 1.0.0 set out in Part I. In these Supplemental Terms, **licensor**, **software**, **you**, and **use** have the meanings given in Part I.
+
+## 1. Educational Use Only — No Operational or Clinical Reliance
+
+**The software is a work of interactive fiction created for teaching purposes. It is not a validated epidemiological model, a public health decision-support tool, or a source of medical, clinical, epidemiological, or policy guidance.**
+
+The software contains a fictional outbreak scenario. Its pathogen characteristics, transmission dynamics, case and fatality figures, intervention outcomes, resource constraints, geopolitical dynamics, and organizational procedures are **invented or simplified for pedagogical effect**. They are constructed to produce instructive decision-making dilemmas for students, not to forecast, replicate, or approximate the behavior of any real pathogen, the actual operations of the World Health Organization or any of its regional offices, or the conduct of any real government, agency, or individual.
+
+Any resemblance between scenario content and real outbreaks, institutions, officials, or events is used solely as pedagogical framing and does not represent factual reporting or endorsement by any organization named or evoked.
+
+**You must not use the software, its outputs, its scoring, or any content derived from it as a basis for real-world public health decisions, emergency preparedness planning, clinical judgment, risk assessment, resource allocation, or policy formulation.** Any such reliance is outside the permitted scope of use and is undertaken entirely at your own risk.
+
+If you deploy the software in instruction, you are responsible for ensuring learners understand that the scenario is fictional and that its parameters are not authoritative.
+
+## 2. Attribution and Academic Citation
+
+Beyond the `Required Notice` obligation in Part I:
+
+If you use the software, or any adaptation of it, in teaching, research, publication, presentation, curriculum materials, grant reporting, or any scholarly or professional output, you must provide reasonable attribution to the original author. A citation in substantially the following form satisfies this requirement:
+
+> Curry, T. (2026). *Operation Veiled Horizon: A Pandemic Response Simulation* [Software]. Available under the PolyForm Noncommercial License 1.0.0 with Supplemental Terms.
+
+Attribution must not be removed, obscured, or presented in a way that implies the original author endorses your adaptation, your institution, or any conclusions drawn from your use.
+
+## 3. Disclosure of Modifications
+
+If you distribute the software with changes, or distribute any new work based on it, you must:
+
+a. **Clearly and conspicuously state that the work has been modified from the original**, in the software's user-facing interface, documentation, or accompanying materials — wherever a user would reasonably look to identify what they are running;
+
+b. **Not present modified content as the original author's work.** This applies with particular force to changes affecting scenario parameters, disease modeling values, scoring logic, equity weighting, decision consequences, or event content, because such changes alter the pedagogical behavior of the simulation while leaving it superficially recognizable;
+
+c. **Retain this License in full**, including these Supplemental Terms, in the modified distribution.
+
+You are not required to disclose the substance of your changes, only that changes were made.
+
+## 4. Trademark and Naming Rights Reserved
+
+No license, express or implied, is granted to any trademark, service mark, trade name, logo, visual identity, or other branding of the licensor.
+
+This includes but is not limited to the name **"Operation Veiled Horizon"** and any confusingly similar name.
+
+You may factually state that your work is based on, derived from, or adapted from Operation Veiled Horizon. You may **not** name your modified version "Operation Veiled Horizon," use that name as the title or primary identifier of a derivative work, or otherwise use it in a manner likely to cause confusion as to the source, sponsorship, or endorsement of your work.
+
+The licensor reserves all rights to establish, register, and enforce marks associated with the software.
+
+## 5. Third-Party Names and Institutions
+
+The software references real organizations, including the World Health Organization and its regional structures, in a fictional capacity for educational realism. Such references do not indicate any affiliation with, sponsorship by, endorsement by, or review by those organizations. You must not represent otherwise, and you must not modify the software in a way that implies such affiliation or endorsement.
+
+## 6. Reservation of Rights and Separate Licensing
+
+The licensor is the sole copyright holder of the software. Nothing in this License limits the licensor's right to license the software to any party under different terms, including commercial terms, or to distribute the software under an additional or alternative license at any time.
+
+Distribution under this License is non-exclusive and does not transfer, assign, or diminish any right of the licensor.
+
+Parties seeking a commercial license, or any use falling outside the permitted purposes defined in Part I, should contact the licensor to arrange separate terms.
+
+## 7. No Warranty — Extended
+
+In addition to the No Liability provision in Part I, and as far as the law allows:
+
+**The licensor makes no representation or warranty that the software's scenario content, epidemiological parameters, scoring criteria, or depicted institutional behavior are accurate, current, complete, evidence-based, or fit for any particular educational or professional purpose.**
+
+The licensor will not be liable for any decision, action, outcome, assessment, grade, harm, or loss arising from use of, reliance on, or inability to use the software, including in instructional settings.
+
+## 8. Severability
+
+If any provision of these Supplemental Terms is held unenforceable, that provision shall be modified to the minimum extent necessary to make it enforceable, or severed if modification is not possible. All remaining provisions remain in full force. Severance of any provision in Part II does not affect the validity of Part I.
+
+---
+
+*End of License.*
