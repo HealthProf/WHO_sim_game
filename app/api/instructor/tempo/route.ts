@@ -4,6 +4,7 @@ import { sessionState, instructorActions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
 import { MIN_INTENSITY_MULTIPLIER as MIN_INTENSITY, MAX_INTENSITY_MULTIPLIER as MAX_INTENSITY } from "@/lib/config";
+import { clearGodModeFlag } from "@/lib/cheat-engine";
 
 // Item 9's "drama dial" — see the schema comment on sessionState.intensityMultiplier
 // for exactly what it scales. Clamped server-side regardless of what the
@@ -20,6 +21,10 @@ export async function PATCH(req: NextRequest) {
   const intensityMultiplier = Math.max(MIN_INTENSITY, Math.min(MAX_INTENSITY, raw));
 
   await db.update(sessionState).set({ intensityMultiplier, updatedAt: new Date() }).where(eq(sessionState.sessionId, sessionId));
+  // Overwriting intensityMultiplier here makes the God Mode cheat's
+  // godModeActive flag stale (see lib/cheat-engine.ts's comment on it) —
+  // clear it so the display layer stops claiming God Mode is still active.
+  await clearGodModeFlag(sessionId);
   await db.insert(instructorActions).values({
     sessionId,
     instructorUserId: actor!.userId!,

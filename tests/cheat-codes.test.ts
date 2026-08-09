@@ -1,16 +1,20 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { db } from "@/lib/db";
-import { sessionState, modelState, cheatCodeAttempts, cheatRegionEffects, announcements, globalFeedItems } from "@/lib/db/schema";
+import { sessionState, modelState, gameSessions, cheatCodeAttempts, cheatCodeRedemptions, cheatCodeState, cheatRegionEffects, announcements, globalFeedItems } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { resetDb, seedStaticOnce } from "./helpers/db";
 import { createTestSession, actorFor, instructorActorFor } from "./helpers/session";
+import { deleteSession } from "@/lib/session-lifecycle";
 import {
   handleCheatAttempt,
   executeCheatCode,
   resolveCheatMonologue,
   computeRevertOverride,
+  getCheatDisplayState,
+  clearGodModeFlag,
 } from "@/lib/cheat-engine";
 import { tokenize, matchCheatCode, ARROW_GLYPHS, MONOLOGUE_MESSAGES, MONOLOGUE_MESSAGE_SECONDS } from "@/lib/cheat-codes";
+import { BARREL_ROLL_BROADCAST_WINDOW_SECONDS } from "@/lib/config";
 
 describe("cheat code tokenizing + matching", () => {
   it("treats arrow keys as single tokens and is case-insensitive", () => {
@@ -202,6 +206,75 @@ describe("cheat code engine", () => {
 
     const revealed = computeRevertOverride({ ...start, revertPhase: "revealed_winner" }, gameDaysPerRealMinute, 420_000);
     expect(revealed).toEqual({ confirmedCases: 0, deaths: 0 });
+  });
+
+  // Update 1a: barrelRollAt used to be returned forever, so reopening a
+  // session any time after a roll replayed it. Fixed by bounding the
+  // broadcast to a short window server-side (the client-side baseline bug is
+  // covered separately, in lib/use-barrel-roll.ts, which isn't reachable
+  // from this DB-only suite).
+  it("BARREL_ROLL is only broadcast within the window, and disappears once it elapses", async () => {
+    const { sessionId } = await createTestSession("instructor");
+    const afro = await actorFor(sessionId, "AFRO");
+
+    const attempt = await handleCheatAttempt(sessionId, afro, "do a barrel roll");
+    expect(attempt.result).toBe("success"); // BARREL_ROLL is global-scope — any actor can trigger it
+    await executeCheatCode(sessionId, afro, "BARREL_ROLL");
+
+    const fresh = await getCheatDisplayState(sessionId);
+    expect(fresh.barrelRollAt).not.toBeNull();
+
+    // Back-date the stamp past the broadcast window, simulating a client
+    // that loads well after the roll happened.
+    await db
+      .update(cheatCodeState)
+      .set({ barrelRollAt: new Date(Date.now() - (BARREL_ROLL_BROADCAST_WINDOW_SECONDS + 5) * 1000) })
+      .where(eq(cheatCodeState.sessionId, sessionId));
+
+    const stale = await getCheatDisplayState(sessionId);
+    expect(stale.barrelRollAt).toBeNull();
+  });
+
+  // Update 1a's audit: godModeActive was set but never cleared anywhere,
+  // even though its real effect (intensityMultiplier) gets overwritten by
+  // the tempo dial at any time. clearGodModeFlag is what
+  // PATCH /api/instructor/tempo now calls.
+  it("clearGodModeFlag turns godModeActive back off once something else has overwritten the multiplier", async () => {
+    const { sessionId, ownerUserId } = await createTestSession("instructor");
+    const instructor = await instructorActorFor(sessionId, ownerUserId);
+
+    await handleCheatAttempt(sessionId, instructor, "IDDQD");
+    await executeCheatCode(sessionId, instructor, "GOD_MODE");
+    expect((await getCheatDisplayState(sessionId)).godModeActive).toBe(true);
+
+    await clearGodModeFlag(sessionId);
+    expect((await getCheatDisplayState(sessionId)).godModeActive).toBe(false);
+  });
+
+  // Bonus fix found during the 1a audit: deleteSession() deleted ~25 tables
+  // but omitted all four cheat_* tables, every one of which has a foreign
+  // key to game_sessions — so any session that had ever had a cheat code
+  // entered would throw a foreign-key violation when the reaper
+  // (lib/reaper.ts) tried to delete it. This populates all four tables via
+  // the real code paths, then asserts the session actually deletes cleanly.
+  it("deleteSession succeeds for a session with rows in every cheat_* table", async () => {
+    const { sessionId, ownerUserId } = await createTestSession("instructor");
+    const afro = await actorFor(sessionId, "AFRO");
+    const instructor = await instructorActorFor(sessionId, ownerUserId);
+
+    await handleCheatAttempt(sessionId, afro, "not a real code"); // -> cheat_code_attempts
+    await executeCheatCode(sessionId, afro, "FUNDS_30M"); // -> cheat_code_redemptions
+    await executeCheatCode(sessionId, afro, "REVERT_TO_ZERO"); // -> cheat_region_effects
+    await handleCheatAttempt(sessionId, instructor, "IDDQD");
+    await executeCheatCode(sessionId, instructor, "GOD_MODE"); // -> cheat_code_state
+
+    expect(await db.query.cheatCodeAttempts.findFirst({ where: eq(cheatCodeAttempts.sessionId, sessionId) })).toBeDefined();
+    expect(await db.query.cheatCodeRedemptions.findFirst({ where: eq(cheatCodeRedemptions.sessionId, sessionId) })).toBeDefined();
+    expect(await db.query.cheatRegionEffects.findFirst({ where: eq(cheatRegionEffects.sessionId, sessionId) })).toBeDefined();
+    expect(await db.query.cheatCodeState.findFirst({ where: eq(cheatCodeState.sessionId, sessionId) })).toBeDefined();
+
+    await expect(deleteSession(sessionId)).resolves.not.toThrow();
+    expect(await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, sessionId) })).toBeUndefined();
   });
 
   it("REVERT_TO_ZERO creates a per-region row seeded from that region's current real counts", async () => {
