@@ -55,11 +55,15 @@ describe("region login credentials", () => {
     expect(result.outcome).toBe("invalid");
   });
 
-  it("generated passwords use an unambiguous alphabet (no 0/1/l/O/I confusion)", async () => {
+  // Passwords are deliberately short (6 chars) — quick to type on a phone
+  // under time pressure at the start of class. Still ~1 billion
+  // combinations from the unambiguous alphabet, which the per-credential
+  // rate limit above makes infeasible to brute-force within a session.
+  it("generated passwords are 6 characters from an unambiguous alphabet (no 0/1/l/O/I confusion)", async () => {
     const { sessionId } = await createTestSession("instructor");
     const creds = await db.query.sessionRegionCredentials.findMany({ where: eq(sessionRegionCredentials.sessionId, sessionId) });
     for (const cred of creds) {
-      expect(cred.plaintextHint).toMatch(/^[A-HJ-NP-Z2-9]+$/);
+      expect(cred.plaintextHint).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
     }
   });
 

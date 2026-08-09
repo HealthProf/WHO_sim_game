@@ -6,6 +6,7 @@ import { QrCode } from "@/components/qr-code";
 import { PillButton, PillLink } from "@/components/ui/pill-button";
 import { OpenDisplayButton } from "@/components/open-display-button";
 import { AppFooter } from "@/components/app-footer";
+import { SCENARIO_OVERVIEW_TOTAL_SECONDS } from "@/lib/db/seed-data/scenario-overview-slides";
 
 // Update 4c: the login site's URL, needed on screen *and* on the printed
 // sheet — a printed row of usernames/passwords with no URL on it is useless
@@ -87,7 +88,7 @@ export default function SessionCredentialsPage() {
         </PillButton>
         <span className="text-[13px] text-neutral-700">
           {scenarioOverviewState === "started"
-            ? "Started — runs on every connected screen and the projector, ~70 seconds."
+            ? `Started — runs on every connected screen and the projector, ~${SCENARIO_OVERVIEW_TOTAL_SECONDS} seconds.`
             : "Plays the opening briefing sequence on every logged-in screen and the projector."}
         </span>
       </div>

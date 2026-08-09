@@ -44,7 +44,7 @@ import {
 import { eq } from "drizzle-orm";
 import { regionSeed } from "./db/seed-data/regions";
 import { generateSessionId, generateSecret, generateUsernameSuffix, generateReadablePassword } from "./ids";
-import { DEMO_GAME_DAYS_PER_REAL_MINUTE, DEMO_FAST_MODE_MULTIPLIER } from "./config";
+import { DEMO_GAME_DAYS_PER_REAL_MINUTE, DEMO_FAST_MODE_MULTIPLIER, SCENARIO_OVERVIEW_PREROLL_SECONDS } from "./config";
 import { logSessionEvent } from "./session-events";
 import { logAnalyticsEvent } from "./analytics";
 
@@ -80,13 +80,18 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
   // on the credential sheet, which is Class Session mode's equivalent
   // trigger). Instructor mode deliberately leaves scenarioOverviewStartedAt
   // null here; it's set only by that button or by a reset.
+  //
+  // Set a few seconds in the future rather than "now" — see
+  // SCENARIO_OVERVIEW_PREROLL_SECONDS's comment in lib/config.ts for why:
+  // without this buffer, the client discovering the deck (page load, first
+  // poll) ate directly into slide 1's on-screen time.
   await db.insert(sessionState).values(
     mode === "demo"
       ? {
           sessionId,
           gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE,
           fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER,
-          scenarioOverviewStartedAt: new Date(),
+          scenarioOverviewStartedAt: new Date(Date.now() + SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000),
         }
       : { sessionId }
   );
@@ -140,7 +145,11 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
     // regions directly (gameSessions.demoActiveRegionId), and every region
     // not currently occupied is driven by the scripted autoplayer.
     if (mode === "instructor" && team) {
-      const password = generateReadablePassword();
+      // 6 chars from the 32-symbol unambiguous alphabet is ~1.07 billion
+      // combinations — far beyond what SIGNIN_MAX_ATTEMPTS_PER_CREDENTIAL's
+      // rate limit (lib/auth.ts) lets an attacker try, and quick enough to
+      // type correctly on a phone under time pressure at the start of class.
+      const password = generateReadablePassword(6);
       const passwordHash = await bcrypt.hash(password, 10);
       await db.insert(sessionRegionCredentials).values({
         sessionId,

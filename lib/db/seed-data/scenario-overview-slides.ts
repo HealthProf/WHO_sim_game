@@ -5,16 +5,20 @@
 // overlay.tsx for the rendering and lib/use-scenario-overview.ts for how
 // clients derive the current slide from the server's broadcast timestamp.
 //
-// Deliberately data-driven — nothing downstream hardcodes "7 slides" or
-// "70 seconds"; both fall out of this array's length and
-// SCENARIO_SLIDE_SECONDS. Content below is copied verbatim from the
-// author-approved copy; do not edit the wording without the author's sign-off.
+// Deliberately data-driven — nothing downstream hardcodes the slide count or
+// total duration; both fall out of this array. Content below is copied
+// verbatim from the author-approved copy; do not edit the wording without
+// the author's sign-off.
 
+// Default duration for a slide that doesn't set its own `seconds` field.
 export const SCENARIO_SLIDE_SECONDS = 10;
 
 export interface ScenarioSlide {
   id: string;
   body: string;
+  // Overrides SCENARIO_SLIDE_SECONDS for this one slide — e.g. the closing
+  // "Let's begin." doesn't need a full 10s. Most slides omit this.
+  seconds?: number;
 }
 
 export const SCENARIO_OVERVIEW_SLIDES: ScenarioSlide[] = [
@@ -45,7 +49,24 @@ export const SCENARIO_OVERVIEW_SLIDES: ScenarioSlide[] = [
   {
     id: "scenario-7",
     body: "Let's begin.",
+    seconds: 5,
   },
 ];
 
-export const SCENARIO_OVERVIEW_TOTAL_SECONDS = SCENARIO_OVERVIEW_SLIDES.length * SCENARIO_SLIDE_SECONDS;
+// Cumulative offset (in seconds) each slide begins at — precomputed once so
+// lib/use-scenario-overview.ts's per-tick lookup doesn't recompute it on
+// every render. SCENARIO_OVERVIEW_TOTAL_SECONDS is the sum of every slide's
+// duration, not a uniform multiplication, since durations aren't uniform.
+export const SCENARIO_OVERVIEW_SLIDE_STARTS: number[] = (() => {
+  let offset = 0;
+  return SCENARIO_OVERVIEW_SLIDES.map((slide) => {
+    const start = offset;
+    offset += slide.seconds ?? SCENARIO_SLIDE_SECONDS;
+    return start;
+  });
+})();
+
+export const SCENARIO_OVERVIEW_TOTAL_SECONDS = SCENARIO_OVERVIEW_SLIDES.reduce(
+  (sum, slide) => sum + (slide.seconds ?? SCENARIO_SLIDE_SECONDS),
+  0
+);

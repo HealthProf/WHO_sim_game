@@ -5,7 +5,14 @@ import { eq } from "drizzle-orm";
 import { resetDb, seedStaticOnce } from "./helpers/db";
 import { createTestUser } from "./helpers/session";
 import { createSession } from "@/lib/session-lifecycle";
-import { SCENARIO_OVERVIEW_SLIDES, SCENARIO_SLIDE_SECONDS, SCENARIO_OVERVIEW_TOTAL_SECONDS } from "@/lib/db/seed-data/scenario-overview-slides";
+import {
+  SCENARIO_OVERVIEW_SLIDES,
+  SCENARIO_SLIDE_SECONDS,
+  SCENARIO_OVERVIEW_SLIDE_STARTS,
+  SCENARIO_OVERVIEW_TOTAL_SECONDS,
+} from "@/lib/db/seed-data/scenario-overview-slides";
+import { SCENARIO_OVERVIEW_PREROLL_SECONDS } from "@/lib/config";
+import { computeCurrentSlideIndex } from "@/lib/use-scenario-overview";
 
 // Covers Update 3's server-side triggers: createSession() (demo mode starts
 // the Scenario Overview deck immediately; instructor mode does not — the
@@ -29,21 +36,42 @@ describe("Scenario Overview slide deck", () => {
     await seedStaticOnce();
   });
 
-  it("is data-driven: total seconds derives from the slide count, not a hardcoded number", () => {
+  it("is data-driven: total seconds is the sum of each slide's own duration, not a hardcoded number", () => {
     expect(SCENARIO_OVERVIEW_SLIDES.length).toBeGreaterThan(0);
-    expect(SCENARIO_OVERVIEW_TOTAL_SECONDS).toBe(SCENARIO_OVERVIEW_SLIDES.length * SCENARIO_SLIDE_SECONDS);
+    const expectedTotal = SCENARIO_OVERVIEW_SLIDES.reduce((sum, s) => sum + (s.seconds ?? SCENARIO_SLIDE_SECONDS), 0);
+    expect(SCENARIO_OVERVIEW_TOTAL_SECONDS).toBe(expectedTotal);
   });
 
-  it("createSession(demo) starts the deck immediately", async () => {
+  // The closing slide ("Let's begin.") is intentionally shorter than the
+  // rest — this is the per-slide-duration lookup's whole reason to exist
+  // (see lib/use-scenario-overview.ts), so pin its exact shape rather than
+  // just checking the total.
+  it("the final slide has a shorter duration than the default, reflected in the precomputed offsets", () => {
+    const lastIndex = SCENARIO_OVERVIEW_SLIDES.length - 1;
+    const lastSlide = SCENARIO_OVERVIEW_SLIDES[lastIndex];
+    expect(lastSlide.seconds).toBeDefined();
+    expect(lastSlide.seconds!).toBeLessThan(SCENARIO_SLIDE_SECONDS);
+
+    // Every earlier slide uses the default duration, so the last slide's
+    // start offset should land exactly at (n-1) * SCENARIO_SLIDE_SECONDS.
+    expect(SCENARIO_OVERVIEW_SLIDE_STARTS[lastIndex]).toBe(lastIndex * SCENARIO_SLIDE_SECONDS);
+    expect(SCENARIO_OVERVIEW_TOTAL_SECONDS).toBe(SCENARIO_OVERVIEW_SLIDE_STARTS[lastIndex] + lastSlide.seconds!);
+  });
+
+  it("createSession(demo) starts the deck a few seconds in the future (pre-roll buffer)", async () => {
     const owner = await createTestUser("instructor");
+    const beforeCall = Date.now();
     const sessionId = await createSession(owner.id, "demo");
 
     const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
     expect(gs?.scenarioOverviewStartedAt).not.toBeNull();
-    // Started just now, not backdated or in the future.
-    const elapsedMs = Date.now() - new Date(gs!.scenarioOverviewStartedAt!).getTime();
-    expect(elapsedMs).toBeGreaterThanOrEqual(0);
-    expect(elapsedMs).toBeLessThan(5000);
+    // Set to "now + preroll", not bare "now" — see SCENARIO_OVERVIEW_PREROLL_SECONDS's
+    // comment in lib/config.ts for why: without this buffer, the client
+    // discovering the deck (page load, first poll) ate directly into slide
+    // 1's on-screen time.
+    const offsetMs = new Date(gs!.scenarioOverviewStartedAt!).getTime() - beforeCall;
+    expect(offsetMs).toBeGreaterThanOrEqual(SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000 - 500);
+    expect(offsetMs).toBeLessThanOrEqual(SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000 + 5000);
   });
 
   it("createSession(instructor) leaves the deck unstarted — the credential sheet's button and a reset are its triggers", async () => {
@@ -52,6 +80,34 @@ describe("Scenario Overview slide deck", () => {
 
     const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
     expect(gs?.scenarioOverviewStartedAt).toBeNull();
+  });
+
+  // The core of the pacing bug fix: per-slide-duration lookup and the
+  // pre-roll clamp, exercised directly against real elapsed-time values
+  // rather than through a live 1-second interval.
+  describe("computeCurrentSlideIndex", () => {
+    it("clamps to slide 0 (not null) while still inside the pre-roll window", () => {
+      expect(computeCurrentSlideIndex(-3)).toBe(0);
+      expect(computeCurrentSlideIndex(-0.1)).toBe(0);
+    });
+
+    it("gives every slide except the last its full SCENARIO_SLIDE_SECONDS window", () => {
+      // Slide 0: [0, 10). Slide 1: [10, 20). Etc.
+      expect(computeCurrentSlideIndex(0)).toBe(0);
+      expect(computeCurrentSlideIndex(9.9)).toBe(0);
+      expect(computeCurrentSlideIndex(10)).toBe(1);
+      expect(computeCurrentSlideIndex(19.9)).toBe(1);
+      expect(computeCurrentSlideIndex(20)).toBe(2);
+    });
+
+    it("the final slide gets its own shorter window, then the deck ends", () => {
+      const lastIndex = SCENARIO_OVERVIEW_SLIDES.length - 1;
+      const lastStart = SCENARIO_OVERVIEW_SLIDE_STARTS[lastIndex];
+      expect(computeCurrentSlideIndex(lastStart)).toBe(lastIndex);
+      expect(computeCurrentSlideIndex(SCENARIO_OVERVIEW_TOTAL_SECONDS - 0.1)).toBe(lastIndex);
+      expect(computeCurrentSlideIndex(SCENARIO_OVERVIEW_TOTAL_SECONDS)).toBeNull();
+      expect(computeCurrentSlideIndex(SCENARIO_OVERVIEW_TOTAL_SECONDS + 100)).toBeNull();
+    });
   });
 
   it("scenarioOverviewStartedAt is session-isolated: starting the deck in one demo session never appears in another", async () => {

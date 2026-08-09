@@ -8,7 +8,7 @@ import { SCENARIO_OVERVIEW_TOTAL_SECONDS } from "@/lib/db/seed-data/scenario-ove
 // Update 3's synchronization endpoint — deliberately its own tiny route
 // rather than folded into /api/dashboard or /api/display. Those poll at
 // 15s/4s-backing-off-to-30s and both opportunistically run processDeadlines,
-// which is far too coarse and heavy for a 70-second, 10-seconds-per-slide
+// which is far too coarse and heavy for a several-seconds-per-slide
 // sequence: this is polled every 5s by every connected client (see
 // components/scenario-overview-watcher.tsx) and does a single indexed read,
 // nothing else.

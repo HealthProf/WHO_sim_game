@@ -4,6 +4,7 @@ import { sessionState } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
 import { bumpStateVersion } from "@/lib/state-version";
+import { SCENARIO_OVERVIEW_PREROLL_SECONDS } from "@/lib/config";
 
 // Update 3, Class Session mode's manual trigger — the "Scenario Overview"
 // button on the credential sheet (app/(public)/sessions/[id]/credentials).
@@ -19,7 +20,10 @@ export async function POST() {
   if (error) return error;
   const sessionId = actor!.sessionId;
 
-  await db.update(sessionState).set({ scenarioOverviewStartedAt: new Date(), updatedAt: new Date() }).where(eq(sessionState.sessionId, sessionId));
+  // A few seconds in the future, not "now" — see
+  // SCENARIO_OVERVIEW_PREROLL_SECONDS's comment in lib/config.ts.
+  const scenarioOverviewStartedAt = new Date(Date.now() + SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000);
+  await db.update(sessionState).set({ scenarioOverviewStartedAt, updatedAt: new Date() }).where(eq(sessionState.sessionId, sessionId));
   await bumpStateVersion(sessionId);
 
   return NextResponse.json({ ok: true });
