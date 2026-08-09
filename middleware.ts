@@ -11,8 +11,8 @@ const { auth } = NextAuth(authConfig);
 // session ownership (see lib/auth.ts), which can change without a new JWT
 // being issued (the client calls next-auth's update() after creating a
 // session), so middleware can no longer assume the token's role is current.
-const PUBLIC_PATHS = ["/login", "/register", "/account/recover", "/display"];
-const PUBLIC_API_PREFIXES = ["/api/auth", "/api/display", "/api/cron", "/api/account/register"];
+const PUBLIC_PATHS = ["/login", "/register", "/account/recover", "/display", "/license"];
+const PUBLIC_API_PREFIXES = ["/api/auth", "/api/display", "/api/cron", "/api/account/register", "/api/scenario-overview"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

@@ -161,12 +161,20 @@ export function CheatCodeWidget() {
 
   return (
     <>
+      {/* Update 1b: was a dark chip (bg-neutral-900/60) with a light-brown
+          glyph (text-neutral-500) at opacity-30, on the app's light cream
+          background — roughly 1.1:1 contrast, effectively invisible. Now a
+          solid high-contrast black glyph on the light surface, at full
+          opacity, so it reads clearly without needing hover to see it at
+          all. aria-label/title are also given a real accessible name —
+          "???"/" " left the button unnameable to screen readers (WCAG
+          4.1.2) — worded neutrally so it doesn't spoil the codes. */}
       <button
         type="button"
         onClick={openModal}
-        aria-label="???"
-        title=" "
-        className="fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full border-2 border-neutral-700 bg-neutral-900/60 text-neutral-500 opacity-30 shadow-lg transition-opacity duration-150 hover:opacity-90"
+        aria-label="Easter egg"
+        title="Easter egg"
+        className="fixed bottom-5 right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full border-2 border-neutral-900 bg-bg text-neutral-900 shadow-lg transition-colors duration-150 hover:bg-neutral-200"
       >
         <EggIcon />
       </button>

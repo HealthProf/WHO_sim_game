@@ -316,6 +316,21 @@ export const sessionState = pgTable("session_state", {
   // separate ones so a facilitator who senses the room coasting can turn up
   // the pressure without hunting through multiple settings.
   intensityMultiplier: real("intensity_multiplier").notNull().default(1.0),
+  // Update 3's Scenario Overview slide deck: a single server-set broadcast
+  // timestamp, same shared-clock shape as the cheat monologue's
+  // monologueStartedAt (lib/use-monologue.ts) — every connected client
+  // (region dashboards, instructor console, projector display) derives the
+  // current slide from elapsed real time since this timestamp rather than
+  // running an independent local timer, so every screen shows the same
+  // slide at the same moment and a late joiner lands mid-sequence instead of
+  // restarting from slide 1. Set at demo-session creation, on every reset
+  // (both modes), and by the instructor's "Scenario Overview" button in
+  // Class Session mode (see app/api/instructor/scenario-overview/route.ts).
+  // Never cleared — app/api/scenario-overview/route.ts stops reporting it
+  // once SCENARIO_OVERVIEW_TOTAL_SECONDS have elapsed, the same
+  // bounded-window approach used to fix the barrel-roll cheat code's replay
+  // bug (see lib/cheat-engine.ts's getCheatDisplayState).
+  scenarioOverviewStartedAt: timestamp("scenario_overview_started_at"),
   // Bumped by a single atomic increment on every mutating write this
   // session makes (see lib/state-version.ts) — /api/dashboard and
   // /api/display accept ?since=<version> and return { unchanged: true }

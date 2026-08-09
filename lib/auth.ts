@@ -1,11 +1,23 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { users, sessionRegionCredentials, teams, gameSessions } from "./db/schema";
+import { gameSessions } from "./db/schema";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { authConfig } from "./auth.config";
-import { checkRateLimit, clientIpFrom } from "./rate-limit";
+import { isRateLimited, consumeRateLimit, clearRateLimit, clientIpFrom } from "./rate-limit";
+import { SIGNIN_MAX_ATTEMPTS_PER_CREDENTIAL, SIGNIN_IP_MAX_ATTEMPTS } from "./config";
+import { verifyCredentials } from "./auth-verify";
+
+// Distinct AuthError subclasses so the client can tell "you were rate
+// limited" apart from "wrong username or password" (see app/login/page.tsx)
+// instead of both collapsing into next-auth's generic CredentialsSignin.
+// `code` ends up in the redirect URL's ?code= param, which next-auth's
+// client-side signIn() surfaces back as res.code — see the "code" property's
+// own doc comment on CredentialsSignin for why it must stay generic (never
+// hint at *which* credential was rejected).
+export class RateLimitedSignin extends CredentialsSignin {
+  code = "rate_limited";
+}
 
 declare module "next-auth" {
   interface Session {
@@ -58,50 +70,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       authorize: async (credentials, request) => {
         const username = (credentials?.username as string)?.toLowerCase().trim();
-        const password = credentials?.password as string;
+        const password = (credentials?.password as string)?.trim();
         if (!username || !password) return null;
 
         const ip = clientIpFrom(request.headers);
-        const allowed = await checkRateLimit(`${ip}:signin`);
-        if (!allowed) return null;
+        const ipKey = `${ip}:signin`;
+        const credentialKey = `${ip}:${username}:signin`;
 
-        // 1. Public account (lib/db/schema.ts users).
-        const user = await db.query.users.findFirst({ where: eq(users.username, username) });
-        if (user) {
-          const valid = await bcrypt.compare(password, user.passwordHash);
-          if (!valid) return null;
-          await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
-          return {
-            id: `user:${user.id}`,
-            kind: "user" as const,
-            userId: user.id,
-            username: user.username,
-            name: user.name,
-          } as never;
+        // Two independent budgets rather than one shared-key counter (see
+        // lib/rate-limit.ts's header comment on isRateLimited/consumeRateLimit):
+        // a tight per-credential ceiling that is the actual brute-force guard,
+        // and a much looser per-IP ceiling that only resists one source trying
+        // many different usernames. Both are read-only checks here — only a
+        // failed attempt below ever writes to either counter, so a classroom
+        // behind one shared IP signing in correctly never spends the budget.
+        if (await isRateLimited(ipKey, SIGNIN_IP_MAX_ATTEMPTS)) throw new RateLimitedSignin();
+        if (await isRateLimited(credentialKey, SIGNIN_MAX_ATTEMPTS_PER_CREDENTIAL)) throw new RateLimitedSignin();
+
+        const result = await verifyCredentials(username, password);
+        if (result.outcome === "invalid") {
+          await consumeRateLimit(ipKey);
+          await consumeRateLimit(credentialKey);
+          return null;
         }
+        // Password checked out but the region has no teams row — a
+        // data-integrity edge case, not a guessed credential, so it must not
+        // burn the caller's rate-limit budget.
+        if (result.outcome === "region-missing-team") return null;
 
-        // 2. Session-scoped region login (instructor mode, generated at
-        // session creation — see lib/session-lifecycle.ts). Generated
-        // usernames carry a random "-xxxxxx" suffix, so they can never
-        // collide with a public account's username (registration also
-        // rejects "-"-suffixed-looking names defensively — see
-        // app/api/account/register/route.ts).
-        const cred = await db.query.sessionRegionCredentials.findFirst({ where: eq(sessionRegionCredentials.username, username) });
-        if (!cred) return null;
-        const valid = await bcrypt.compare(password, cred.passwordHash);
-        if (!valid) return null;
-        const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, cred.sessionId), eq(teams.regionId, cred.regionId)) });
-        if (!team) return null;
-
-        return {
-          id: `region:${cred.id}`,
-          kind: "region" as const,
-          username: cred.username,
-          name: `${cred.regionId} Team`,
-          sessionId: cred.sessionId,
-          regionId: cred.regionId,
-          teamId: team.id,
-        } as never;
+        await clearRateLimit(credentialKey);
+        return result.actor as never;
       },
     }),
   ],

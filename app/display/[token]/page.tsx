@@ -11,6 +11,7 @@ import type { FinalResults } from "@/lib/final-results";
 import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
 import { useBarrelRollEffect } from "@/lib/use-barrel-roll";
 import { useMonologueMessage } from "@/lib/use-monologue";
+import { ScenarioOverviewWatcher } from "@/components/scenario-overview-watcher";
 
 interface DisplaySnapVote {
   question: string;
@@ -165,6 +166,7 @@ export default function PublicDisplayPage() {
   if (!data) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-neutral-900 px-8 text-center text-3xl text-neutral-400">
+        <ScenarioOverviewWatcher displayToken={token} />
         <p>{lastError ? "Couldn't reach the server" : "Loading situation room..."}</p>
         {lastError && <p className="text-lg text-accent-400">{lastError} — retrying every 10s</p>}
       </div>
@@ -185,6 +187,7 @@ export default function PublicDisplayPage() {
   if (data.simulationStatus === "completed" && data.rounds) {
     return (
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-neutral-900 text-white">
+        <ScenarioOverviewWatcher displayToken={token} />
         {staleBanner}
         <header className="shrink-0 bg-neutral-800 px-8 py-6 text-center">
           <h1 className="font-heading text-4xl tracking-wide xl:text-5xl">SIMULATION COMPLETE — SUMMARY REPORT</h1>
@@ -237,6 +240,7 @@ export default function PublicDisplayPage() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-neutral-900 text-white">
+      <ScenarioOverviewWatcher displayToken={token} />
       {staleBanner}
       <header className={`flex shrink-0 flex-wrap items-center justify-between gap-4 px-8 py-5 ${escalationBg[data.escalationState]}`}>
         <h1 className="font-heading text-3xl tracking-wide xl:text-4xl">OPERATION VEILED HORIZON</h1>

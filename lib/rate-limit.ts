@@ -7,7 +7,7 @@
 // concurrent requests.
 import { db } from "./db";
 import { rateLimitCounters } from "./db/schema";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { RATE_LIMIT_WINDOW_SECONDS, RATE_LIMIT_MAX_ATTEMPTS } from "./config";
 
 // Returns true if this attempt is allowed (and counts it), false if the
@@ -39,6 +39,51 @@ export async function checkRateLimit(key: string): Promise<boolean> {
     .returning();
 
   return row.count <= RATE_LIMIT_MAX_ATTEMPTS;
+}
+
+// --- Split primitives for the sign-in path (lib/auth.ts) ---
+//
+// checkRateLimit() above counts every call, success or failure, which is
+// correct for register/credentials-rotation (there's no "successful attempt"
+// concept worth exempting) but wrong for sign-in: a shared classroom/NAT IP
+// racks up one count per successful login too, so a handful of people
+// signing in correctly can lock the room out for the rest of the window. The
+// three primitives below let a caller check without writing, and only write
+// on the outcome that should actually count.
+//
+// isRateLimited() is read-only — it never creates or bumps a row, so merely
+// checking a key that has never failed costs nothing and starts no window.
+export async function isRateLimited(key: string, maxAttempts: number): Promise<boolean> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - RATE_LIMIT_WINDOW_SECONDS * 1000);
+  const row = await db.query.rateLimitCounters.findFirst({ where: eq(rateLimitCounters.key, key) });
+  if (!row) return false;
+  if (row.windowStartedAt < windowStart) return false; // window has aged out
+  return row.count >= maxAttempts;
+}
+
+// Same atomic conditional-update shape as checkRateLimit — call only for an
+// attempt that should count against the budget (e.g. a failed sign-in).
+export async function consumeRateLimit(key: string): Promise<void> {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - RATE_LIMIT_WINDOW_SECONDS * 1000);
+  await db
+    .insert(rateLimitCounters)
+    .values({ key, windowStartedAt: now, count: 1 })
+    .onConflictDoUpdate({
+      target: rateLimitCounters.key,
+      set: {
+        windowStartedAt: sql`CASE WHEN ${rateLimitCounters.windowStartedAt} < ${windowStart} THEN ${now} ELSE ${rateLimitCounters.windowStartedAt} END`,
+        count: sql`CASE WHEN ${rateLimitCounters.windowStartedAt} < ${windowStart} THEN 1 ELSE ${rateLimitCounters.count} + 1 END`,
+      },
+    });
+}
+
+// Call on a successful sign-in so a credential that failed a few times
+// before succeeding doesn't carry a partially-spent budget into its next
+// attempt.
+export async function clearRateLimit(key: string): Promise<void> {
+  await db.delete(rateLimitCounters).where(eq(rateLimitCounters.key, key));
 }
 
 export function clientIpFrom(headers: Headers): string {

@@ -23,7 +23,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import { creditRegionField } from "./db-atomic";
 import { bumpStateVersion } from "./state-version";
-import { ANNOUNCEMENT_AUTO_DISMISS_SECONDS } from "./config";
+import { ANNOUNCEMENT_AUTO_DISMISS_SECONDS, BARREL_ROLL_BROADCAST_WINDOW_SECONDS } from "./config";
 import type { Actor } from "./session-context";
 import {
   CHEAT_CODES,
@@ -195,6 +195,19 @@ async function applyGodMode(sessionId: string): Promise<void> {
     .onConflictDoUpdate({ target: cheatCodeState.sessionId, set: { godModeActive: true, updatedAt: new Date() } });
   await bumpStateVersion(sessionId);
   await broadcastGlobalMessage(sessionId, "God Mode Activated", "The difficulty multiplier has been set to 5x.");
+}
+
+// godModeActive is purely informational (see the CheatDisplayState comment
+// on it) — the real effect is sessionState.intensityMultiplier, which this
+// deliberately never touches. Call this whenever something else overwrites
+// intensityMultiplier (the tempo dial, a reset) so the flag doesn't
+// permanently claim God Mode is active after the multiplier it described has
+// long since been changed. A no-op if it's already false.
+export async function clearGodModeFlag(sessionId: string): Promise<void> {
+  await db
+    .update(cheatCodeState)
+    .set({ godModeActive: false, updatedAt: new Date() })
+    .where(and(eq(cheatCodeState.sessionId, sessionId), eq(cheatCodeState.godModeActive, true)));
 }
 
 async function applyBarrelRoll(sessionId: string): Promise<void> {
@@ -441,9 +454,23 @@ export async function getCheatDisplayState(sessionId: string): Promise<CheatDisp
     const secondsRemaining = Math.max(0, Math.ceil(MONOLOGUE_MESSAGES.length * MONOLOGUE_MESSAGE_SECONDS - elapsedSec));
     monologue = { index, total: MONOLOGUE_MESSAGES.length, text: MONOLOGUE_MESSAGES[index], secondsRemaining, startedAt: startedAt.toISOString() };
   }
+
+  // barrelRollAt is meant to be a one-time broadcast pulse — "everyone who's
+  // watching right now plays the roll once" — but the column itself is a
+  // permanent record of the last roll with nothing to clear it. Without a
+  // window, any client that (re)loads *after* the roll (a fresh tab, a
+  // reopened session days later) reads the same non-null timestamp as a
+  // brand-new trigger and replays it. Bounding it to a short window here
+  // makes the broadcast actually transient without needing a background job
+  // to null the column out.
+  const barrelRollAt =
+    state?.barrelRollAt && Date.now() - new Date(state.barrelRollAt).getTime() <= BARREL_ROLL_BROADCAST_WINDOW_SECONDS * 1000
+      ? new Date(state.barrelRollAt).toISOString()
+      : null;
+
   return {
     godModeActive: state?.godModeActive ?? false,
-    barrelRollAt: state?.barrelRollAt ? new Date(state.barrelRollAt).toISOString() : null,
+    barrelRollAt,
     monologue,
   };
 }
