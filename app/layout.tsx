@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Caprasimo, Figtree } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
@@ -53,6 +54,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <Providers>{children}</Providers>
         <InstallPrompt />
+        <Analytics />
       </body>
     </html>
   );
