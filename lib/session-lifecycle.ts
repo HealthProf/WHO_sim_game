@@ -36,10 +36,14 @@ import {
   modelStateHistory,
   instructorActions,
   sessionRegionAutoplay,
+  cheatCodeAttempts,
+  cheatCodeRedemptions,
+  cheatRegionEffects,
+  cheatCodeState,
 } from "./db/schema";
 import { eq } from "drizzle-orm";
 import { regionSeed } from "./db/seed-data/regions";
-import { generateSessionId, generateSecret, generateUsernameSuffix } from "./ids";
+import { generateSessionId, generateSecret, generateUsernameSuffix, generateReadablePassword } from "./ids";
 import { DEMO_GAME_DAYS_PER_REAL_MINUTE, DEMO_FAST_MODE_MULTIPLIER } from "./config";
 import { logSessionEvent } from "./session-events";
 import { logAnalyticsEvent } from "./analytics";
@@ -70,10 +74,20 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
 
   // 2. Wide per-tick state row. Demo mode runs on a faster clock so a solo
   // visitor can finish an arc in ~10-15 minutes (see lib/config.ts) —
-  // instructor mode keeps the schema defaults.
+  // instructor mode keeps the schema defaults. Demo mode also starts the
+  // Update 3 Scenario Overview deck immediately (no login step for an
+  // instructor to press a button from — see the "Scenario Overview" button
+  // on the credential sheet, which is Class Session mode's equivalent
+  // trigger). Instructor mode deliberately leaves scenarioOverviewStartedAt
+  // null here; it's set only by that button or by a reset.
   await db.insert(sessionState).values(
     mode === "demo"
-      ? { sessionId, gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE, fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER }
+      ? {
+          sessionId,
+          gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE,
+          fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER,
+          scenarioOverviewStartedAt: new Date(),
+        }
       : { sessionId }
   );
 
@@ -126,7 +140,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
     // regions directly (gameSessions.demoActiveRegionId), and every region
     // not currently occupied is driven by the scripted autoplayer.
     if (mode === "instructor" && team) {
-      const password = generateSecret(9);
+      const password = generateReadablePassword();
       const passwordHash = await bcrypt.hash(password, 10);
       await db.insert(sessionRegionCredentials).values({
         sessionId,
@@ -151,6 +165,21 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
   await logAnalyticsEvent({ sessionId, mode, eventType: "session_created", userId: ownerUserId });
 
   return sessionId;
+}
+
+// Called from PATCH /api/instructor/simulation when a session transitions to
+// "completed". sessionRegionCredentials.plaintextHint and the credential
+// sheet's display fallback ("(cleared after the session completed)") both
+// documented this happening, but nothing ever actually did it — plaintext
+// region passwords were persisting indefinitely. bcrypt's passwordHash is
+// untouched, so a reopened session ("completed" is soft and reversible, see
+// that route's header comment) keeps its region logins working; only the
+// printable plaintext copy is gone. Pulled out as its own function (rather
+// than inlined in the route) so it's testable without importing lib/auth —
+// see tests/cheat-codes.test.ts's header comment on why route handlers that
+// transitively import next-auth can't be exercised directly under Vitest.
+export async function clearSessionCredentialSecrets(sessionId: string): Promise<void> {
+  await db.update(sessionRegionCredentials).set({ plaintextHint: null }).where(eq(sessionRegionCredentials.sessionId, sessionId));
 }
 
 // Deletes every row belonging to a session, in FK-dependency order — mirrors
@@ -178,6 +207,15 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await db.delete(eventDispatches).where(eq(eventDispatches.sessionId, sessionId));
   await db.delete(modelStateHistory).where(eq(modelStateHistory.sessionId, sessionId));
   await db.delete(instructorActions).where(eq(instructorActions.sessionId, sessionId));
+  // Any session that ever had a cheat code entered carries rows in these
+  // four tables, all of which reference gameSessions — omitting them here
+  // caused a foreign-key violation whenever the reaper (lib/reaper.ts) tried
+  // to delete such a session. None of the four are referenced by any other
+  // table, so deletion order among them doesn't matter.
+  await db.delete(cheatCodeAttempts).where(eq(cheatCodeAttempts.sessionId, sessionId));
+  await db.delete(cheatCodeRedemptions).where(eq(cheatCodeRedemptions.sessionId, sessionId));
+  await db.delete(cheatRegionEffects).where(eq(cheatRegionEffects.sessionId, sessionId));
+  await db.delete(cheatCodeState).where(eq(cheatCodeState.sessionId, sessionId));
   await db.delete(modelState).where(eq(modelState.sessionId, sessionId));
   await db.delete(modelStateOptimal).where(eq(modelStateOptimal.sessionId, sessionId));
   await db.delete(teams).where(eq(teams.sessionId, sessionId));

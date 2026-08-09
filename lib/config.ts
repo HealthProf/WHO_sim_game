@@ -22,6 +22,15 @@ export const BUDGET_DONATION_WINDOW_SECONDS = 90;
 export const ANNOUNCEMENT_AUTO_DISMISS_SECONDS = 10;
 export const DRAMATIC_MOMENT_AUTO_DISMISS_SECONDS = 18;
 
+// --- Cheat codes (lib/cheat-engine.ts) ---
+// BARREL_ROLL's barrelRollAt is a broadcast timestamp with no separate
+// "clear" step — every poller within this many seconds of the timestamp
+// plays the roll once; anyone loading later sees nothing. Comfortably wider
+// than the widest cheat-relevant poll interval (the 4s display default) so
+// a normal poll never misses the window, but short enough that reopening a
+// session minutes/days later never replays a stale roll.
+export const BARREL_ROLL_BROADCAST_WINDOW_SECONDS = 15;
+
 // --- Tempo dial / drama dial (item 9) ---
 export const MIN_INTENSITY_MULTIPLIER = 0.5;
 export const MAX_INTENSITY_MULTIPLIER = 2.0;
@@ -40,6 +49,15 @@ export const POLITICAL_TENSION_LOCKOUT_THRESHOLD = 90;
 // attempts per window" is all this needs to guard against.
 export const RATE_LIMIT_WINDOW_SECONDS = 15 * 60;
 export const RATE_LIMIT_MAX_ATTEMPTS = 10;
+
+// Sign-in specifically (lib/auth.ts authorize()) uses two separate budgets
+// instead of the single shared-key counter above: a tight per-credential
+// ceiling that only counts failed attempts, and a much looser per-IP
+// ceiling as a backstop against one source enumerating many usernames. This
+// is what actually fixes "a classroom behind one NAT IP locks itself out" —
+// see the fix's commit message for the incident this traces back to.
+export const SIGNIN_MAX_ATTEMPTS_PER_CREDENTIAL = 10;
+export const SIGNIN_IP_MAX_ATTEMPTS = 100;
 
 // --- Demo mode pacing (lib/session-lifecycle.ts, Phase 4) ---
 // A demo session runs on a faster clock than an instructor session so a

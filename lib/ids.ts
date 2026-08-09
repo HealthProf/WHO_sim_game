@@ -25,3 +25,18 @@ export function generateUsernameSuffix(length = 6): string {
   for (let i = 0; i < length; i++) out += SUFFIX_ALPHABET[bytes[i] % SUFFIX_ALPHABET.length];
   return out;
 }
+
+// Generated region-credential passwords (lib/session-lifecycle.ts). Unlike
+// generateSecret()'s base64url output — mixed case plus "-"/"_", alongside
+// visually-similar l/1/I and O/0 — this is printed on a paper credential
+// sheet in a monospace font and hand-typed into a phone by someone who
+// didn't choose it, so transcription error is the whole risk model. Same
+// approach as SUFFIX_ALPHABET above, just uppercase (easier to read on a
+// printed sheet) and with the ambiguous characters dropped.
+const READABLE_PASSWORD_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export function generateReadablePassword(length = 10): string {
+  const bytes = randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) out += READABLE_PASSWORD_ALPHABET[bytes[i] % READABLE_PASSWORD_ALPHABET.length];
+  return out;
+}
