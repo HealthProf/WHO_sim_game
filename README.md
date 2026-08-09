@@ -94,6 +94,72 @@ available on request.
 Next.js (App Router) + Drizzle ORM + Postgres (Neon) + NextAuth v5
 (credentials) + TanStack Query + Tailwind, deployed on Vercel.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Clients["Clients (no server state of their own)"]
+        TeamUI["Team dashboard<br/>app/(dashboard)/*<br/>situation room · events · marketplace · pledges"]
+        InstructorUI["Instructor console<br/>app/(instructor)/*<br/>control · scoring · debrief · log"]
+        DisplayUI["Public projector display<br/>app/display/[token]<br/>unauthenticated"]
+    end
+
+    subgraph Routes["app/api/* route handlers"]
+        DashAPI["/api/dashboard"]
+        DisplayAPI["/api/display"]
+        InstrAPI["/api/instructor/*, /api/scores"]
+        ActionAPI["/api/decisions, /api/trade,<br/>/api/market, /api/pledges, ..."]
+    end
+
+    SessionCtx["lib/session-context.ts<br/>requireActor() / requireInstructorActor() / requireTeamActor()<br/>— resolves session identity ONCE per request;<br/>no route accepts a client-supplied sessionId"]
+
+    subgraph Engine["lib/ — simulation engine"]
+        ModelEngine["lib/model-engine/<br/>core (deltas + escalation)<br/>drift (passive decay + epidemic growth)<br/>shadow (counterfactual 'Optimal' run)"]
+        Deadline["lib/deadline.ts<br/>processDeadlines(sessionId)<br/>opportunistic tick, throttled by<br/>sessionState.lastTickAt + TICK_THROTTLE_SECONDS"]
+        Scoring["lib/scoring.ts, lib/consequences.ts<br/>40% evidence / 30% political / 30% equity"]
+        Atomic["lib/db-atomic.ts<br/>tryDeductRegionField / creditRegionField<br/>single-statement conditional UPDATEs<br/>(no db.transaction() — breaks on neon-http)"]
+    end
+
+    DB[("Postgres (Neon)<br/><br/>Per-session tables (sessionId-scoped):<br/>teams, sessionState, modelState,<br/>decisions, scores, coordination, ...<br/><br/>Global static tables:<br/>regions, events, eventChainLinks")]
+
+    TeamUI --> DashAPI
+    TeamUI --> ActionAPI
+    InstructorUI --> InstrAPI
+    InstructorUI --> ActionAPI
+    DisplayUI --> DisplayAPI
+
+    DashAPI --> SessionCtx
+    DisplayAPI --> SessionCtx
+    InstrAPI --> SessionCtx
+    ActionAPI --> SessionCtx
+
+    SessionCtx --> Engine
+    DashAPI -. "piggybacks tick on every poll" .-> Deadline
+    DisplayAPI -. "piggybacks tick on every poll" .-> Deadline
+
+    ModelEngine --> DB
+    Deadline --> DB
+    Scoring --> DB
+    Atomic --> DB
+```
+
+Two things this diagram is trying to make legible, since they're the parts
+most likely to surprise someone used to a conventional Next.js/cron/ORM
+stack:
+
+- **`session-context.ts` is a deliberate choke point, not a convenience
+  helper.** Every route resolves session identity through it exactly once,
+  which is what makes "any per-session table query must filter on
+  `sessionId`" a mechanically checkable rule instead of a convention people
+  can forget.
+- **There's no scheduler.** `processDeadlines()` — deadline expiry, passive
+  drift, snap-vote expiry, budget-cycle timers, social milestones — rides
+  along on `/api/dashboard` and `/api/display` polling instead of a real
+  cron, because Vercel's free tier only offers once-daily cron and the game
+  needs sub-minute ticks. Throttling per session (`lastTickAt` +
+  `TICK_THROTTLE_SECONDS`) keeps concurrent pollers from re-running it and
+  keeps sessions ticking independently of each other.
+
 ## Status
 
 Prototype, mid-migration to a multi-tenant public deployment. The core
