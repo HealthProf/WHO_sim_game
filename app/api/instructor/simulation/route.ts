@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
 import { logSessionEvent } from "@/lib/session-events";
 import { captureFinalSnapshot } from "@/lib/session-snapshot";
+import { clearSessionCredentialSecrets } from "@/lib/session-lifecycle";
 
 // Start/pause/resume/complete/reopen the simulation. "Completed" is a soft,
 // reversible state per simulation-docs/07-open-questions.md Q7 — never
@@ -57,6 +58,7 @@ export async function PATCH(req: NextRequest) {
       await logSessionEvent({ sessionId, kind: "completed", mode: session.mode });
       await captureFinalSnapshot(sessionId, "completed");
     }
+    await clearSessionCredentialSecrets(sessionId);
   }
 
   return NextResponse.json({ ok: true, status });
