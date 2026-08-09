@@ -3,6 +3,8 @@ import { ownedActiveSession } from "@/lib/session-context";
 import { TeamAnnouncementWatcher } from "@/components/team-announcement-watcher";
 import { TeamRail } from "@/components/team-rail";
 import { CheatCodeWidget } from "@/components/cheat-code-widget";
+import { AppFooter } from "@/components/app-footer";
+import { ScenarioOverviewWatcher } from "@/components/scenario-overview-watcher";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -11,6 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-text lg:flex-row">
+      <ScenarioOverviewWatcher />
       <TeamAnnouncementWatcher />
       <CheatCodeWidget />
       <TeamRail
@@ -18,7 +21,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         demoSession={demoSession}
         isAccountHolder={session?.user?.kind === "user"}
       />
-      <main className="flex min-w-0 flex-1 flex-col gap-[26px] bg-bg px-[22px] py-[26px] lg:px-[34px] lg:py-[30px]">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <main className="flex min-w-0 flex-1 flex-col gap-[26px] bg-bg px-[22px] py-[26px] lg:px-[34px] lg:py-[30px]">{children}</main>
+        <AppFooter />
+      </div>
     </div>
   );
 }

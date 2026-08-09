@@ -25,6 +25,10 @@ import {
   emergencyFundingContributions,
   emergencyFundingRequests,
   socialMilestoneAwards,
+  cheatCodeAttempts,
+  cheatCodeRedemptions,
+  cheatRegionEffects,
+  cheatCodeState,
 } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
@@ -64,6 +68,15 @@ export async function POST() {
   await db.delete(eventDispatches).where(eq(eventDispatches.sessionId, sessionId));
   await db.delete(modelStateHistory).where(eq(modelStateHistory.sessionId, sessionId));
   await db.delete(instructorActions).where(eq(instructorActions.sessionId, sessionId));
+  // Cheat-code state: without this, God Mode's flag and an in-progress
+  // "revert to zero" taper would silently survive a reset even though every
+  // other piece of game state was wiped (Update 1a's audit). None of these
+  // four tables are referenced by any other table, so deletion order among
+  // them doesn't matter.
+  await db.delete(cheatCodeAttempts).where(eq(cheatCodeAttempts.sessionId, sessionId));
+  await db.delete(cheatCodeRedemptions).where(eq(cheatCodeRedemptions.sessionId, sessionId));
+  await db.delete(cheatRegionEffects).where(eq(cheatRegionEffects.sessionId, sessionId));
+  await db.delete(cheatCodeState).where(eq(cheatCodeState.sessionId, sessionId));
 
   const allRegions = await db.query.regions.findMany();
   for (const r of allRegions) {
@@ -123,6 +136,14 @@ export async function POST() {
       whoHqAntiviralsStock: 200_000,
       lastBudgetCycleNarrativeDay: 0,
       intensityMultiplier: 1.0,
+      // Update 3: a reset re-plays the Scenario Overview deck for everyone,
+      // identically to a brand-new session — "a reset does not skip or
+      // shortcut any part of this flow" is explicit in the spec. Both modes
+      // get this (unlike session creation, where only demo mode starts the
+      // deck immediately — Class Session mode's equivalent trigger is the
+      // instructor's button, which isn't available at the exact moment of
+      // a reset the way it is at creation-then-credential-sheet time).
+      scenarioOverviewStartedAt: new Date(),
       updatedAt: new Date(),
     })
     .where(eq(sessionState.sessionId, sessionId));
