@@ -12,6 +12,7 @@ import { maybeStakeholderReact } from "./stakeholders";
 import type { ModelDelta } from "./db/seed-data/events";
 import { gradeDecision, type ProvisionalGrade } from "./auto-grade";
 import { varyDeltas } from "./outcome-variance";
+import { applyDisruptionConsequences } from "./disruptors";
 
 type DecisionRow = typeof decisions.$inferSelect;
 type EventRow = typeof events.$inferSelect;
@@ -212,6 +213,7 @@ export async function scoreDecision(sessionId: string, body: ScoreBody, scoredBy
       tier,
     });
     await maybeStakeholderReact(sessionId, team.id, tier);
+    await applyDisruptionConsequences({ sessionId, dispatch, structuredChoice: decision.structuredChoice, submittedAt: decision.submittedAt, regionId: team.regionId });
   }
 
   await maybeAnnounceResolution(sessionId, event.id);

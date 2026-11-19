@@ -13,6 +13,7 @@ import { useMonologueMessage } from "@/lib/use-monologue";
 import { ScenarioOverviewWatcher } from "@/components/scenario-overview-watcher";
 import { ProjectorWorld, type ProjectorAlert } from "@/components/projector-world";
 import type { SessionHistory } from "@/lib/history";
+import { pathogenFor } from "@/lib/pathogens";
 
 interface DisplaySnapVote {
   question: string;
@@ -53,6 +54,7 @@ interface DisplayData extends GlobalClockFields {
   teamChapters: TeamChapter[] | null;
   worldHealth: { index: number; label: string };
   history: SessionHistory;
+  pathogenId?: string;
   cheat: {
     godModeActive: boolean;
     barrelRollAt: string | null;
@@ -268,7 +270,10 @@ export default function PublicDisplayPage() {
       )}
       {staleBanner}
       <header className={`flex shrink-0 flex-wrap items-center justify-between gap-4 px-8 py-5 ${escalationBg[data.escalationState]}`}>
-        <h1 className="font-heading text-3xl tracking-wide xl:text-4xl">OPERATION VEILED HORIZON</h1>
+        <div>
+          <h1 className="font-heading text-3xl tracking-wide xl:text-4xl">OPERATION VEILED HORIZON</h1>
+          <p className="text-sm text-neutral-300">Outbreak: {pathogenFor(data.pathogenId).codeName} ({pathogenFor(data.pathogenId).name})</p>
+        </div>
         <SimClock state={data} size="lg" />
         <div className="flex items-center gap-8 text-xl font-semibold xl:text-2xl">
           <span>{data.escalationState}</span>

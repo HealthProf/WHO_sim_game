@@ -14,6 +14,8 @@ import { PillLink } from "@/components/ui/pill-button";
 import { IndexGauge } from "@/components/index-gauge";
 import { bandFor } from "@/lib/index-bands";
 import { WorldPanel } from "@/components/world-panel";
+import { PathogenCard } from "@/components/pathogen-card";
+import { pathogenFor } from "@/lib/pathogens";
 import { RegionAvatar } from "@/components/region-avatar";
 import { moodFor } from "@/lib/avatar-mood";
 
@@ -128,6 +130,7 @@ export default function DashboardPage() {
 
       {view === "overview" && (
         <>
+          <PathogenCard pathogenId={(data.globalState as { pathogenId?: string }).pathogenId} />
           {openDispatch && (
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-accent-100 p-[22px_24px]">
               <div>
@@ -162,7 +165,7 @@ export default function DashboardPage() {
               <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <Stat label="Fund" value={`$${(data.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
                 <Stat label="PPE days" value={data.ownRegion.ppeDaysRemaining} />
-                <Stat label="Antivirals" value={data.ownRegion.antiviralsRemaining.toLocaleString()} />
+                <Stat label={pathogenFor((data.globalState as { pathogenId?: string }).pathogenId).countermeasure.label} value={data.ownRegion.antiviralsRemaining.toLocaleString()} />
                 <Stat label="HCW surge" value={`${data.ownRegion.hcwSurgePct}%`} />
                 <Stat label="Rt" value={data.ownRegion.rt.toFixed(2)} />
                 <Stat label="CFR multiplier" value={data.ownRegion.cfrMultiplier.toFixed(2)} />

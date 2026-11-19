@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { canDispatch } from "./chain";
 import { computeDeadlineAt } from "./deadline-window";
 import { announceDispatch } from "./announcements";
+import { planDisruptions } from "./disruptors";
 
 export type DispatchResult =
   | { ok: true; dispatches: (typeof eventDispatches.$inferSelect)[] }
@@ -26,13 +27,16 @@ export async function dispatchEventToRegions(opts: {
   actionUserId: number;
   actionType?: string;
   reason?: string | null;
+  // Release 5: the facilitator may fire an event whose prerequisites aren't
+  // resolved yet (after a warning in the UI). Recorded in the action log.
+  force?: boolean;
 }): Promise<DispatchResult> {
   const { sessionId, eventId } = opts;
   const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
   if (!event) return { ok: false, status: 404, error: "Event not found" };
 
   const chain = await canDispatch(sessionId, eventId);
-  if (!chain.ok) {
+  if (!chain.ok && !opts.force) {
     return { ok: false, status: 409, error: `Blocked by unresolved prerequisite events: ${chain.blockedBy.join(", ")}` };
   }
 
@@ -62,6 +66,8 @@ export async function dispatchEventToRegions(opts: {
               deadlineAt,
               status: "dispatched" as const,
               dispatchedByUserId: opts.dispatchedByUserId,
+              // Release 5: mid-event disruptors drawn for this team now.
+              disruptionsJson: planDisruptions(eventId, allTeams.find((t) => t.id === teamId)?.regionId ?? "", dispatchedAt, deadlineAt),
             }))
           )
           .returning()
@@ -74,7 +80,7 @@ export async function dispatchEventToRegions(opts: {
     instructorUserId: opts.actionUserId,
     actionType: opts.actionType ?? "dispatch_event",
     targetDesc: `${eventId} -> ${audienceDesc}`,
-    reason: opts.reason ?? null,
+    reason: !chain.ok && opts.force ? `Fired before prerequisites resolved (${chain.blockedBy.join(", ")}). ${opts.reason ?? ""}`.trim() : (opts.reason ?? null),
   });
 
   await announceDispatch({ sessionId, eventId, eventTitle: event.title, targetTeamIds: targetIds });

@@ -11,6 +11,7 @@ import { modelStateHistory, sessionState } from "./db/schema";
 import { asc, eq } from "drizzle-orm";
 import { regionSeed } from "./db/seed-data/regions";
 import { REGIONS, type RegionId } from "./regions";
+import { pathogenFor, startingRtFor } from "./pathogens";
 
 export const HISTORY_METRICS = ["rt", "publicTrustIndex", "populationHappinessIndex", "deaths", "confirmedCases"] as const;
 export type HistoryMetric = (typeof HISTORY_METRICS)[number];
@@ -64,10 +65,10 @@ const HIGHER_IS_BETTER: Record<HistoryMetric, boolean> = {
   confirmedCases: false,
 };
 
-function startingValues(regionId: string): Record<HistoryMetric, number> {
+function startingValues(regionId: string, pathogenId?: string): Record<HistoryMetric, number> {
   const r = regionSeed.find((x) => x.id === regionId)!;
   return {
-    rt: r.startingRt,
+    rt: startingRtFor(r.startingRt, pathogenFor(pathogenId)),
     publicTrustIndex: r.startingPublicTrust,
     populationHappinessIndex: 60, // the model's fixed starting morale (lib/session-lifecycle.ts)
     deaths: r.startingDeaths,
@@ -97,7 +98,7 @@ export async function buildSessionHistory(sessionId: string, now: Date = new Dat
   for (const regionId of REGIONS) {
     const own = rows.filter((r) => r.regionId === regionId);
     let idx = 0;
-    let current = startingValues(regionId);
+    let current = startingValues(regionId, gs.pathogenId);
     series[regionId] = grid.map((m) => {
       const t = start + m * 60000;
       while (idx < own.length && own[idx].createdAt.getTime() <= t) {

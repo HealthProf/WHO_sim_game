@@ -52,6 +52,7 @@ import {
   CLASS_DECISION_WINDOW_BASE_MINUTES,
 } from "./config";
 import { rateForDuration } from "./game-duration";
+import { pathogenFor, randomPathogenId, startingRtFor, type PathogenId } from "./pathogens";
 import { logSessionEvent } from "./session-events";
 import { logAnalyticsEvent } from "./analytics";
 
@@ -67,7 +68,10 @@ function shuffled<T>(arr: T[]): T[] {
   return out;
 }
 
-export async function createSession(ownerUserId: number, mode: "instructor" | "demo"): Promise<string> {
+export async function createSession(ownerUserId: number, mode: "instructor" | "demo", opts: { pathogenId?: PathogenId } = {}): Promise<string> {
+  // Release 5: each game is about one of four pathogens, drawn at random
+  // unless specified (lib/pathogens.ts).
+  const pathogen = pathogenFor(opts.pathogenId ?? randomPathogenId());
   const sessionId = generateSessionId();
 
   // 1. Identity row, not yet joinable.
@@ -99,6 +103,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
           gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE,
           targetDurationMinutes: Math.round(90 / DEMO_GAME_DAYS_PER_REAL_MINUTE),
           computerFacilitator: true,
+          pathogenId: pathogen.id,
           fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER,
           scenarioOverviewStartedAt: new Date(Date.now() + SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000),
         }
@@ -109,6 +114,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
           targetDurationMinutes: CLASS_DEFAULT_DURATION_MINUTES,
           gameDaysPerRealMinute: rateForDuration(90, CLASS_DEFAULT_DURATION_MINUTES),
           decisionWindowBaseMinutes: CLASS_DECISION_WINDOW_BASE_MINUTES,
+          pathogenId: pathogen.id,
         }
   );
 
@@ -126,7 +132,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
       sessionId,
       regionId: r.id,
       day: 1,
-      rt: r.startingRt,
+      rt: startingRtFor(r.startingRt, pathogen),
       cfrMultiplier: r.startingCfrMultiplier,
       confirmedCases: r.startingConfirmed,
       estimatedTrueCasesLow: r.startingEstTrueLow,
@@ -146,7 +152,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
     await db.insert(modelStateOptimal).values({
       sessionId,
       regionId: r.id,
-      rt: r.startingRt,
+      rt: startingRtFor(r.startingRt, pathogen),
       cfrMultiplier: r.startingCfrMultiplier,
       confirmedCases: r.startingConfirmed,
       estimatedTrueCasesLow: r.startingEstTrueLow,

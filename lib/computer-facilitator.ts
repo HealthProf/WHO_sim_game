@@ -72,6 +72,7 @@ async function fireEvents(sessionId: string, session: Session, gs: State, now: D
     targetHints,
     clock: gs,
     now: now.getTime(),
+    researchReady: gs.rdMilestone >= 3,
   });
   if (pacing.maxOpenPerTeam >= HARD_MAX_OPEN_PER_TEAM) return;
 

@@ -6,6 +6,8 @@ import { PillButton } from "@/components/ui/pill-button";
 import { AppFooter } from "@/components/app-footer";
 import type { RegionSetup } from "@/lib/region-setup";
 import type { CompetenceProfile } from "@/lib/autoplayer";
+import { PATHOGENS, PATHOGEN_IDS, type PathogenId } from "@/lib/pathogens";
+import { PathogenCard } from "@/components/pathogen-card";
 
 const PROFILE_HELP: Record<CompetenceProfile, string> = {
   strong: "Usually makes evidence-based, equitable calls.",
@@ -24,6 +26,7 @@ export default function ClassSetupPage() {
   const [regions, setRegions] = useState<RegionSetup[] | null>(null);
   const [duration, setDuration] = useState(75);
   const [started, setStarted] = useState(false);
+  const [pathogenId, setPathogenId] = useState<PathogenId>("ncov");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -34,6 +37,7 @@ export default function ClassSetupPage() {
         setRegions(j.regions);
         setDuration(j.targetDurationMinutes);
         setStarted(j.started);
+        setPathogenId(j.pathogenId);
       })
       .catch(() => setError("Couldn't load this session's setup."));
   }, [params.id]);
@@ -48,7 +52,7 @@ export default function ClassSetupPage() {
     const res = await fetch(`/api/sessions/${params.id}/setup`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ regions, durationMinutes: started ? undefined : duration }),
+      body: JSON.stringify({ regions, durationMinutes: started ? undefined : duration, pathogenId: started ? undefined : pathogenId }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -116,6 +120,26 @@ export default function ClassSetupPage() {
             {players} region{players === 1 ? "" : "s"} played by students, {6 - players} by the computer. Computer regions also
             react to how their region is doing: low trust or morale makes their calls worse.
           </p>
+        </section>
+
+        <section className="space-y-2">
+          <label htmlFor="pathogen" className="text-sm font-semibold text-text">
+            Pathogen {started ? "(locked once the game starts)" : "(drawn at random; change it if you like)"}
+          </label>
+          <select
+            id="pathogen"
+            value={pathogenId}
+            disabled={started}
+            onChange={(e) => setPathogenId(e.target.value as PathogenId)}
+            className="block rounded-full border-2 border-divider bg-bg px-4 py-2 text-sm"
+          >
+            {PATHOGEN_IDS.map((id) => (
+              <option key={id} value={id}>
+                {PATHOGENS[id].name} ({PATHOGENS[id].codeName})
+              </option>
+            ))}
+          </select>
+          <PathogenCard pathogenId={pathogenId} showSources />
         </section>
 
         {!started && (

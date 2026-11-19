@@ -13,6 +13,7 @@ import { submitDecision } from "../decisions";
 import { applyFastPathScore } from "../fast-path-scoring";
 import { runComputerFacilitator, scoreHumanSubmissions } from "../computer-facilitator";
 import { computerEconomyTurn } from "./economy";
+import { removedOptions } from "../disruptors";
 import { scriptedAutoplayer } from "./index";
 import { AUTOPLAY_STRUGGLING_MISS_CHANCE } from "../config";
 import type { RegionId } from "../regions";
@@ -57,6 +58,7 @@ async function respondAsAutoplayer(sessionId: string, region: typeof sessionRegi
       event,
       modelState: state,
       profile: region.profile,
+      unavailableOptions: [...removedOptions(dispatch.disruptionsJson, now).keys()],
     });
 
     const result = await submitDecision({

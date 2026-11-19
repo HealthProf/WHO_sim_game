@@ -8,6 +8,7 @@ import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { getTeamAnnouncements, getActiveGlobalAnnouncement } from "@/lib/announcements";
 import { projectForward } from "@/lib/projection";
+import { applyPathogenText, pathogenFor } from "@/lib/pathogens";
 import { computeSimClock } from "@/lib/sim-clock";
 import { computeFinalResults } from "@/lib/final-results";
 import { POLL_BACKOFF_MS } from "@/lib/config";
@@ -88,10 +89,10 @@ export async function GET(req: NextRequest) {
         ...s,
         confirmedCases: override ? override.confirmedCases : s.confirmedCases,
         deaths: override ? override.deaths : s.deaths,
-        profileMarkdown: r.profileMarkdown,
+        profileMarkdown: applyPathogenText(r.profileMarkdown, gs?.pathogenId),
         roleTitle: r.roleTitle,
         hqLocation: r.hqLocation,
-        projection: projectForward(s),
+        projection: projectForward(s, pathogenFor(gs?.pathogenId)),
       };
     }
     if (actor!.teamId) {

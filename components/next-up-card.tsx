@@ -35,6 +35,7 @@ export function NextUpCard({
   targetHints,
   autopilotEnabled,
   showAutopilot,
+  researchReady,
 }: {
   clock: GlobalClockFields;
   events: PacingEvent[];
@@ -43,6 +44,7 @@ export function NextUpCard({
   targetHints?: Record<string, string[]>;
   autopilotEnabled: boolean;
   showAutopilot: boolean;
+  researchReady?: boolean;
 }) {
   const qc = useQueryClient();
   const [now, setNow] = useState(() => Date.now());
@@ -61,7 +63,7 @@ export function NextUpCard({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard"] }),
   });
 
-  const p = computePacing({ events, dispatches, chainStatus, targetHints, clock, now });
+  const p = computePacing({ events, dispatches, chainStatus, targetHints, clock, now, researchReady });
   const statusText =
     p.status === "behind"
       ? `Behind ~${Math.round(p.minutesOffSchedule)} min`

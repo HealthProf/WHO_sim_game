@@ -15,6 +15,9 @@ import { TempoDial } from "@/components/tempo-dial";
 import { NextUpCard } from "@/components/next-up-card";
 import { PacingPanel, type PacingGlobalState } from "@/components/pacing-panel";
 import { SessionSettingsPanel, type SessionSettings } from "@/components/session-settings-panel";
+import { PathogenCard } from "@/components/pathogen-card";
+import { EventMap } from "@/components/event-map";
+import { ResearchSection } from "@/components/research-section";
 import type { FeatureUnlockState, GatedFeature } from "@/lib/feature-unlock";
 import { InterjectionPanel } from "@/components/interjection-panel";
 import { Chip, type ChipTone } from "@/components/ui/chip";
@@ -55,6 +58,7 @@ interface EventsData {
   teams: TeamRef[];
   targetHints: Record<string, string[]>;
   mode?: "instructor" | "demo";
+  chainLinks?: { from: string; to: string }[];
 }
 
 interface DashboardData {
@@ -66,6 +70,8 @@ interface DashboardData {
     intensityMultiplier: number;
     autopilotEnabled: boolean;
     computerFacilitator: boolean;
+    pathogenId: string;
+    rdMilestone: number;
   };
 }
 
@@ -98,8 +104,8 @@ export default function ControlPage() {
   });
 
   const dispatchEvent = useMutation({
-    mutationFn: ({ eventId, targetRegionIds }: { eventId: string; targetRegionIds: string[] }) =>
-      apiFetch("/api/events", { method: "POST", body: JSON.stringify({ eventId, targetRegionIds }) }),
+    mutationFn: ({ eventId, targetRegionIds, force }: { eventId: string; targetRegionIds: string[]; force?: boolean }) =>
+      apiFetch("/api/events", { method: "POST", body: JSON.stringify({ eventId, targetRegionIds, force }) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["events"] });
       setPickerOpenFor(null);
@@ -196,9 +202,14 @@ export default function ControlPage() {
         chainStatus={data.chainStatus}
         targetHints={data.targetHints}
         autopilotEnabled={dash.globalState.autopilotEnabled}
+        researchReady={dash.globalState.rdMilestone >= 3}
         showAutopilot={data.mode === "instructor" || !dash.globalState.computerFacilitator}
       />
       <PacingPanel state={dash.globalState} openEventCount={new Set(activeDeadlines.map((a) => a.dispatch.eventId)).size} />
+      <PathogenCard pathogenId={dash.globalState.pathogenId} showSources />
+      <section className="rounded-lg bg-surface p-5">
+        <ResearchSection canContribute={false} />
+      </section>
       <SessionSettingsPanel settings={dash.globalState} unlocks={dash.featureUnlocks} />
       <DirectorTimeline state={dash.globalState} events={data.events} dispatches={data.dispatches} />
       <TempoDial intensityMultiplier={dash.globalState.intensityMultiplier} />
@@ -254,6 +265,8 @@ export default function ControlPage() {
       <BudgetCyclePanel />
       <MarketApprovalPanel />
       <EmergencyFundingPanel />
+
+      <EventMap events={data.events} dispatches={data.dispatches} chainStatus={data.chainStatus} chainLinks={data.chainLinks ?? []} targetHints={data.targetHints} />
 
       {/* Event queue, grouped by day */}
       <section>
@@ -332,7 +345,28 @@ export default function ControlPage() {
                           >
                             {dispatches.length > 0 ? "Re-dispatch" : "Dispatch Now"}
                           </PillButton>
-                          {!chain?.ok && <span className="text-xs text-accent-700">Blocked: {chain.blockedBy.join(", ")}</span>}
+                          {!chain?.ok && (
+                            <>
+                              <span className="text-xs text-accent-700">Waiting on: {chain.blockedBy.join(", ")}</span>
+                              {/* Release 5: the facilitator can always deploy an event,
+                                  with a clear warning about what it skips. */}
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-accent-700 underline hover:text-accent-600"
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `${e.id} normally waits until ${chain.blockedBy.join(", ")} ${chain.blockedBy.length === 1 ? "is" : "are"} resolved for every team. Its story may assume those outcomes. Fire it anyway (to ${(targetHint ?? e.suggestedTargetRegions ?? ALL_REGIONS).join(", ")})?`
+                                    )
+                                  ) {
+                                    dispatchEvent.mutate({ eventId: e.id, targetRegionIds: targetHint ?? e.suggestedTargetRegions ?? [...ALL_REGIONS], force: true });
+                                  }
+                                }}
+                              >
+                                Fire anyway
+                              </button>
+                            </>
+                          )}
                           {allScored && <span className="text-xs font-semibold text-accent-2-700">All scored</span>}
                         </div>
                       </div>

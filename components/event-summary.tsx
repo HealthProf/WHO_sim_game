@@ -1,6 +1,7 @@
 import { eventSummaries } from "@/lib/db/seed-data/event-summaries";
 import { advisoryOpinions } from "@/lib/db/seed-data/advisory-opinions";
 import { expectedRange } from "@/lib/outcome-variance";
+import { applyPathogenText } from "@/lib/pathogens";
 import { FIELD_LABEL, formatEffect, isGood, splitByAudience } from "@/lib/effect-labels";
 import type { ModelDelta, OptionCost, Tier } from "@/lib/db/seed-data/events";
 
@@ -27,12 +28,14 @@ export function EventSummary({
   modelDeltaJson,
   ownRegionId,
   showExpectedEffects,
+  pathogenId,
 }: {
   eventId: string;
   options: SummaryOption[] | null;
   modelDeltaJson: Record<string, ModelDelta[]> | null;
   ownRegionId: string | null | undefined;
   showExpectedEffects: boolean;
+  pathogenId?: string | null;
 }) {
   const summary = eventSummaries[eventId];
   const advisors = advisoryOpinions[eventId] ?? [];
@@ -51,7 +54,7 @@ export function EventSummary({
           <ul className="mt-1 space-y-0.5 text-xs">
             {advisors.map((a) => (
               <li key={a.role}>
-                <span className="font-semibold">{a.role}:</span> {firstSentence(a.opinion)}
+                <span className="font-semibold">{a.role}:</span> {firstSentence(applyPathogenText(a.opinion, pathogenId))}
               </li>
             ))}
           </ul>

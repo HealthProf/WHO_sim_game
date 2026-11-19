@@ -3,6 +3,7 @@
 import { PledgesSection } from "@/components/pledges-section";
 import { EmergencyFundingSection } from "@/components/emergency-funding-section";
 import { FeatureLockNotice } from "@/components/feature-lock-notice";
+import { ResearchSection } from "@/components/research-section";
 
 // Release 2: pledges and emergency funding on one page (playtest request).
 // Both are "send or ask for help" between regions; the WHO HQ marketplace
@@ -13,7 +14,8 @@ export default function PledgesAndFundingPage() {
       <div>
         <h1 className="font-heading text-[32px] text-text">Pledges &amp; Funding</h1>
         <p className="mt-1 text-sm text-neutral-700">
-          Give resources to another region directly, or ask everyone (including WHO HQ) for emergency funding.{" "}
+          Give resources to another region directly, ask everyone (including WHO HQ) for emergency funding, or pool
+          money into shared research.{" "}
           <a href="#funding" className="font-medium text-accent-700 underline">
             Jump to emergency funding
           </a>
@@ -23,6 +25,8 @@ export default function PledgesAndFundingPage() {
         <PledgesSection />
         <div className="h-px bg-divider" />
         <EmergencyFundingSection />
+        <div className="h-px bg-divider" />
+        <ResearchSection canContribute />
       </FeatureLockNotice>
     </div>
   );

@@ -15,6 +15,7 @@ import { maybeAnnounceResolution, announceDecisionRevealed } from "./announcemen
 import { maybeStakeholderReact } from "./stakeholders";
 import type { Tier, ModelDelta } from "./db/seed-data/events";
 import { varyDeltas } from "./outcome-variance";
+import { applyDisruptionConsequences } from "./disruptors";
 
 export async function applyFastPathScore(opts: {
   sessionId: string;
@@ -86,6 +87,10 @@ export async function applyFastPathScore(opts: {
     tier,
   });
   await maybeStakeholderReact(sessionId, decision.teamId, tier);
+  const dispatchRow = await db.query.eventDispatches.findFirst({ where: and(eq(eventDispatches.sessionId, sessionId), eq(eventDispatches.id, decision.eventDispatchId)) });
+  if (dispatchRow) {
+    await applyDisruptionConsequences({ sessionId, dispatch: dispatchRow, structuredChoice: decision.structuredChoice, submittedAt: decision.submittedAt, regionId });
+  }
 
   await db.update(eventDispatches).set({ status: "scored" }).where(eq(eventDispatches.id, decision.eventDispatchId));
   await maybeAnnounceResolution(sessionId, event.id);

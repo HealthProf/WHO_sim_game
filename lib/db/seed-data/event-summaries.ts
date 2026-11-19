@@ -32,5 +32,9 @@ export const eventSummaries: Record<string, string> = {
   "EVT-022": "Morale has collapsed below 15 and health workers are walking off shifts. Choose an emergency response.",
   "EVT-023": "Political tension with member states is above 60 and relations are getting strained. Choose how to respond.",
   "EVT-024": "Tension is above 75 and a member state has suspended data sharing. Choose how to resolve the standoff.",
+  "EVT-026": "The fast-tracked countermeasure is meeting heavy hesitancy. Decide how to rebuild confidence without making it worse.",
+  "EVT-027": "Labs have found samples resistant to standard treatment. Decide how fast to share the findings and what to change in treatment now.",
+  "EVT-028": "A huge PPE factory burned down and prices tripled. Decide how to secure PPE: together with other regions, alone, or by restricting exports.",
+  "EVT-029": "Tens of thousands of people are heading for your borders. Decide how to manage the crossings safely.",
   "EVT-025": "Tension is above 90 and a member state has suspended cooperation; you're cut off from the WHO HQ marketplace and emergency funding while this lasts. Choose an emergency response.",
 };

@@ -16,6 +16,7 @@ import { LockIcon } from "@/components/feature-lock-notice";
 import { RegionAvatar } from "@/components/region-avatar";
 import { StartTourButton } from "@/components/guided-tour";
 import { moodFor } from "@/lib/avatar-mood";
+import { pathogenFor } from "@/lib/pathogens";
 import type { StructuredOption } from "@/lib/db/seed-data/events";
 
 interface RailDashboardData {
@@ -134,7 +135,7 @@ export function TeamRail({
         <div className="flex gap-4 overflow-x-auto border-t border-neutral-800 px-4 py-2 text-[12px] text-neutral-400" aria-label="Your ledger">
           <CompactStat label="Fund" value={`$${(dash.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
           <CompactStat label="PPE" value={`${dash.ownRegion.ppeDaysRemaining}d`} />
-          <CompactStat label="AV" value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
+          <CompactStat label={pathogenFor((dash.globalState as { pathogenId?: string }).pathogenId).countermeasure.label} value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
           <CompactStat label="Rt" value={dash.ownRegion.rt.toFixed(2)} />
           <CompactStat label="Trust" value={`${dash.ownRegion.publicTrustIndex} ${bandFor("publicTrust", dash.ownRegion.publicTrustIndex).label}`} />
           <CompactStat label="Tension" value={`${dash.ownRegion.politicalTensionIndex} ${bandFor("politicalTension", dash.ownRegion.politicalTensionIndex).label}`} />
@@ -268,7 +269,7 @@ function RailContents({
           <div className="space-y-1.5">
             <LedgerRow label="Fund" value={`$${(dash.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
             <LedgerRow label="PPE days" value={dash.ownRegion.ppeDaysRemaining} />
-            <LedgerRow label="Antivirals" value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
+            <LedgerRow label={pathogenFor((dash.globalState as { pathogenId?: string }).pathogenId).countermeasure.label} value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
             <LedgerRow label="HCW surge" value={`${dash.ownRegion.hcwSurgePct}%`} />
             <div className="my-1.5 h-px bg-neutral-700" />
             <LedgerRow

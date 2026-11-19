@@ -319,6 +319,16 @@ export const sessionState = pgTable("session_state", {
   // requests, ends the game). Solo sessions start with it on (the original
   // demo behavior); choosing to be the facilitator turns it off.
   computerFacilitator: boolean("computer_facilitator").notNull().default(false),
+  // Release 5: which pathogen this game is about (lib/pathogens.ts). Drawn
+  // at random at creation; the facilitator can change it before the start.
+  pathogenId: text("pathogen_id").notNull().default("ncov"),
+  // Release 5 shared R&D fund (lib/research.ts): total pooled, per-region
+  // contributions ({ AFRO: 5000000, ... }), the highest milestone reached
+  // (0-3), and whether the "rushed vaccine" trust backlash has been rolled.
+  rdFund: integer("rd_fund").notNull().default(0),
+  rdContributions: jsonb("rd_contributions").notNull().default({}),
+  rdMilestone: integer("rd_milestone").notNull().default(0),
+  rdBacklashRolled: boolean("rd_backlash_rolled").notNull().default(false),
   // resultsRevealForced: false (default) = each team has its own "show how
   // this affected the world" toggle on a scored event, starting off; true =
   // always shown to every team, no toggle.
@@ -547,6 +557,10 @@ export const eventDispatches = pgTable(
     status: dispatchStatusEnum("status").notNull().default("dispatched"),
     revealedToPublic: boolean("revealed_to_public").notNull().default(false),
     dispatchedByUserId: integer("dispatched_by_user_id").references(() => users.id),
+    // Release 5 mid-event disruptors (lib/disruptors.ts) planned for this
+    // dispatch at release time: [{ id, at }]. Each takes effect at its "at"
+    // time; null/empty = none drawn.
+    disruptionsJson: jsonb("disruptions_json"),
   },
   (t) => [index("event_dispatches_session_idx").on(t.sessionId)]
 );

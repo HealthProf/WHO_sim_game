@@ -24,6 +24,7 @@ import { db } from "../db";
 import { modelState, modelStateOptimal, modelStateHistory, sessionState } from "../db/schema";
 import { and, eq } from "drizzle-orm";
 import { clamp, applyFieldDelta, recomputeEscalationState } from "./core";
+import { pathogenFor } from "../pathogens";
 
 const DRIFT_RATE_PER_MINUTE = 0.015; // Rt units per real minute, per region
 const DRIFT_BATCH_MINUTES = 2;
@@ -74,17 +75,22 @@ export function confirmedCaseCeiling(regionId: string, surveillanceIndex: number
   return population * BASE_CONFIRMED_CEILING_PCT * detectionMultiplier;
 }
 
+// Release 5: serial interval and base CFR come from the session's pathogen
+// (lib/pathogens.ts); defaults are the coronavirus values above.
 export function computeEpidemicGrowth(
   before: { rt: number; cfrMultiplier: number; confirmedCases: number; estimatedTrueCasesLow: number; estimatedTrueCasesHigh: number },
   elapsedNarrativeDays: number,
-  ceiling: number
+  ceiling: number,
+  pathogen: { serialIntervalDays: number; baseCfr: number } = { serialIntervalDays: SERIAL_INTERVAL_DAYS, baseCfr: BASE_CFR }
 ) {
-  const rPerDay = Math.log(Math.max(before.rt, 0.01)) / SERIAL_INTERVAL_DAYS;
+  const rPerDay = Math.log(Math.max(before.rt, 0.01)) / pathogen.serialIntervalDays;
   const logisticHeadroom = ceiling > 0 ? clamp(1 - before.confirmedCases / ceiling, 0, 1) : 1;
   const newConfirmedRaw = rPerDay * before.confirmedCases * logisticHeadroom * elapsedNarrativeDays;
   const newConfirmed = clamp(Math.round(newConfirmedRaw), 0, Math.max(0, ceiling - before.confirmedCases));
   const trueCaseGrowthFactor = before.confirmedCases > 0 ? (before.confirmedCases + newConfirmed) / before.confirmedCases : 1;
-  const newDeaths = Math.max(0, Math.round(newConfirmed * BASE_CFR * before.cfrMultiplier));
+  // Capped so a very lethal pathogen in a low-capacity region can't exceed
+  // 95% of new cases.
+  const newDeaths = Math.max(0, Math.round(newConfirmed * Math.min(0.95, pathogen.baseCfr * before.cfrMultiplier)));
   return {
     newConfirmed,
     newDeaths,
@@ -102,6 +108,7 @@ export async function applyPassiveDrift(
     escalationState?: string;
     gameDaysPerRealMinute?: number;
     intensityMultiplier?: number;
+    pathogenId?: string;
   }
 ) {
   const state = gs ?? (await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) }));
@@ -113,7 +120,8 @@ export async function applyPassiveDrift(
   if (elapsedMinutes < DRIFT_BATCH_MINUTES) return;
 
   const intensity = state.intensityMultiplier && state.intensityMultiplier > 0 ? state.intensityMultiplier : 1.0;
-  const rtDelta = DRIFT_RATE_PER_MINUTE * elapsedMinutes * intensity;
+  const pathogen = pathogenFor(state.pathogenId);
+  const rtDelta = DRIFT_RATE_PER_MINUTE * elapsedMinutes * intensity * pathogen.driftScale;
   const escalationState =
     state.escalationState ??
     (await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) }))?.escalationState ??
@@ -132,7 +140,7 @@ export async function applyPassiveDrift(
     await applyFieldDelta(sessionId, region.id, "rt", rtDelta);
 
     const ceiling = confirmedCaseCeiling(region.id, before.surveillanceIndex);
-    const growth = computeEpidemicGrowth(before, elapsedNarrativeDays, ceiling);
+    const growth = computeEpidemicGrowth(before, elapsedNarrativeDays, ceiling, pathogen);
     const happinessLoss = Math.round(happinessDrain * elapsedMinutes + growth.newDeaths * 0.05);
 
     await db
@@ -172,7 +180,7 @@ export async function applyPassiveDrift(
       // current value (surveillance capacity is regional infrastructure,
       // not something an idealized counterfactual would differ on) and thus
       // the same ceiling computed above for the real trajectory.
-      const shadowGrowth = computeEpidemicGrowth({ ...shadow, rt: shadow.rt }, elapsedNarrativeDays, ceiling);
+      const shadowGrowth = computeEpidemicGrowth({ ...shadow, rt: shadow.rt }, elapsedNarrativeDays, ceiling, pathogen);
       const shadowHappinessLoss = Math.round(happinessDrain * elapsedMinutes + shadowGrowth.newDeaths * 0.05);
       await db
         .update(modelStateOptimal)

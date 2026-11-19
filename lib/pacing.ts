@@ -49,6 +49,9 @@ export interface PacingInput {
   targetHints?: Record<string, string[]>;
   clock: GlobalClockFields;
   now?: number;
+  // Release 5: the shared R&D fund reached its final milestone, so the
+  // vaccine allocation event can be released ahead of its slot.
+  researchReady?: boolean;
 }
 
 export interface Recommendation {
@@ -203,6 +206,25 @@ export function computePacing(input: PacingInput): PacingResult {
           hint && hint.length > 0
             ? `${hint.join("/")} currently meet${hint.length === 1 ? "s" : ""} this event's trigger.`
             : `You have room before the next required event; fits Act ${e.day}.`,
+        targetRegions: targetsFor(e, input.targetHints),
+      });
+    }
+  }
+
+  // Shared R&D delivered a countermeasure early: offer the vaccine event now.
+  const EARLY_EVENT = "EVT-006";
+  if (input.researchReady && started && !firedIds.has(EARLY_EVENT) && next?.eventId !== EARLY_EVENT) {
+    const e = input.events.find((x) => x.id === EARLY_EVENT);
+    if (e) {
+      const blocked = input.chainStatus[EARLY_EVENT]?.ok === false;
+      optional.unshift({
+        eventId: e.id,
+        title: e.title,
+        isCorePath: e.isCorePath,
+        dueInMinutes: null,
+        reason: blocked
+          ? `Research funding made doses available early, but it still waits on ${input.chainStatus[EARLY_EVENT].blockedBy.join(", ")}.`
+          : "Research funding made doses available early; you can release this now instead of waiting for its slot.",
         targetRegions: targetsFor(e, input.targetHints),
       });
     }

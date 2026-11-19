@@ -139,6 +139,7 @@ export async function GET(req: NextRequest) {
     totalGameDays: gs?.totalGameDays,
     // Release 4: time series for the projector's line chart and spotlight.
     history: historyForPublic(await buildSessionHistory(sessionId)),
+    pathogenId: gs?.pathogenId,
     clockAnchorElapsedMs: gs?.clockAnchorElapsedMs,
     clockAnchorGameDays: gs?.clockAnchorGameDays,
     targetDurationMinutes: gs?.targetDurationMinutes,

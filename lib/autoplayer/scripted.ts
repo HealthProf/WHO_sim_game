@@ -169,8 +169,9 @@ export const scriptedAutoplayer: AutoplayerBackend = {
       };
     }
 
-    const affordable = options.filter((o) => canAfford(o.cost, modelState));
-    const pool = affordable.length > 0 ? affordable : options;
+    const available = options.filter((o) => !(ctx.unavailableOptions ?? []).includes(o.label));
+    const affordable = available.filter((o) => canAfford(o.cost, modelState));
+    const pool = affordable.length > 0 ? affordable : available.length > 0 ? available : options;
 
     const sampledTier = sampleTier(profile, modelState);
     let candidates = pool.filter((o) => o.suggestedTier === sampledTier);

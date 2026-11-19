@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { eventDispatches, instructorActions, globalFeedItems, teams } from "@/lib/db/schema";
+import { eventDispatches, instructorActions, globalFeedItems, teams, sessionState } from "@/lib/db/schema";
+import { applyPathogenText } from "@/lib/pathogens";
+import { visibleDisruptions } from "@/lib/disruptors";
 import { and, eq } from "drizzle-orm";
 import { requireActor, requireInstructorActor } from "@/lib/session-context";
 import { computeAllChainStatus } from "@/lib/chain";
@@ -14,7 +16,15 @@ export async function GET() {
   if (error) return error;
   const sessionId = actor!.sessionId;
 
-  const allEvents = await db.query.events.findMany();
+  // Release 5: event text names this session's pathogen (lib/pathogens.ts).
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  const pt = (t: string) => applyPathogenText(t, gs?.pathogenId);
+  const allEvents = (await db.query.events.findMany()).map((e) => ({
+    ...e,
+    narrativeMarkdown: pt(e.narrativeMarkdown),
+    decisionPromptMarkdown: pt(e.decisionPromptMarkdown),
+    structuredOptionsJson: (e.structuredOptionsJson as { text: string; impactDesc: string }[] | null)?.map((o) => ({ ...o, text: pt(o.text), impactDesc: pt(o.impactDesc) })) ?? null,
+  }));
   const allDispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.sessionId, sessionId) });
 
   const chainStatus = await computeAllChainStatus(sessionId, allEvents.map((e) => e.id));
@@ -29,10 +39,15 @@ export async function GET() {
       teams: allTeams.map((t) => ({ id: t.id, regionId: t.regionId })),
       targetHints,
       mode: actor!.mode,
+      // Release 5 event map: prerequisite links between events (global).
+      chainLinks: (await db.query.eventChainLinks.findMany()).map((l) => ({ from: l.prevEventId, to: l.nextEventId })),
     });
   }
 
-  const myDispatches = allDispatches.filter((d) => d.targetTeamId === actor!.teamId);
+  const now = new Date();
+  const myDispatches = allDispatches
+    .filter((d) => d.targetTeamId === actor!.teamId)
+    .map((d) => ({ ...d, disruptionsJson: visibleDisruptions(d.disruptionsJson, now) }));
   return NextResponse.json({ events: allEvents, dispatches: myDispatches, chainStatus });
 }
 
@@ -57,6 +72,7 @@ export async function POST(req: NextRequest) {
     dispatchedByUserId: actor!.userId,
     actionUserId: actor!.userId!,
     reason: body.reason ?? null,
+    force: body.force === true,
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ dispatches: result.dispatches });

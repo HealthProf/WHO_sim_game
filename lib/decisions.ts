@@ -5,6 +5,7 @@
 // logic and history trail a human submission would. Never a parallel
 // simulation of "what a submission would do."
 import { db } from "./db";
+import { removedOptions } from "./disruptors";
 import { decisions, eventDispatches, events, modelState, teams, modelStateHistory } from "./db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import type { OptionCost, StructuredOption } from "./db/seed-data/events";
@@ -101,6 +102,12 @@ export async function submitDecision(opts: SubmitDecisionOpts): Promise<SubmitDe
 
   const event = await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) });
   if (!event) return { error: "Event not found" };
+  // Release 5 disruptors: an option taken off the table mid-event can't be
+  // submitted after that moment (lib/disruptors.ts).
+  if (structuredChoice) {
+    const removed = removedOptions(dispatch.disruptionsJson).get(structuredChoice);
+    if (removed) return { error: `Option ${structuredChoice} is no longer available: ${removed.headline}.` };
+  }
 
   if (event.isAllocationEvent) {
     const allocation = opts.resourceAllocationJson as Record<string, number> | undefined;

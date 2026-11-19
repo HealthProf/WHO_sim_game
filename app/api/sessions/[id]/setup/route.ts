@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { gameSessions, sessionState, instructorActions } from "@/lib/db/schema";
+import { gameSessions, sessionState, instructorActions, modelState, modelStateOptimal } from "@/lib/db/schema";
+import { PATHOGEN_IDS, pathogenFor, startingRtFor, type PathogenId } from "@/lib/pathogens";
+import { regionSeed } from "@/lib/db/seed-data/regions";
 import { and, eq, ne } from "drizzle-orm";
 import { getRegionSetup, parseRegionSetup, saveRegionSetup } from "@/lib/region-setup";
 import { planDurationChange } from "@/lib/game-duration";
@@ -28,6 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({
     regions: await getRegionSetup(id),
     targetDurationMinutes: gs?.targetDurationMinutes ?? 75,
+    pathogenId: gs?.pathogenId ?? "ncov",
     started: !!gs?.simulationStartedAt,
   });
 }
@@ -51,6 +54,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, id) });
     if (gs && Number.isFinite(minutes) && minutes > 0) {
       await db.update(sessionState).set({ ...planDurationChange(gs, minutes), updatedAt: new Date() }).where(eq(sessionState.sessionId, id));
+    }
+  }
+  // Release 5: the pathogen can be changed before the game starts; starting
+  // Rt is re-derived for it (nothing has happened yet, so nothing is lost).
+  if (typeof body.pathogenId === "string" && PATHOGEN_IDS.includes(body.pathogenId as PathogenId)) {
+    const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, id) });
+    if (gs && !gs.simulationStartedAt && gs.pathogenId !== body.pathogenId) {
+      const p = pathogenFor(body.pathogenId);
+      await db.update(sessionState).set({ pathogenId: p.id, updatedAt: new Date() }).where(eq(sessionState.sessionId, id));
+      for (const r of regionSeed) {
+        const rt = startingRtFor(r.startingRt, p);
+        await db.update(modelState).set({ rt }).where(and(eq(modelState.sessionId, id), eq(modelState.regionId, r.id)));
+        await db.update(modelStateOptimal).set({ rt }).where(and(eq(modelStateOptimal.sessionId, id), eq(modelStateOptimal.regionId, r.id)));
+      }
     }
   }
   await bumpStateVersion(id);
