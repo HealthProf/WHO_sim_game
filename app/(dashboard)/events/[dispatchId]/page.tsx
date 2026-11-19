@@ -10,13 +10,17 @@ import { KeyTerms } from "@/components/key-terms";
 import { AdvisoryBoard } from "@/components/advisory-board";
 import { EventStatusBadge } from "@/components/event-status-badge";
 import { GlossaryText } from "@/components/glossary-text";
+import { EventSummary } from "@/components/event-summary";
+import { EventResult } from "@/components/event-result";
+import type { ModelDelta } from "@/lib/db/seed-data/events";
+import { effectiveMinWords, wordCount } from "@/lib/auto-grade";
 import { affordabilityIssue, formatCost, type OwnRegionResources } from "@/lib/affordability";
 import type { StructuredOption as FullStructuredOption } from "@/lib/db/seed-data/events";
 import { REGIONS } from "@/lib/regions";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PillButton } from "@/components/ui/pill-button";
 
-type StructuredOption = Pick<FullStructuredOption, "label" | "text" | "cost" | "impactDesc">;
+type StructuredOption = Pick<FullStructuredOption, "label" | "text" | "cost" | "impactDesc" | "suggestedTier">;
 
 interface EventFull {
   id: string;
@@ -25,6 +29,7 @@ interface EventFull {
   decisionPromptMarkdown: string;
   minRationaleWords: number;
   structuredOptionsJson: StructuredOption[] | null;
+  modelDeltaJson: Record<string, ModelDelta[]> | null;
   isAllocationEvent: boolean;
   deadlineType: string;
 }
@@ -47,7 +52,10 @@ export default function EventDetailPage() {
   const { data: dash } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () =>
-      apiFetch<{ globalState: { gameDaysPerRealMinute: number }; ownRegion: OwnRegionResources | null }>("/api/dashboard"),
+      apiFetch<{
+        globalState: { gameDaysPerRealMinute: number; showExpectedEffects?: boolean; resultsRevealForced?: boolean };
+        ownRegion: (OwnRegionResources & { regionId: string }) | null;
+      }>("/api/dashboard"),
     refetchInterval: 15000,
   });
 
@@ -88,6 +96,9 @@ export default function EventDetailPage() {
   if (!dispatch || !event) return <p className="text-neutral-700">Event not found.</p>;
 
   const allocationTotal = Object.values(allocation).reduce((a, b) => a + b, 0);
+  const minWords = effectiveMinWords(event.minRationaleWords);
+  const rationaleWords = wordCount(rationale);
+  const rationaleShort = minWords > 0 && rationaleWords < minWords;
   const alreadyResolved = dispatch.status === "scored" || dispatch.status === "closed";
 
   return (
@@ -103,6 +114,14 @@ export default function EventDetailPage() {
         )}
       </div>
 
+      <EventSummary
+        eventId={event.id}
+        options={event.structuredOptionsJson}
+        modelDeltaJson={event.modelDeltaJson}
+        ownRegionId={dash?.ownRegion?.regionId}
+        showExpectedEffects={dash?.globalState.showExpectedEffects ?? true}
+      />
+
       <section className="rounded-lg bg-surface p-4 text-[16px] leading-[1.6] text-neutral-800">
         <GlossaryText className="whitespace-pre-wrap" text={event.narrativeMarkdown} />
       </section>
@@ -116,7 +135,10 @@ export default function EventDetailPage() {
       <AdvisoryBoard eventId={event.id} />
 
       {alreadyResolved ? (
-        <p className="text-sm font-medium text-accent-2-700">This event has been scored and closed.</p>
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-accent-2-700">This event has been scored and closed.</p>
+          <EventResult dispatchId={dispatchId} ownRegionId={dash?.ownRegion?.regionId} forced={!!dash?.globalState.resultsRevealForced} />
+        </div>
       ) : (
         <form
           onSubmit={(e) => {
@@ -232,18 +254,30 @@ export default function EventDetailPage() {
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-semibold text-text">Rationale (optional, but strongly encouraged — this is what the instructor scores)</p>
+            <label htmlFor="rationale" className="mb-1 block text-sm font-semibold text-text">
+              Rationale{minWords > 0 ? ` (2-5 sentences, at least ${minWords} words)` : " (optional)"}
+            </label>
+            <p className="mb-2 text-xs text-neutral-700">
+              Say why, covering the evidence, what&apos;s politically and economically realistic, and who is most affected. Your
+              grade is built from these three.
+            </p>
             <textarea
+              id="rationale"
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
-              rows={8}
+              rows={5}
+              aria-describedby="rationale-count"
               className="w-full rounded-lg border-2 border-divider bg-bg px-[18px] py-[14px] text-[15px]"
             />
+            <p id="rationale-count" className={`mt-1 text-xs ${rationaleShort ? "text-accent-800" : "text-accent-2-700"}`} aria-live="polite">
+              {rationaleWords} word{rationaleWords === 1 ? "" : "s"}
+              {minWords > 0 && (rationaleShort ? ` · ${minWords - rationaleWords} more needed` : " · enough")}
+            </p>
           </div>
 
           {error && <p className="text-sm font-medium text-accent-800">{error}</p>}
 
-          <PillButton type="submit" disabled={submit.isPending} tone="accent" className="px-[30px] py-3">
+          <PillButton type="submit" disabled={submit.isPending || rationaleShort} tone="accent" className="px-[30px] py-3">
             {submit.isPending ? "Submitting..." : "Submit Decision"}
           </PillButton>
         </form>

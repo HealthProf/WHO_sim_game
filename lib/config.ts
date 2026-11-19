@@ -150,3 +150,24 @@ export const DECISION_TIME_MIN_MULTIPLIER = 0.5;
 export const DECISION_TIME_MAX_MULTIPLIER = 2.0;
 // "Add time" button on the Command Center: extends every open event by this.
 export const EXTEND_OPEN_EVENTS_MINUTES = 2;
+
+// --- Release 2: rationale, grading, outcomes, feature phase-in ---
+// Required rationale length, capped from the source design's 150-400 words
+// to roughly 2-5 sentences so teams can actually write it inside a 7-11
+// minute window (lib/auto-grade.ts effectiveMinWords). Enforced on team
+// submissions only (app/api/decisions); computer players are exempt.
+export const RATIONALE_MIN_WORDS_CAP = 40;
+// Optional "auto-accept provisional scores" (facilitator toggle): a team's
+// submission is scored automatically this long after it arrives, unless it
+// needs review, so slow scoring can't stall prerequisite chains.
+export const AUTO_ACCEPT_GRACE_SECONDS = 60;
+// Outcome variance: the realized effect of a scored decision on Rt, CFR, and
+// the social indices is the designed delta times a random factor in
+// [1 - v, 1 + v]. Costs (fund, PPE, antivirals) are never varied, and the
+// "what if every call were Optimal" shadow model stays deterministic.
+export const OUTCOME_VARIANCE = 0.3;
+// Phased feature unlock (class sessions): pledges and emergency funding open
+// once this many distinct events have been fired, marketplace and trades
+// after the second number. The facilitator can open everything early.
+export const UNLOCK_PLEDGES_AFTER_EVENTS = 3;
+export const UNLOCK_MARKET_AFTER_EVENTS = 5;

@@ -11,9 +11,12 @@ import { RoleSwitcher } from "@/components/role-switcher";
 import { EndSessionButton } from "@/components/end-session-button";
 import { affordabilityIssue, type OwnRegionResources } from "@/lib/affordability";
 import { bandFor, type IndexMetric } from "@/lib/index-bands";
+import type { FeatureUnlockState, GatedFeature } from "@/lib/feature-unlock";
+import { LockIcon } from "@/components/feature-lock-notice";
 import type { StructuredOption } from "@/lib/db/seed-data/events";
 
 interface RailDashboardData {
+  featureUnlocks?: Record<GatedFeature, FeatureUnlockState>;
   globalState: GlobalClockFields;
   ownRegion: {
     regionId: string;
@@ -36,9 +39,8 @@ const NAV_ITEMS = [
   { label: "Situation", href: "/dashboard" },
   { label: "Events", href: "/events" },
   { label: "Coordination", href: "/coordination" },
-  { label: "Pledges", href: "/pledges" },
-  { label: "Marketplace", href: "/marketplace" },
-  { label: "Funding", href: "/emergency-funding" },
+  { label: "Pledges & Funding", href: "/pledges", feature: "pledges" as const },
+  { label: "Marketplace", href: "/marketplace", feature: "market" as const },
   { label: "Briefing", href: "/briefing" },
   { label: "Summary", href: "/summary" },
 ];
@@ -283,6 +285,12 @@ function RailContents({
                 }
               >
                 {item.label}
+                {"feature" in item && item.feature && dash?.featureUnlocks?.[item.feature] && !dash.featureUnlocks[item.feature].open && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-[12px] text-neutral-500" title={dash.featureUnlocks[item.feature].message ?? ""}>
+                    <LockIcon />
+                    <span className="sr-only">locked</span>
+                  </span>
+                )}
                 {item.label === "Events" && awaitingCount > 0 && (
                   <span className="ml-2 rounded-full bg-accent-700 px-2 py-0.5 text-[12px] font-bold text-white">{awaitingCount}</span>
                 )}

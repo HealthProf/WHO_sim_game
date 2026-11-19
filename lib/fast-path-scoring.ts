@@ -13,7 +13,8 @@ import { applyModelDelta, applyOptimalShadowDelta } from "./model-engine";
 import { pushConsequence } from "./consequences";
 import { maybeAnnounceResolution, announceDecisionRevealed } from "./announcements";
 import { maybeStakeholderReact } from "./stakeholders";
-import type { Tier } from "./db/seed-data/events";
+import type { Tier, ModelDelta } from "./db/seed-data/events";
+import { varyDeltas } from "./outcome-variance";
 
 export async function applyFastPathScore(opts: {
   sessionId: string;
@@ -48,16 +49,18 @@ export async function applyFastPathScore(opts: {
     scoredByUserId,
   });
 
-  const deltaJson = (event.modelDeltaJson as Record<string, unknown[]>) ?? {};
-  const deltas = deltaJson[tier] ?? [];
+  const deltaJson = (event.modelDeltaJson as Record<string, ModelDelta[]>) ?? {};
+  // Same outcome variance as a facilitator-scored decision (Release 2).
+  const deltas = varyDeltas(deltaJson[tier] ?? []);
+  await db.update(scores).set({ appliedDeltasJson: deltas }).where(and(eq(scores.sessionId, sessionId), eq(scores.decisionId, decision.id)));
 
   await applyModelDelta({
     sessionId,
-    deltas: deltas as never,
+    deltas,
     submittingRegionId: regionId,
     reason: `${event.id} fast-pathed: ${tier} auto-applied`,
   });
-  await applyOptimalShadowDelta(sessionId, (deltaJson.OPTIMAL as never) ?? [], regionId);
+  await applyOptimalShadowDelta(sessionId, deltaJson.OPTIMAL ?? [], regionId);
 
   const afterState = await db.query.modelState.findFirst({
     where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)),
@@ -69,7 +72,7 @@ export async function applyFastPathScore(opts: {
     teamId: decision.teamId,
     regionId,
     tier,
-    deltas: deltas as never,
+    deltas,
     actorUserId: scoredByUserId,
     afterState: afterState ?? undefined,
   });

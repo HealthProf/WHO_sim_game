@@ -15,6 +15,7 @@ import { checkSocialMilestones } from "./social-thresholds";
 import { applyFastPathScore } from "./fast-path-scoring";
 import { runAutoplayer } from "./autoplayer/run";
 import { runAutopilot } from "./autopilot";
+import { runAutoAccept } from "./auto-accept";
 import { TICK_THROTTLE_SECONDS, IDLE_TICK_CUTOFF_MINUTES } from "./config";
 import { computeDeadlineAt, decisionWindowMinutes } from "./deadline-window";
 import { reapStale } from "./reaper";
@@ -83,6 +84,7 @@ export async function processDeadlines(sessionId: string) {
   await checkSocialMilestones(sessionId).catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
   await runAutoplayer(sessionId).catch((e) => console.error("[tick] runAutoplayer failed:", e));
   await runAutopilot(sessionId).catch((e) => console.error("[tick] runAutopilot failed:", e));
+  await runAutoAccept(sessionId).catch((e) => console.error("[tick] runAutoAccept failed:", e));
   await resolveCheatRegionReverts(sessionId).catch((e) => console.error("[tick] resolveCheatRegionReverts failed:", e));
 
   const now = new Date();

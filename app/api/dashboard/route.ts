@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { featureUnlocksFor } from "@/lib/feature-gate";
 import { db } from "@/lib/db";
 import { sessionState, modelState, teamNotifications } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
@@ -134,7 +135,12 @@ export async function GET(req: NextRequest) {
   // the projector shows — see components/cheat-code-widget.tsx.
   const activeGlobalAnnouncement = await getActiveGlobalAnnouncement(sessionId);
 
+  // Release 2 phased feature unlock, so team pages and the rail can show
+  // what's open (lib/feature-unlock.ts).
+  const featureUnlocks = await featureUnlocksFor(sessionId);
+
   return NextResponse.json({
+    featureUnlocks,
     globalState: gs,
     stateVersion: gs?.stateVersion,
     globalRt,

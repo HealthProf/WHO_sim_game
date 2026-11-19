@@ -303,6 +303,21 @@ export const sessionState = pgTable("session_state", {
   // the recommender's next required event on schedule. Off by default; the
   // facilitator normally fires events by hand from the "Next up" card.
   autopilotEnabled: boolean("autopilot_enabled").notNull().default(false),
+  // Release 2 facilitator switches.
+  // autoAcceptScores: the tick applies each submission's rule-based
+  // provisional grade (lib/auto-grade.ts) after AUTO_ACCEPT_GRACE_SECONDS,
+  // except ones that need review. Off by default.
+  autoAcceptScores: boolean("auto_accept_scores").notNull().default(false),
+  // resultsRevealForced: false (default) = each team has its own "show how
+  // this affected the world" toggle on a scored event, starting off; true =
+  // always shown to every team, no toggle.
+  resultsRevealForced: boolean("results_reveal_forced").notNull().default(false),
+  // showExpectedEffects: event pages show each option's expected effect on
+  // the team's region and the world (as a range, see lib/outcome-variance.ts).
+  showExpectedEffects: boolean("show_expected_effects").notNull().default(true),
+  // featuresUnlockedEarly: skip the phased unlock of pledges/funding and the
+  // marketplace (lib/feature-unlock.ts) and open everything now.
+  featuresUnlockedEarly: boolean("features_unlocked_early").notNull().default(false),
   // Passive drift (see lib/model-engine.ts applyPassiveDrift): a small
   // continuous Rt creep applied while the sim is running and no fresh
   // containment decision has landed, so idle real time between dispatched
@@ -568,6 +583,11 @@ export const scores = pgTable(
       .notNull()
       .unique()
       .references(() => decisions.id),
+    // Release 2: the deltas actually applied after outcome variance
+    // (lib/outcome-variance.ts), so a team can see exactly what its decision
+    // did; and the rule-based grader's reasons, for the facilitator's record.
+    appliedDeltasJson: jsonb("applied_deltas_json"),
+    gradeReasonsJson: jsonb("grade_reasons_json"),
     evidenceScore: integer("evidence_score").notNull(),
     politicalScore: integer("political_score").notNull(),
     equityScore: integer("equity_score").notNull(),

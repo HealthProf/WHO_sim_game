@@ -30,7 +30,7 @@ import { modelState, sessionState } from "./db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { bumpStateVersion } from "./state-version";
 
-type FundField = "fundRemaining" | "ppeDaysRemaining" | "antiviralsRemaining";
+type FundField = "fundRemaining" | "ppeDaysRemaining" | "antiviralsRemaining" | "hcwSurgePct";
 
 // Attempts to deduct `amount` from a region's fund/PPE/antivirals field.
 // Returns false (no row changed) if the region no longer has enough —
@@ -97,5 +97,22 @@ export async function creditWhoHqField(sessionId: string, field: WhoHqStockField
     .update(sessionState)
     .set({ [field]: sql`${sessionState[field]} + ${amount}`, updatedAt: new Date() } as never)
     .where(eq(sessionState.sessionId, sessionId));
+  await bumpStateVersion(sessionId);
+}
+
+// Credit with a ceiling (e.g. hcwSurgePct is a 0-100 percentage): a single
+// atomic LEAST(x + amount, cap) so concurrent credits can't push past it or
+// be lost to a stale read. Release 2, used by resource pledges.
+export async function creditRegionFieldCapped(
+  sessionId: string,
+  regionId: string,
+  field: FundField,
+  amount: number,
+  cap: number
+): Promise<void> {
+  await db
+    .update(modelState)
+    .set({ [field]: sql`LEAST(${modelState[field]} + ${amount}, ${cap})`, updatedAt: new Date() } as never)
+    .where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, regionId)));
   await bumpStateVersion(sessionId);
 }

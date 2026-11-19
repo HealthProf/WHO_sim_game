@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lockedResponse } from "@/lib/feature-gate";
 import { cancelEmergencyRequest } from "@/lib/cancel-requests";
 import { db } from "@/lib/db";
 import { emergencyFundingRequests, emergencyFundingContributions, modelState, teams, teamNotifications } from "@/lib/db/schema";
@@ -53,6 +54,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { actor, error } = await requireTeamActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "pledges", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();
@@ -115,6 +118,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const { actor, error } = await requireActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "pledges", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();

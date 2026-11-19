@@ -14,6 +14,8 @@ import { DirectorTimeline } from "@/components/director-timeline";
 import { TempoDial } from "@/components/tempo-dial";
 import { NextUpCard } from "@/components/next-up-card";
 import { PacingPanel, type PacingGlobalState } from "@/components/pacing-panel";
+import { SessionSettingsPanel, type SessionSettings } from "@/components/session-settings-panel";
+import type { FeatureUnlockState, GatedFeature } from "@/lib/feature-unlock";
 import { InterjectionPanel } from "@/components/interjection-panel";
 import { Chip, type ChipTone } from "@/components/ui/chip";
 import { PillButton, PillLink } from "@/components/ui/pill-button";
@@ -56,7 +58,8 @@ interface EventsData {
 }
 
 interface DashboardData {
-  globalState: PacingGlobalState & {
+  featureUnlocks?: Record<GatedFeature, FeatureUnlockState>;
+  globalState: PacingGlobalState & SessionSettings & {
     simulationStatus: string;
     currentDay: number;
     escalationState: string;
@@ -195,6 +198,7 @@ export default function ControlPage() {
         showAutopilot={data.mode === "instructor"}
       />
       <PacingPanel state={dash.globalState} openEventCount={new Set(activeDeadlines.map((a) => a.dispatch.eventId)).size} />
+      <SessionSettingsPanel settings={dash.globalState} unlocks={dash.featureUnlocks} />
       <DirectorTimeline state={dash.globalState} events={data.events} dispatches={data.dispatches} />
       <TempoDial intensityMultiplier={dash.globalState.intensityMultiplier} />
       <InterjectionPanel />

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lockedResponse } from "@/lib/feature-gate";
 import { cancelMarketRequest } from "@/lib/cancel-requests";
 import { db } from "@/lib/db";
 import { marketRequests, modelState, sessionState, teams, teamNotifications } from "@/lib/db/schema";
@@ -48,6 +49,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { actor, error } = await requireTeamActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "market", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();

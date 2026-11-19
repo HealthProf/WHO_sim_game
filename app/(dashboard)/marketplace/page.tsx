@@ -7,6 +7,7 @@ import { QueryError } from "@/components/query-error";
 import { REGIONS } from "@/lib/regions";
 import { Chip } from "@/components/ui/chip";
 import { PillButton } from "@/components/ui/pill-button";
+import { FeatureLockNotice } from "@/components/feature-lock-notice";
 
 interface MarketData {
   prices: { PPE_DAYS: number; ANTIVIRALS: number };
@@ -107,7 +108,8 @@ export default function MarketplacePage() {
   const tradeStatusTone = { accepted: "sage-soft", rejected: "neutral-outline", pending: "accent-soft", cancelled: "neutral-outline" } as const;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-[26px]">
+    <FeatureLockNotice feature="market">
+      <div className="flex max-w-4xl flex-col gap-[26px]">
       <div>
         <h1 className="font-heading text-[32px] text-text">Marketplace</h1>
         <p className="mt-1 text-sm text-neutral-700">
@@ -269,6 +271,7 @@ export default function MarketplacePage() {
           {(!trades || trades.offers.length === 0) && <p className="text-sm text-neutral-700">No trades yet.</p>}
         </div>
       </section>
-    </div>
+      </div>
+    </FeatureLockNotice>
   );
 }
