@@ -13,6 +13,9 @@ import { Chip } from "@/components/ui/chip";
 import { PillLink } from "@/components/ui/pill-button";
 import { IndexGauge } from "@/components/index-gauge";
 import { bandFor } from "@/lib/index-bands";
+import { WorldPanel } from "@/components/world-panel";
+import { RegionAvatar } from "@/components/region-avatar";
+import { moodFor } from "@/lib/avatar-mood";
 
 interface DashboardData {
   globalState: { currentDay: number; escalationState: "GREEN" | "AMBER" | "RED"; mediaPressureIndex: number; simulationStatus: string };
@@ -68,6 +71,7 @@ const escalationTone: Record<string, string> = {
 
 const VIEWS = [
   { value: "overview", label: "Overview" },
+  { value: "world", label: "World" },
   { value: "regions", label: "All regions" },
   { value: "projection", label: "Projection" },
   { value: "recent", label: "Recent developments" },
@@ -144,7 +148,16 @@ export default function DashboardPage() {
 
           {data.ownRegion && (
             <section className="rounded-lg bg-surface p-5">
-              <h2 className="font-heading text-[21px] text-text">{data.ownRegion.roleTitle}</h2>
+              <div className="flex items-center gap-3">
+                <span data-tour="avatar">
+                  <RegionAvatar
+                    regionId={data.ownRegion.regionId}
+                    mood={moodFor({ rt: data.ownRegion.rt, publicTrustIndex: data.ownRegion.publicTrustIndex, populationHappinessIndex: data.ownRegion.populationHappinessIndex })}
+                    size={48}
+                  />
+                </span>
+                <h2 className="font-heading text-[21px] text-text">{data.ownRegion.roleTitle}</h2>
+              </div>
               <p className="mb-4 text-sm text-neutral-700">{data.ownRegion.hqLocation}</p>
               <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <Stat label="Fund" value={`$${(data.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
@@ -171,6 +184,8 @@ export default function DashboardPage() {
           )}
         </>
       )}
+
+      {view === "world" && <WorldPanel ownRegionId={data.ownRegion?.regionId} />}
 
       {view === "regions" && <RegionsTable rows={data.sharedSummary} ownRegionId={data.ownRegion?.regionId} />}
 

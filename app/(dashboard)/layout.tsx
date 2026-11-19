@@ -5,6 +5,7 @@ import { TeamRail } from "@/components/team-rail";
 import { CheatCodeWidget } from "@/components/cheat-code-widget";
 import { AppFooter } from "@/components/app-footer";
 import { ScenarioOverviewWatcher } from "@/components/scenario-overview-watcher";
+import { GuidedTour } from "@/components/guided-tour";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -15,6 +16,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="flex min-h-screen flex-col bg-bg text-text lg:flex-row">
       <ScenarioOverviewWatcher />
       <TeamAnnouncementWatcher />
+      {/* Release 4 walkthrough: remembered per region per browser. */}
+      <GuidedTour storageKey={`who-tour-v1:${session?.user?.regionId ?? demoSession?.demoActiveRegionId ?? "team"}`} />
       <CheatCodeWidget />
       <TeamRail
         regionId={session?.user?.regionId}

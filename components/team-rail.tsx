@@ -13,6 +13,9 @@ import { affordabilityIssue, type OwnRegionResources } from "@/lib/affordability
 import { bandFor, type IndexMetric } from "@/lib/index-bands";
 import type { FeatureUnlockState, GatedFeature } from "@/lib/feature-unlock";
 import { LockIcon } from "@/components/feature-lock-notice";
+import { RegionAvatar } from "@/components/region-avatar";
+import { StartTourButton } from "@/components/guided-tour";
+import { moodFor } from "@/lib/avatar-mood";
 import type { StructuredOption } from "@/lib/db/seed-data/events";
 
 interface RailDashboardData {
@@ -27,6 +30,7 @@ interface RailDashboardData {
     hcwSurgePct: number;
     politicalTensionIndex: number;
     publicTrustIndex: number;
+    populationHappinessIndex?: number;
   } | null;
 }
 
@@ -212,11 +216,21 @@ function RailContents({
       {/* Brand block */}
       <div>
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Veiled Horizon</p>
-        <p className="font-heading text-2xl leading-[1.15] text-white">
-          {regionId ?? "—"}
-          <br />
-          Regional Office
-        </p>
+        <div className="flex items-center gap-3">
+          {regionId && dash?.ownRegion && (
+            <RegionAvatar
+              regionId={regionId}
+              mood={moodFor({ rt: dash.ownRegion.rt, publicTrustIndex: dash.ownRegion.publicTrustIndex, populationHappinessIndex: dash.ownRegion.populationHappinessIndex })}
+              size={44}
+              theme="dark"
+            />
+          )}
+          <p className="font-heading text-2xl leading-[1.15] text-white">
+            {regionId ?? "—"}
+            <br />
+            Regional Office
+          </p>
+        </div>
         {demoSession && demoSession.soloRole === "region" && (
           <div className="mt-2 space-y-2">
             <p className="text-[13px] text-neutral-400">Solo play: the computer runs the facilitator and the other regions.</p>
@@ -236,7 +250,7 @@ function RailContents({
 
       {/* Deadline block */}
       {openDispatch && (
-        <div className="rounded-lg bg-accent-800 p-[16px_18px]">
+        <div className="rounded-lg bg-accent-800 p-[16px_18px]" data-tour="deadline">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent-300">Deadline</p>
           <p className="text-[34px] font-extrabold leading-none tracking-[-0.02em] text-white">
             <DeadlineValue deadlineAt={openDispatch.deadlineAt!} now={now} />
@@ -249,7 +263,7 @@ function RailContents({
           teams weigh their choices against it (playtest feedback). On an
           event page the affordability warning sits directly under it. */}
       {dash?.ownRegion && (
-        <div>
+        <div data-tour="ledger">
           <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Your ledger</p>
           <div className="space-y-1.5">
             <LedgerRow label="Fund" value={`$${(dash.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
@@ -283,6 +297,7 @@ function RailContents({
               <Link
                 key={item.href}
                 href={item.href}
+                data-tour={`nav-${item.href.slice(1)}`}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={
@@ -310,7 +325,8 @@ function RailContents({
       {/* Clock, pushed to the bottom */}
       <div className="mt-auto border-t border-neutral-700 pt-[18px]">
         {dash?.globalState && <ClockBlock state={dash.globalState} now={now} />}
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <StartTourButton />
           <SignOutButton />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildSessionHistory, historyForPublic } from "@/lib/history";
 import { db } from "@/lib/db";
 import { sessionState, eventDispatches, events, modelState, gameSessions, globalFeedItems } from "@/lib/db/schema";
 import { eq, and, isNotNull, inArray, desc } from "drizzle-orm";
@@ -136,6 +137,8 @@ export async function GET(req: NextRequest) {
     fastModeMultiplier: gs?.fastModeMultiplier,
     gameDaysPerRealMinute: gs?.gameDaysPerRealMinute,
     totalGameDays: gs?.totalGameDays,
+    // Release 4: time series for the projector's line chart and spotlight.
+    history: historyForPublic(await buildSessionHistory(sessionId)),
     clockAnchorElapsedMs: gs?.clockAnchorElapsedMs,
     clockAnchorGameDays: gs?.clockAnchorGameDays,
     targetDurationMinutes: gs?.targetDurationMinutes,

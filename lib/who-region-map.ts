@@ -32,14 +32,10 @@ export const countryToRegion: Record<string, string> = {
   PNG: "WPRO", NZL: "WPRO", SGP: "WPRO", KHM: "WPRO", LAO: "WPRO", MNG: "WPRO", FJI: "WPRO",
 };
 
-export const regionColors: Record<string, string> = {
-  AFRO: "#f59e0b",
-  AMRO: "#3b82f6",
-  EMRO: "#a855f7",
-  EURO: "#10b981",
-  SEARO: "#ef4444",
-  WPRO: "#06b6d4",
-};
+// Release 4: region colors now come from lib/region-colors.ts (validated
+// for color-vision deficiency). Kept as an alias of the dark-surface steps
+// for the projector's existing uses.
+export { REGION_COLORS_DARK as regionColors } from "./region-colors";
 
 export const regionCentroids: Record<string, [number, number]> = {
   AFRO: [20, 2],
