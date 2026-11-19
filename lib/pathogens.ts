@@ -158,6 +158,21 @@ export function pathogenFor(id: string | null | undefined): Pathogen {
   return PATHOGENS[(id as PathogenId) ?? "ncov"] ?? PATHOGENS.ncov;
 }
 
+// UI wording for the "antivirals" stockpile (the ANTIVIRALS resource), so
+// forms and ledgers name the right countermeasure. Antivirals are counted in
+// doses; antibiotic and monoclonal treatment in courses.
+export function countermeasureUnits(id: string | null | undefined): {
+  label: string; // "Antibiotics"
+  unit: string; // "course"
+  formLabel: string; // "Antibiotics (courses)"
+  phrase: string; // "antibiotic courses"
+} {
+  const c = pathogenFor(id).countermeasure;
+  const unit = c.singular === "antiviral" ? "dose" : "course";
+  const phrase = c.singular.endsWith(unit) ? c.plural : `${c.singular} ${unit}s`;
+  return { label: c.label, unit, formLabel: `${c.label} (${unit}s)`, phrase };
+}
+
 // A region's starting Rt for this pathogen (the seeds are written for the
 // coronavirus), never below 1.05 so every game starts with a growing outbreak.
 export function startingRtFor(seedRt: number, p: Pathogen): number {

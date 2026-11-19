@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { countermeasureUnits } from "@/lib/pathogens";
 import { apiFetch } from "@/lib/fetcher";
 import { Chip } from "@/components/ui/chip";
 import { PillButton } from "@/components/ui/pill-button";
@@ -21,14 +22,15 @@ interface MarketData {
   whoHqAntiviralsStock: number;
 }
 
-const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE-days", ANTIVIRALS: "antiviral doses" };
 
 // Item 3's instructor-side approval queue for WHO HQ marketplace requests —
 // see app/api/instructor/market/route.ts. A request may go stale (WHO HQ
 // stock or the requesting region's fund can move between submission and
 // approval); the PATCH endpoint re-validates and returns a clear error,
 // surfaced here inline rather than via a toast.
-export function MarketApprovalPanel() {
+export function MarketApprovalPanel({ pathogenId }: { pathogenId?: string }) {
+  const cm = countermeasureUnits(pathogenId);
+  const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE-days", ANTIVIRALS: cm.phrase };
   const qc = useQueryClient();
 
   const { data: pending } = useQuery({
@@ -63,8 +65,8 @@ export function MarketApprovalPanel() {
             <p className="font-semibold text-text">{market.whoHqPpeStock.toLocaleString()} days — ${market.prices.PPE_DAYS.toLocaleString()}/unit</p>
           </div>
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-700">Antiviral stock / current price</p>
-            <p className="font-semibold text-text">{market.whoHqAntiviralsStock.toLocaleString()} doses — ${market.prices.ANTIVIRALS.toLocaleString()}/unit</p>
+            <p className="text-xs text-neutral-700">{cm.label} stock / current price</p>
+            <p className="font-semibold text-text">{market.whoHqAntiviralsStock.toLocaleString()} {cm.unit}s — ${market.prices.ANTIVIRALS.toLocaleString()}/unit</p>
           </div>
         </div>
       )}

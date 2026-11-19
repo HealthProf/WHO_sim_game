@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { countermeasureUnits } from "@/lib/pathogens";
 import { QueryError } from "@/components/query-error";
 import { REGIONS } from "@/lib/regions";
 import { Chip } from "@/components/ui/chip";
@@ -29,13 +30,14 @@ interface TradeOffer {
 
 interface DashboardData {
   ownRegion: { regionId: string } | null;
+  globalState?: { pathogenId?: string };
 }
-
-const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE (days)", ANTIVIRALS: "Antivirals (doses)" };
 
 export default function MarketplacePage() {
   const qc = useQueryClient();
   const { data: dash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard") });
+  const cm = countermeasureUnits(dash?.globalState?.pathogenId);
+  const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE (days)", ANTIVIRALS: cm.formLabel };
 
   const { data: market, error: marketError, refetch: refetchMarket } = useQuery({
     queryKey: ["market"],
@@ -113,7 +115,7 @@ export default function MarketplacePage() {
       <div>
         <h1 className="font-heading text-[32px] text-text">Marketplace</h1>
         <p className="mt-1 text-sm text-neutral-700">
-          Buy PPE or antivirals from WHO HQ at the current adaptive price (requires instructor approval — other
+          Buy PPE or {cm.label.toLowerCase()} from WHO HQ at the current adaptive price (requires instructor approval — other
           regions get a 30-second heads-up to submit their own request before it&apos;s processed), or trade directly
           with another region. Trades are accept/reject only, no counter-offers.
         </p>
@@ -128,7 +130,7 @@ export default function MarketplacePage() {
             <p className="mt-1 text-xs text-neutral-700">WHO HQ stock: {market?.whoHqPpeStock.toLocaleString()}</p>
           </div>
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-700">Antivirals (per dose)</p>
+            <p className="text-xs text-neutral-700">{cm.label} (per {cm.unit})</p>
             <p className="text-base font-bold text-text">${market?.prices.ANTIVIRALS.toLocaleString()}</p>
             <p className="mt-1 text-xs text-neutral-700">WHO HQ stock: {market?.whoHqAntiviralsStock.toLocaleString()}</p>
           </div>
@@ -146,7 +148,7 @@ export default function MarketplacePage() {
             Resource
             <select value={buyResource} onChange={(e) => setBuyResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="PPE_DAYS">PPE (days)</option>
-              <option value="ANTIVIRALS">Antivirals (doses)</option>
+              <option value="ANTIVIRALS">{cm.formLabel}</option>
             </select>
           </label>
           <label className="text-sm">
@@ -225,7 +227,7 @@ export default function MarketplacePage() {
             Resource
             <select value={tradeResource} onChange={(e) => setTradeResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block w-full rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="PPE_DAYS">PPE (days)</option>
-              <option value="ANTIVIRALS">Antivirals (doses)</option>
+              <option value="ANTIVIRALS">{cm.formLabel}</option>
             </select>
           </label>
           <label className="text-sm">

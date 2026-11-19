@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { countermeasureUnits } from "@/lib/pathogens";
 import { QueryError } from "@/components/query-error";
 import { REGIONS } from "@/lib/regions";
 import { PillButton } from "@/components/ui/pill-button";
@@ -16,16 +17,19 @@ interface Pledge {
   createdAt: string;
 }
 
-const RESOURCE_OPTIONS = [
-  { value: "FUND", label: "Fund ($)" },
-  { value: "PPE_DAYS", label: "PPE (days)" },
-  { value: "ANTIVIRALS", label: "Antivirals (doses)" },
-  { value: "HCW_SURGE_PCT", label: "HCW surge capacity (%)" },
-];
+function resourceOptions(pathogenId: string | undefined) {
+  return [
+    { value: "FUND", label: "Fund ($)" },
+    { value: "PPE_DAYS", label: "PPE (days)" },
+    { value: "ANTIVIRALS", label: countermeasureUnits(pathogenId).formLabel },
+    { value: "HCW_SURGE_PCT", label: "HCW surge capacity (%)" },
+  ];
+}
 
 
 interface DashboardData {
   ownRegion: { regionId: string } | null;
+  globalState?: { pathogenId?: string };
 }
 
 export function PledgesSection() {
@@ -41,6 +45,7 @@ export function PledgesSection() {
     refetchInterval: 10000,
   });
   const { data: dash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard") });
+  const RESOURCE_OPTIONS = resourceOptions(dash?.globalState?.pathogenId);
 
   const pledge = useMutation({
     mutationFn: () =>

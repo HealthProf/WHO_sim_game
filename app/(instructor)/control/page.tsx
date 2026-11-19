@@ -263,7 +263,7 @@ export default function ControlPage() {
 
       <EmergencyCommitteePanel />
       <BudgetCyclePanel />
-      <MarketApprovalPanel />
+      <MarketApprovalPanel pathogenId={dash.globalState.pathogenId} />
       <EmergencyFundingPanel />
 
       <EventMap events={data.events} dispatches={data.dispatches} chainStatus={data.chainStatus} chainLinks={data.chainLinks ?? []} targetHints={data.targetHints} />

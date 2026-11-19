@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { resetDb, seedStaticOnce } from "./helpers/db";
 import { createTestSession, createTestUser } from "./helpers/session";
 import { createSession } from "@/lib/session-lifecycle";
-import { PATHOGENS, applyPathogenText, startingRtFor } from "@/lib/pathogens";
+import { PATHOGENS, applyPathogenText, countermeasureUnits, startingRtFor } from "@/lib/pathogens";
 import { computeEpidemicGrowth } from "@/lib/model-engine";
 import { planDisruptions, removedOptions, activeDisruptions, applyDisruptionConsequences } from "@/lib/disruptors";
 import { disruptorSeed } from "@/lib/db/seed-data/disruptors";
@@ -27,6 +27,13 @@ describe("pathogens (pure)", () => {
     expect(plague).toContain("antibiotics are short");
     expect(plague).toContain("one antibiotic course");
     expect(plague).not.toContain("spike protein");
+  });
+
+  it("names the stockpile for the pathogen in forms and ledgers", () => {
+    expect(countermeasureUnits("ncov")).toMatchObject({ formLabel: "Antivirals (doses)", phrase: "antiviral doses" });
+    expect(countermeasureUnits("plague")).toMatchObject({ formLabel: "Antibiotics (courses)", phrase: "antibiotic courses", unit: "course" });
+    expect(countermeasureUnits("nipah").phrase).toBe("monoclonal antibody courses");
+    expect(countermeasureUnits(undefined).formLabel).toBe("Antivirals (doses)");
   });
 
   it("keeps every game's outbreak growing at the start", () => {
