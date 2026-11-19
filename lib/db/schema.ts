@@ -195,6 +195,12 @@ export const gameSessions = pgTable("game_sessions", {
   // requireActor() (Phase 4 wires the override; Phase 1 leaves this column in
   // place but unused by any read path other than the schema itself).
   demoActiveRegionId: text("demo_active_region_id").references(() => regions.id),
+  // Release 3, solo play only: the role the owner chose on the solo setup
+  // screen. "facilitator" = they run the facilitator console and can step
+  // into any region; "region" = they play one region (demoActiveRegionId)
+  // and the computer runs the facilitator and every other region. null =
+  // not chosen yet (behaves like the original demo: computer fires events).
+  soloRole: text("solo_role"),
 });
 
 // Per-session region logins (instructor mode). Generated at session creation
@@ -308,6 +314,11 @@ export const sessionState = pgTable("session_state", {
   // provisional grade (lib/auto-grade.ts) after AUTO_ACCEPT_GRACE_SECONDS,
   // except ones that need review. Off by default.
   autoAcceptScores: boolean("auto_accept_scores").notNull().default(false),
+  // Release 3: the computer runs the facilitator side (fires events, scores
+  // the human player's decisions, approves market requests, handles funding
+  // requests, ends the game). Solo sessions start with it on (the original
+  // demo behavior); choosing to be the facilitator turns it off.
+  computerFacilitator: boolean("computer_facilitator").notNull().default(false),
   // resultsRevealForced: false (default) = each team has its own "show how
   // this affected the world" toggle on a scored event, starting off; true =
   // always shown to every team, no toggle.
@@ -1022,12 +1033,11 @@ export const socialMilestoneAwards = pgTable(
   ]
 );
 
-// Demo mode only: which competence profile the scripted autoplayer uses for
-// a region it's driving, and whether it's currently enabled at all (it's
-// disabled for whichever region the session owner is actively occupying —
-// see gameSessions.demoActiveRegionId and lib/autoplayer/scripted.ts).
-// Assigned with variety at session creation (lib/session-lifecycle.ts) so
-// no two demo runs feel identical.
+// Which regions a computer player drives, and with what competence profile.
+// Solo play: a row per region at creation, varied profiles; the region the
+// owner occupies (gameSessions.demoActiveRegionId) is skipped. Class
+// sessions (Release 3): rows only for regions the facilitator marked
+// "computer" on the setup page; enabled=false means a human team plays it.
 export const sessionRegionAutoplay = pgTable(
   "session_region_autoplay",
   {

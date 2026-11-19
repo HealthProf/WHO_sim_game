@@ -26,6 +26,7 @@ export default function SessionCredentialsPage() {
   const params = useParams<{ id: string }>();
   const [credentials, setCredentials] = useState<Credential[] | null>(null);
   const [displayToken, setDisplayToken] = useState<string | null>(null);
+  const [computerRegions, setComputerRegions] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [scenarioOverviewState, setScenarioOverviewState] = useState<"idle" | "starting" | "started" | "error">("idle");
 
@@ -34,6 +35,7 @@ export default function SessionCredentialsPage() {
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((json) => {
         setCredentials(json.credentials);
+        setComputerRegions(json.computerRegions ?? []);
         setDisplayToken(json.session.displayToken);
       })
       .catch(() => setError("Couldn't load this session's credentials."));
@@ -152,8 +154,16 @@ export default function SessionCredentialsPage() {
           {credentials.map((c) => (
             <tr key={c.regionId} className="border-b border-divider text-text">
               <td className="py-2.5 pr-4 font-bold">{c.regionId}</td>
-              <td className="py-2.5 pr-4 font-mono">{c.username}</td>
-              <td className="py-2.5 font-mono">{c.password ?? "(cleared after the session completed)"}</td>
+              {computerRegions.includes(c.regionId) ? (
+                <td colSpan={2} className="py-2.5 text-neutral-700">
+                  Computer-run (no login needed)
+                </td>
+              ) : (
+                <>
+                  <td className="py-2.5 pr-4 font-mono">{c.username}</td>
+                  <td className="py-2.5 font-mono">{c.password ?? "(cleared after the session completed)"}</td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>

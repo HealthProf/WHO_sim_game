@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { submitDecision } from "@/lib/decisions";
 import { effectiveMinWords, wordCount } from "@/lib/auto-grade";
+import { computerRegionIds } from "@/lib/region-setup";
 import { logAnalyticsEvent } from "@/lib/analytics";
 
 // POST: a team submits a decision for a dispatch targeted at them. Thin
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
   // Release 2: a short written rationale (2-5 sentences, ~40 words) is
   // required wherever the event asks for one. Enforced here, on team
   // submissions only; lib/decisions.ts is shared with the computer players.
+  // Release 3: in a class session, a region marked computer-run is played by
+  // the computer; a stray student login for it can't submit over it.
+  if (actor!.mode === "instructor" && !actor!.isOwner && (await computerRegionIds(actor!.sessionId)).includes(actor!.regionId!)) {
+    return NextResponse.json({ error: "This region is being played by the computer for this session. Ask your facilitator." }, { status: 403 });
+  }
   const rationaleText = (body.rationaleText as string) ?? "";
   const dispatch = await db.query.eventDispatches.findFirst({
     where: and(eq(eventDispatches.sessionId, actor!.sessionId), eq(eventDispatches.id, Number(body.eventDispatchId))),

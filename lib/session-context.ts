@@ -149,6 +149,8 @@ export interface OwnedSessionSummary {
   // sheet already prints, and the display route is deliberately public so a
   // projector can show it without logging in.
   displayToken: string;
+  // Solo play only (Release 3): "facilitator" | "region" | null (not chosen).
+  soloRole: string | null;
 }
 
 export async function ownedActiveSession(): Promise<OwnedSessionSummary | null> {
@@ -166,5 +168,6 @@ export async function ownedActiveSession(): Promise<OwnedSessionSummary | null> 
     mode: owned.mode,
     demoActiveRegionId: owned.demoActiveRegionId,
     displayToken: owned.displayToken,
+    soloRole: owned.soloRole,
   };
 }

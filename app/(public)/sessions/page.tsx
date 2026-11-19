@@ -14,6 +14,8 @@ interface OwnedSession {
   // Demo mode only: set when the owner is occupying a region rather than
   // acting as instructor, which decides where "Go to it" should land them.
   demoActiveRegionId: string | null;
+  // Solo play (Release 3): null until a role is chosen on the solo setup page.
+  soloRole: string | null;
 }
 
 const MODE_LABEL: Record<OwnedSession["mode"], string> = {
@@ -50,7 +52,7 @@ export default function SessionsPage() {
   }
 
   function landingFor(mode: OwnedSession["mode"], sessionId: string) {
-    return mode === "instructor" ? `/sessions/${sessionId}/credentials` : "/control";
+    return mode === "instructor" ? `/sessions/${sessionId}/setup` : `/sessions/${sessionId}/solo`;
   }
 
   async function createSession(mode: "instructor" | "demo") {
@@ -87,7 +89,9 @@ export default function SessionsPage() {
     await refreshRole();
     // In demo mode the owner may be occupying a region, in which case the
     // instructor pages would 403 — land them on the team flow instead.
-    router.push(s.mode === "demo" && s.demoActiveRegionId ? "/dashboard" : "/control");
+    router.push(
+      s.mode === "demo" && !s.soloRole ? `/sessions/${s.id}/solo` : s.mode === "demo" && s.demoActiveRegionId ? "/dashboard" : "/control"
+    );
     router.refresh();
   }
 

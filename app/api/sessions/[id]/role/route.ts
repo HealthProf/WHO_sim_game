@@ -29,6 +29,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   });
   if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (owned.mode !== "demo") return NextResponse.json({ error: "Role switching is only available in demo mode" }, { status: 400 });
+  // Release 3: a solo player who chose to play one region has the computer as
+  // facilitator; switching roles mid-game would leave nobody in that seat.
+  if (owned.soloRole === "region") return NextResponse.json({ error: "You chose to play one region in this game; start a new solo game to switch roles." }, { status: 409 });
 
   await db.update(gameSessions).set({ demoActiveRegionId: regionId }).where(eq(gameSessions.id, sessionId));
 

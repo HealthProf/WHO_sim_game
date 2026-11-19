@@ -238,9 +238,14 @@ function RailContents({
         {dash?.globalState && <ClockBlock state={dash.globalState} now={now} />}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {active?.mode === "instructor" && (
-            <Link href={`/sessions/${active.sessionId}/credentials`} className="text-sm text-neutral-400 hover:text-white">
-              Login details
-            </Link>
+            <>
+              <Link href={`/sessions/${active.sessionId}/credentials`} className="text-sm text-neutral-400 hover:text-white">
+                Login details
+              </Link>
+              <Link href={`/sessions/${active.sessionId}/setup`} className="text-sm text-neutral-400 hover:text-white">
+                Regions setup
+              </Link>
+            </>
           )}
           <Link href="/sessions" className="text-sm text-neutral-400 hover:text-white">
             Switch mode

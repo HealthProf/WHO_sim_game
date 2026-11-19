@@ -98,6 +98,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
           sessionId,
           gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE,
           targetDurationMinutes: Math.round(90 / DEMO_GAME_DAYS_PER_REAL_MINUTE),
+          computerFacilitator: true,
           fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER,
           scenarioOverviewStartedAt: new Date(Date.now() + SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000),
         }

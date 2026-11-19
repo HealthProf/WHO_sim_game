@@ -22,9 +22,12 @@ const AUTOPILOT_HARD_MAX_OPEN_PER_TEAM = 3;
 
 export async function runAutopilot(sessionId: string): Promise<string | null> {
   const session = await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, sessionId) });
-  if (!session || session.mode !== "instructor") return null;
+  if (!session) return null;
   const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
   if (!gs || !gs.autopilotEnabled || gs.simulationStatus !== "running") return null;
+  // Class sessions, and solo games where the player is the facilitator (a
+  // computer facilitator already fires events itself).
+  if (session.mode === "demo" && gs.computerFacilitator) return null;
 
   const allEvents = await db.query.events.findMany();
   const dispatches = await db.query.eventDispatches.findMany({ where: eq(eventDispatches.sessionId, sessionId) });

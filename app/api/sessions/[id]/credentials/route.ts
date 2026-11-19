@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { computerRegionIds } from "@/lib/region-setup";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { gameSessions, sessionRegionCredentials } from "@/lib/db/schema";
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 
   return NextResponse.json({
+    computerRegions: await computerRegionIds(sessionId),
     session: { id: owned.id, mode: owned.mode, status: owned.status, displayToken: owned.displayToken },
     credentials: credentials.map((c) => ({ regionId: c.regionId, username: c.username, password: c.plaintextHint })),
   });

@@ -12,7 +12,10 @@ export async function PATCH(req: NextRequest) {
   const { actor, error } = await requireInstructorActor();
   if (error) return error;
   const sessionId = actor!.sessionId;
-  if (actor!.mode !== "instructor") return NextResponse.json({ error: "Autopilot is for class sessions" }, { status: 400 });
+  if (actor!.mode !== "instructor") {
+    const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+    if (gs?.computerFacilitator) return NextResponse.json({ error: "The computer is already running this game's events" }, { status: 400 });
+  }
 
   const body = await req.json().catch(() => ({}));
   if (typeof body.enabled !== "boolean") return NextResponse.json({ error: "enabled must be a boolean" }, { status: 400 });

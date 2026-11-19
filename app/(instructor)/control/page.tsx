@@ -65,6 +65,7 @@ interface DashboardData {
     escalationState: string;
     intensityMultiplier: number;
     autopilotEnabled: boolean;
+    computerFacilitator: boolean;
   };
 }
 
@@ -195,7 +196,7 @@ export default function ControlPage() {
         chainStatus={data.chainStatus}
         targetHints={data.targetHints}
         autopilotEnabled={dash.globalState.autopilotEnabled}
-        showAutopilot={data.mode === "instructor"}
+        showAutopilot={data.mode === "instructor" || !dash.globalState.computerFacilitator}
       />
       <PacingPanel state={dash.globalState} openEventCount={new Set(activeDeadlines.map((a) => a.dispatch.eventId)).size} />
       <SessionSettingsPanel settings={dash.globalState} unlocks={dash.featureUnlocks} />

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { computeSimClock, formatSimClock, formatRealElapsed, type GlobalClockFields } from "@/lib/sim-clock";
 import { SignOutButton } from "@/components/signout-button";
@@ -53,7 +53,7 @@ export function TeamRail({
   isAccountHolder,
 }: {
   regionId: string | null | undefined;
-  demoSession: { sessionId: string; demoActiveRegionId: string | null } | null;
+  demoSession: { sessionId: string; demoActiveRegionId: string | null; soloRole?: string | null } | null;
   // Only a registered public account (kind "user") has a profile to manage —
   // a region login handed out for a class session has no users row of its
   // own (see app/api/account/route.ts), so the Account nav item only shows
@@ -195,7 +195,7 @@ function RailContents({
   onNavigate,
 }: {
   regionId: string | null | undefined;
-  demoSession: { sessionId: string; demoActiveRegionId: string | null } | null;
+  demoSession: { sessionId: string; demoActiveRegionId: string | null; soloRole?: string | null } | null;
   isAccountHolder: boolean;
   dash: RailDashboardData | undefined;
   openDispatch: RailEventsData["dispatches"][number] | undefined;
@@ -217,7 +217,14 @@ function RailContents({
           <br />
           Regional Office
         </p>
-        {demoSession && (
+        {demoSession && demoSession.soloRole === "region" && (
+          <div className="mt-2 space-y-2">
+            <p className="text-[13px] text-neutral-400">Solo play: the computer runs the facilitator and the other regions.</p>
+            <SoloPauseButton sessionId={demoSession.sessionId} status={(dash?.globalState as { simulationStatus?: string } | undefined)?.simulationStatus} />
+            <EndSessionButton sessionId={demoSession.sessionId} mode="demo" />
+          </div>
+        )}
+        {demoSession && demoSession.soloRole !== "region" && (
           <div className="mt-2">
             <RoleSwitcher sessionId={demoSession.sessionId} currentRegionId={demoSession.demoActiveRegionId} />
             <div className="mt-2">
@@ -350,6 +357,29 @@ function BandedValue({ metric, value }: { metric: IndexMetric; value: number }) 
     <span>
       {value} <span className="text-[12px] font-medium text-neutral-400">{bandFor(metric, value).label}</span>
     </span>
+  );
+}
+
+// Pause/resume for a solo player playing one region (Release 3), who can't
+// reach the facilitator's controls (app/api/sessions/[id]/solo PATCH).
+function SoloPauseButton({ sessionId, status }: { sessionId: string; status?: string }) {
+  const qc = useQueryClient();
+  const toggle = useMutation({
+    mutationFn: (action: "pause" | "resume") =>
+      fetch(`/api/sessions/${sessionId}/solo`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard"] }),
+  });
+  if (status !== "running" && status !== "paused") return null;
+  const paused = status === "paused";
+  return (
+    <button
+      type="button"
+      onClick={() => toggle.mutate(paused ? "resume" : "pause")}
+      disabled={toggle.isPending}
+      className="rounded-full border-2 border-neutral-700 px-[18px] py-[6px] text-[13px] font-semibold text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+    >
+      {paused ? "Resume game" : "Pause game"}
+    </button>
   );
 }
 

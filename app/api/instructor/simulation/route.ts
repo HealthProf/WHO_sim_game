@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setSimulationStatus } from "@/lib/sim-status";
 import { db } from "@/lib/db";
-import { sessionState, instructorActions, gameSessions } from "@/lib/db/schema";
+import { instructorActions, gameSessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
 import { logSessionEvent } from "@/lib/session-events";
@@ -24,26 +25,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const status = body.status as "not_started" | "running" | "paused" | "completed";
 
-  const current = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
-  const now = new Date();
-
-  const updates: Record<string, unknown> = { simulationStatus: status, updatedAt: now };
-
-  if (status === "running") {
-    if (!current?.simulationStartedAt) {
-      updates.simulationStartedAt = now;
-    } else if (current.pausedAt) {
-      const pausedDurationMs = now.getTime() - new Date(current.pausedAt).getTime();
-      updates.pausedAccumulatedMs = (current.pausedAccumulatedMs ?? 0) + pausedDurationMs;
-      updates.pausedAt = null;
-    }
-  } else if (current?.simulationStartedAt && !current.pausedAt) {
-    // Transitioning to paused/completed/not_started while the clock was
-    // running — freeze it now.
-    updates.pausedAt = now;
-  }
-
-  await db.update(sessionState).set(updates).where(eq(sessionState.sessionId, sessionId));
+  await setSimulationStatus(sessionId, status);
 
   await db.insert(instructorActions).values({
     sessionId,
