@@ -53,6 +53,14 @@ export default function EmergencyFundingPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["emergency-funding"] }),
   });
 
+  // Withdraw your own request while nobody has contributed yet
+  // (lib/cancel-requests.ts). Once someone contributes, it stays open for
+  // the facilitator to close and pay out.
+  const cancelRequest = useMutation({
+    mutationFn: (requestId: number) => apiFetch(`/api/emergency-funding?id=${requestId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["emergency-funding"] }),
+  });
+
   if (error) return <QueryError error={error} onRetry={() => refetch()} label="emergency funding requests" />;
 
   const ownRegion = dash?.ownRegion?.regionId;
@@ -106,12 +114,24 @@ export default function EmergencyFundingPage() {
                 <p className="text-sm font-semibold text-text">{r.requestingRegionId} requests ${r.amountRequested.toLocaleString()}</p>
                 <p className="mt-1 text-xs text-neutral-700">{r.reason}</p>
               </div>
-              <Chip tone={r.status === "open" ? "accent-solid" : "sage-soft"}>{r.status}</Chip>
+              <Chip tone={r.status === "open" ? "accent-solid" : r.status === "cancelled" ? "neutral-outline" : "sage-soft"}>{r.status}</Chip>
             </div>
             <p className="text-xs text-neutral-700">
               ${r.totalContributed.toLocaleString()} contributed so far
               {r.contributions.length > 0 && ` (${r.contributions.map((c) => `${c.regionId}: $${c.amount.toLocaleString()}`).join(", ")})`}
             </p>
+            {r.status === "open" && r.requestingRegionId === ownRegion && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-700">
+                {r.contributions.length === 0 ? (
+                  <PillButton size="sm" tone="ghost" onClick={() => cancelRequest.mutate(r.id)} disabled={cancelRequest.isPending}>
+                    Cancel my request
+                  </PillButton>
+                ) : (
+                  <span>Can&apos;t cancel: others have already contributed. The facilitator will close it and pay out.</span>
+                )}
+                {cancelRequest.error && <span className="text-accent-800">{(cancelRequest.error as Error).message}</span>}
+              </div>
+            )}
             {r.status === "open" && r.requestingRegionId !== ownRegion && (
               <div className="flex items-center gap-2">
                 <input

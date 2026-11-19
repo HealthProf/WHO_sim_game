@@ -96,7 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Password checked out but the region has no teams row — a
         // data-integrity edge case, not a guessed credential, so it must not
         // burn the caller's rate-limit budget.
-        if (result.outcome === "region-missing-team") return null;
+        if (result.outcome === "region-missing-team" || result.outcome === "session-ended") return null;
 
         await clearRateLimit(credentialKey);
         return result.actor as never;

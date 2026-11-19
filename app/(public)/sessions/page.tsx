@@ -18,7 +18,7 @@ interface OwnedSession {
 
 const MODE_LABEL: Record<OwnedSession["mode"], string> = {
   instructor: "Class session",
-  demo: "Solo demo",
+  demo: "Solo play",
 };
 
 export default function SessionsPage() {
@@ -91,6 +91,22 @@ export default function SessionsPage() {
     router.refresh();
   }
 
+  async function endSession(s: OwnedSession) {
+    const what = s.mode === "instructor" ? "class session" : "solo game";
+    const consequence = s.mode === "instructor" ? " Its six region logins will stop working." : "";
+    if (!window.confirm(`End this ${what} so you can start a new one?${consequence} This cannot be undone.`)) return;
+    setLoading(true);
+    setError(null);
+    const res = await fetch(`/api/sessions/${s.id}/end`, { method: "POST" });
+    setLoading(false);
+    if (!res.ok) {
+      setError("Couldn't end that session.");
+      return;
+    }
+    await refreshRole();
+    reloadOwned();
+  }
+
   const hasMode = (mode: OwnedSession["mode"]) => (owned ?? []).some((s) => s.mode === mode);
 
   return (
@@ -100,8 +116,9 @@ export default function SessionsPage() {
           <div className="text-center">
             <h1 className="font-heading text-[34px] leading-[1.1] text-text mb-2.5">Your sessions</h1>
             <p className="text-[15px] text-neutral-800 leading-[1.55]">
-              You can keep one class session and one solo demo at the same time, and switch between them
-              whenever you like — switching never ends the other one.
+              You can keep one class session and one solo game at the same time and switch between them
+              whenever you like. Switching never ends the other one; use &ldquo;End&rdquo; to retire a session
+              and start a fresh one.
             </p>
           </div>
 
@@ -139,6 +156,9 @@ export default function SessionsPage() {
                         Login details
                       </a>
                     )}
+                    <PillButton type="button" onClick={() => endSession(s)} disabled={loading} tone="ghost" size="sm">
+                      End
+                    </PillButton>
                     <PillButton
                       type="button"
                       onClick={() => switchTo(s)}
@@ -157,7 +177,7 @@ export default function SessionsPage() {
           {!hasMode("instructor") && (
             <div>
               <PillButton type="button" onClick={() => createSession("instructor")} disabled={loading} className="w-full">
-                {loading ? "Creating…" : "Run a session with my class"}
+                {loading ? "Creating…" : "Start a class session"}
               </PillButton>
               <p className="text-[13px] text-neutral-700 mt-2">
                 Generates six region logins and a printable credential sheet for a real class.
@@ -168,10 +188,10 @@ export default function SessionsPage() {
           {!hasMode("demo") && (
             <div>
               <PillButton type="button" onClick={() => createSession("demo")} disabled={loading} tone="ghost" className="w-full">
-                {loading ? "Creating…" : "Try a solo demo"}
+                {loading ? "Creating…" : "Solo play"}
               </PillButton>
               <p className="text-[13px] text-neutral-700 mt-2">
-                Play any region or the instructor yourself — a scripted AI plays every region you&apos;re not, on a
+                Play any region or the facilitator yourself. Computer players run every region you&apos;re not, on a
                 faster ~10-15 minute clock, so the whole arc plays out solo.
               </p>
             </div>

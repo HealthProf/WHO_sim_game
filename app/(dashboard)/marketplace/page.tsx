@@ -88,13 +88,23 @@ export default function MarketplacePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["trade"] }),
   });
 
+  // Withdraw your own pending WHO HQ request or trade offer before anyone acts
+  // on it (lib/cancel-requests.ts). Nothing was charged yet, so no refund.
+  const cancelRequest = useMutation({
+    mutationFn: ({ kind, id }: { kind: "market" | "trade"; id: number }) => apiFetch(`/api/${kind}?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["market"] });
+      qc.invalidateQueries({ queryKey: ["trade"] });
+    },
+  });
+
   if (marketError) return <QueryError error={marketError} onRetry={() => refetchMarket()} label="marketplace" />;
 
   const ownRegion = dash?.ownRegion?.regionId;
   const incomingOffers = (trades?.offers ?? []).filter((o) => o.toRegionId === ownRegion && o.status === "pending");
   const recentBatch = (market?.requests ?? []).filter((r) => r.status === "pending");
 
-  const tradeStatusTone = { accepted: "sage-soft", rejected: "neutral-outline", pending: "accent-soft" } as const;
+  const tradeStatusTone = { accepted: "sage-soft", rejected: "neutral-outline", pending: "accent-soft", cancelled: "neutral-outline" } as const;
 
   return (
     <div className="flex max-w-4xl flex-col gap-[26px]">
@@ -154,7 +164,21 @@ export default function MarketplacePage() {
           <div className="space-y-1 text-xs text-neutral-700">
             <p className="uppercase tracking-wide text-neutral-700">Pending this batch (awaiting instructor approval)</p>
             {recentBatch.map((r) => (
-              <p key={r.id}>{r.regionId}: {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()}</p>
+              <p key={r.id} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {r.regionId}: {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()}
+                </span>
+                {r.regionId === ownRegion && (
+                  <button
+                    type="button"
+                    onClick={() => cancelRequest.mutate({ kind: "market", id: r.id })}
+                    disabled={cancelRequest.isPending}
+                    className="font-semibold text-accent-700 underline hover:text-accent-600 disabled:opacity-40"
+                  >
+                    Cancel my request
+                  </button>
+                )}
+              </p>
             ))}
           </div>
         )}
@@ -217,6 +241,8 @@ export default function MarketplacePage() {
         {tradeError && <p className="text-sm font-medium text-accent-800">{tradeError}</p>}
       </section>
 
+      {cancelRequest.error && <p className="text-sm font-medium text-accent-800">{(cancelRequest.error as Error).message}</p>}
+
       <section>
         <h2 className="mb-2 text-sm font-semibold text-text">Recent Trades</h2>
         <div className="space-y-2">
@@ -225,7 +251,19 @@ export default function MarketplacePage() {
               <span className="text-text">
                 {o.fromRegionId} → {o.toRegionId}: {o.amount.toLocaleString()} {RESOURCE_LABEL[o.resourceType]} for ${o.totalPrice.toLocaleString()}
               </span>
-              <Chip tone={tradeStatusTone[o.status as keyof typeof tradeStatusTone] ?? "neutral-soft"}>{o.status}</Chip>
+              <span className="flex shrink-0 items-center gap-2">
+                {o.status === "pending" && o.fromRegionId === ownRegion && (
+                  <button
+                    type="button"
+                    onClick={() => cancelRequest.mutate({ kind: "trade", id: o.id })}
+                    disabled={cancelRequest.isPending}
+                    className="text-xs font-semibold text-accent-700 underline hover:text-accent-600 disabled:opacity-40"
+                  >
+                    Cancel offer
+                  </button>
+                )}
+                <Chip tone={tradeStatusTone[o.status as keyof typeof tradeStatusTone] ?? "neutral-soft"}>{o.status}</Chip>
+              </span>
             </div>
           ))}
           {(!trades || trades.offers.length === 0) && <p className="text-sm text-neutral-700">No trades yet.</p>}

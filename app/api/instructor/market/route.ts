@@ -48,7 +48,12 @@ export async function PATCH(req: NextRequest) {
   if (!team) return NextResponse.json({ error: "Region not found" }, { status: 404 });
 
   if (action === "reject") {
-    await db.update(marketRequests).set({ status: "rejected", resolvedAt: new Date(), resolvedByUserId: actor!.userId! }).where(eq(marketRequests.id, requestId));
+    const rejected = await db
+      .update(marketRequests)
+      .set({ status: "rejected", resolvedAt: new Date(), resolvedByUserId: actor!.userId! })
+      .where(and(eq(marketRequests.sessionId, sessionId), eq(marketRequests.id, requestId), eq(marketRequests.status, "pending")))
+      .returning();
+    if (rejected.length === 0) return NextResponse.json({ error: "Request was already resolved or cancelled" }, { status: 409 });
     await db.insert(teamNotifications).values({ sessionId, teamId: team.id, kind: "market", message: `WHO HQ declined your request for ${request.amount.toLocaleString()} ${request.resourceType === "PPE_DAYS" ? "PPE-days" : "antiviral doses"}.` });
     return NextResponse.json({ ok: true });
   }

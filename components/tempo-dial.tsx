@@ -33,7 +33,7 @@ export function TempoDial({ intensityMultiplier }: { intensityMultiplier: number
     <section className="rounded-lg bg-surface p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-bold text-text">Tempo</h2>
-        <span className="text-xs text-neutral-700">Scales Rt drift, WHO HQ prices, and deadline windows together</span>
+        <span className="text-xs text-neutral-700">Scales Rt drift and WHO HQ prices. Decision time is set under Pacing.</span>
       </div>
       <div className="flex items-center gap-1.5 rounded-full bg-neutral-200 p-[5px]">
         {NOTCHES.map((n) => {

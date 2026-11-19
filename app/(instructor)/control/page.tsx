@@ -12,6 +12,8 @@ import { EmergencyFundingPanel } from "@/components/emergency-funding-panel";
 import { DeadlineCountdown } from "@/components/deadline-countdown";
 import { DirectorTimeline } from "@/components/director-timeline";
 import { TempoDial } from "@/components/tempo-dial";
+import { NextUpCard } from "@/components/next-up-card";
+import { PacingPanel, type PacingGlobalState } from "@/components/pacing-panel";
 import { InterjectionPanel } from "@/components/interjection-panel";
 import { Chip, type ChipTone } from "@/components/ui/chip";
 import { PillButton, PillLink } from "@/components/ui/pill-button";
@@ -50,19 +52,16 @@ interface EventsData {
   chainStatus: Record<string, { ok: boolean; blockedBy: string[] }>;
   teams: TeamRef[];
   targetHints: Record<string, string[]>;
+  mode?: "instructor" | "demo";
 }
 
 interface DashboardData {
-  globalState: {
+  globalState: PacingGlobalState & {
     simulationStatus: string;
     currentDay: number;
     escalationState: string;
-    totalGameDays: number;
-    simulationStartedAt: string | null;
-    pausedAccumulatedMs: number;
-    pausedAt: string | null;
-    gameDaysPerRealMinute: number;
     intensityMultiplier: number;
+    autopilotEnabled: boolean;
   };
 }
 
@@ -186,6 +185,16 @@ export default function ControlPage() {
         </div>
       </section>
 
+      <NextUpCard
+        clock={dash.globalState}
+        events={data.events}
+        dispatches={data.dispatches}
+        chainStatus={data.chainStatus}
+        targetHints={data.targetHints}
+        autopilotEnabled={dash.globalState.autopilotEnabled}
+        showAutopilot={data.mode === "instructor"}
+      />
+      <PacingPanel state={dash.globalState} openEventCount={new Set(activeDeadlines.map((a) => a.dispatch.eventId)).size} />
       <DirectorTimeline state={dash.globalState} events={data.events} dispatches={data.dispatches} />
       <TempoDial intensityMultiplier={dash.globalState.intensityMultiplier} />
       <InterjectionPanel />
@@ -250,13 +259,13 @@ export default function ControlPage() {
               onClick={() => setCoreOnly(false)}
               className={!coreOnly ? "rounded-full bg-bg px-4 py-1.5 font-bold text-text shadow-sm" : "rounded-full px-4 py-1.5 text-neutral-700"}
             >
-              All 16 events
+              All {data.events.length} events
             </button>
             <button
               onClick={() => setCoreOnly(true)}
               className={coreOnly ? "rounded-full bg-bg px-4 py-1.5 font-bold text-text shadow-sm" : "rounded-full px-4 py-1.5 text-neutral-700"}
             >
-              Core path only (~60min)
+              Required only
             </button>
           </div>
         </div>
@@ -290,12 +299,12 @@ export default function ControlPage() {
                   const pickerOpen = pickerOpenFor === e.id;
 
                   return (
-                    <div key={e.id} className={`rounded-lg p-4 ${allScored ? "bg-accent-2-100" : "bg-surface"}`}>
+                    <div key={e.id} id={`event-${e.id}`} className={`scroll-mt-6 rounded-lg p-4 ${allScored ? "bg-accent-2-100" : "bg-surface"}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="flex flex-wrap items-center gap-2 font-semibold text-text">
                             {e.title} <span className="text-xs font-normal text-neutral-700">({e.id}, {e.scope})</span>
-                            <Chip tone={e.isCorePath ? "accent-soft" : "neutral-soft"}>{e.isCorePath ? "Core" : "Optional"}</Chip>
+                            <Chip tone={e.isCorePath ? "accent-soft" : "neutral-soft"}>{e.isCorePath ? "Required" : "Optional"}</Chip>
                             {isRestricted && !targetHint && (
                               <Chip tone="neutral-soft">Targeted: {e.suggestedTargetRegions!.join("/")}</Chip>
                             )}

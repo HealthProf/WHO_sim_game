@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { events, eventDispatches, instructorActions, globalFeedItems, teams } from "@/lib/db/schema";
+import { eventDispatches, instructorActions, globalFeedItems, teams } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireActor, requireInstructorActor } from "@/lib/session-context";
-import { canDispatch, computeAllChainStatus } from "@/lib/chain";
-import { computeDeadlineAt } from "@/lib/deadline";
-import { announceDispatch } from "@/lib/announcements";
+import { computeAllChainStatus } from "@/lib/chain";
+import { dispatchEventToRegions } from "@/lib/dispatch";
 import { computeEventTargetHints } from "@/lib/event-targeting";
 
 // GET: list all events with dispatch/chain status. Instructors see everything;
@@ -29,6 +28,7 @@ export async function GET() {
       chainStatus,
       teams: allTeams.map((t) => ({ id: t.id, regionId: t.regionId })),
       targetHints,
+      mode: actor!.mode,
     });
   }
 
@@ -49,68 +49,19 @@ export async function POST(req: NextRequest) {
   const targetTeamId = body.targetTeamId as number | null | undefined; // single-team shorthand
   const targetRegionIds = body.targetRegionIds as string[] | null | undefined; // preferred: explicit region picker from the Control page
 
-  const event = await db.query.events.findFirst({ where: eq(events.id, eventId) });
-  if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
-
-  const chain = await canDispatch(sessionId, eventId);
-  if (!chain.ok) {
-    return NextResponse.json(
-      { error: `Blocked by unresolved prerequisite events: ${chain.blockedBy.join(", ")}` },
-      { status: 409 }
-    );
-  }
-
-  const dispatchedAt = new Date();
-  const deadlineAt = await computeDeadlineAt(sessionId, eventId, dispatchedAt);
-
-  const allTeams = await db.query.teams.findMany({ where: eq(teams.sessionId, sessionId) });
-  // targetTeamId is resolved against this session's teams below (not trusted
-  // directly) so a client-supplied id from another session can't be used to
-  // dispatch into it.
-  let targetIds: number[];
-  if (targetRegionIds && targetRegionIds.length > 0) {
-    targetIds = allTeams.filter((t) => targetRegionIds.includes(t.regionId)).map((t) => t.id);
-  } else if (targetTeamId) {
-    targetIds = allTeams.filter((t) => t.id === targetTeamId).map((t) => t.id);
-  } else {
-    targetIds = allTeams.map((t) => t.id);
-  }
-
-  const created =
-    targetIds.length > 0
-      ? await db
-          .insert(eventDispatches)
-          .values(
-            targetIds.map((teamId) => ({
-              sessionId,
-              eventId,
-              targetTeamId: teamId,
-              dispatchedAt,
-              deadlineAt,
-              status: "dispatched" as const,
-              dispatchedByUserId: actor!.userId,
-            }))
-          )
-          .returning()
-      : [];
-
-  const audienceDesc = targetIds.length >= allTeams.length ? "all teams (global)" : `${targetIds.map((id) => allTeams.find((t) => t.id === id)?.regionId).join(", ")}`;
-  await db.insert(instructorActions).values({
+  const result = await dispatchEventToRegions({
     sessionId,
-    instructorUserId: actor!.userId!,
-    actionType: "dispatch_event",
-    targetDesc: `${eventId} -> ${audienceDesc}`,
+    eventId,
+    targetRegionIds,
+    targetTeamId,
+    dispatchedByUserId: actor!.userId,
+    actionUserId: actor!.userId!,
     reason: body.reason ?? null,
   });
-
-  await announceDispatch({ sessionId, eventId, eventTitle: event.title, targetTeamIds: targetIds });
-
-  return NextResponse.json({ dispatches: created });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ dispatches: result.dispatches });
 }
 
-// PATCH: push an already-dispatched event to the public display (facilitator
-// action, distinct from dispatching it to teams — see design discussion on
-// the public/private data boundary).
 export async function PATCH(req: NextRequest) {
   const { actor, error } = await requireInstructorActor();
   if (error) return error;

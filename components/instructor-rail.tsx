@@ -10,6 +10,7 @@ import { SignOutButton } from "@/components/signout-button";
 import { RoleSwitcher } from "@/components/role-switcher";
 import { OpenDisplayButton } from "@/components/open-display-button";
 import { ResetSimulationButton } from "@/components/reset-simulation-button";
+import { EndSessionButton } from "@/components/end-session-button";
 
 interface RailDashboardData {
   globalState: GlobalClockFields;
@@ -249,6 +250,11 @@ function RailContents({
           {active && <OpenDisplayButton displayToken={active.displayToken} label="Projector" />}
           <ResetSimulationButton />
         </div>
+        {active && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <EndSessionButton sessionId={active.sessionId} mode={active.mode} />
+          </div>
+        )}
         <div className="mt-3">
           <SignOutButton />
         </div>

@@ -8,6 +8,8 @@ import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
 import { KeyTerms } from "@/components/key-terms";
 import { AdvisoryBoard } from "@/components/advisory-board";
+import { EventStatusBadge } from "@/components/event-status-badge";
+import { GlossaryText } from "@/components/glossary-text";
 import { affordabilityIssue, formatCost, type OwnRegionResources } from "@/lib/affordability";
 import type { StructuredOption as FullStructuredOption } from "@/lib/db/seed-data/events";
 import { REGIONS } from "@/lib/regions";
@@ -93,18 +95,21 @@ export default function EventDetailPage() {
       <div>
         <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-accent-700">Event · {event.deadlineType.toLowerCase()} deadline</p>
         <h1 className="font-heading text-[30px] text-text">{event.title}</h1>
-        {dispatch.deadlineAt && (
+        <div className="mt-1.5">
+          <EventStatusBadge status={dispatch.status} />
+        </div>
+        {dispatch.deadlineAt && dispatch.status === "dispatched" && (
           <DeadlineCountdown deadlineAt={dispatch.deadlineAt} gameDaysPerRealMinute={dash?.globalState.gameDaysPerRealMinute ?? 1.5} />
         )}
       </div>
 
       <section className="rounded-lg bg-surface p-4 text-[16px] leading-[1.6] text-neutral-800">
-        <p className="whitespace-pre-wrap">{event.narrativeMarkdown}</p>
+        <GlossaryText className="whitespace-pre-wrap" text={event.narrativeMarkdown} />
       </section>
 
       <section className="rounded-lg bg-surface p-4 text-sm text-neutral-800">
         <p className="mb-2 font-semibold text-text">Decision Prompt</p>
-        <p className="whitespace-pre-wrap">{event.decisionPromptMarkdown}</p>
+        <GlossaryText className="whitespace-pre-wrap" text={event.decisionPromptMarkdown} />
       </section>
 
       <KeyTerms texts={[event.narrativeMarkdown, event.decisionPromptMarkdown]} />

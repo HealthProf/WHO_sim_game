@@ -11,6 +11,8 @@ import { RecentDevelopments } from "@/components/recent-developments";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Chip } from "@/components/ui/chip";
 import { PillLink } from "@/components/ui/pill-button";
+import { IndexGauge } from "@/components/index-gauge";
+import { bandFor } from "@/lib/index-bands";
 
 interface DashboardData {
   globalState: { currentDay: number; escalationState: "GREEN" | "AMBER" | "RED"; mediaPressureIndex: number; simulationStatus: string };
@@ -109,7 +111,8 @@ export default function DashboardPage() {
             Global Rt <span className="font-bold text-text">{data.globalRt.toFixed(2)}</span>
           </span>
           <span className="text-[15px] text-neutral-700">
-            Media <span className="font-bold text-text">{data.globalState.mediaPressureIndex}</span>
+            Media <span className="font-bold text-text">{data.globalState.mediaPressureIndex}</span>{" "}
+            <span className="text-neutral-700">({bandFor("mediaPressure", data.globalState.mediaPressureIndex).label})</span>
           </span>
         </div>
       </div>
@@ -150,9 +153,13 @@ export default function DashboardPage() {
                 <Stat label="HCW surge" value={`${data.ownRegion.hcwSurgePct}%`} />
                 <Stat label="Rt" value={data.ownRegion.rt.toFixed(2)} />
                 <Stat label="CFR multiplier" value={data.ownRegion.cfrMultiplier.toFixed(2)} />
-                <Stat label="Political tension" value={data.ownRegion.politicalTensionIndex} />
-                <Stat label="Public trust" value={data.ownRegion.publicTrustIndex} />
-                <Stat label="Population happiness" value={data.ownRegion.populationHappinessIndex} />
+              </div>
+              {/* 0-100 social indices, with labeled bands tied to the
+                  thresholds where game consequences kick in. */}
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <IndexGauge metric="publicTrust" value={data.ownRegion.publicTrustIndex} />
+                <IndexGauge metric="happiness" value={data.ownRegion.populationHappinessIndex} />
+                <IndexGauge metric="politicalTension" value={data.ownRegion.politicalTensionIndex} />
               </div>
               <details className="text-sm text-neutral-800">
                 <summary className="cursor-pointer text-neutral-700">Full regional profile</summary>

@@ -39,7 +39,16 @@ async function resolveActor(): Promise<Actor | null> {
 
   if (user.kind === "region") {
     if (!user.sessionId || !user.teamId || !user.regionId) return null;
-    await db.update(gameSessions).set({ lastActivityAt: new Date() }).where(eq(gameSessions.id, user.sessionId));
+    // Conditional on the session still being live: once the facilitator
+    // ends it (lib/session-lifecycle.ts endSession), an already-issued region
+    // JWT stops resolving to an actor instead of reading/writing an archived
+    // session's rows until the token expires.
+    const [live] = await db
+      .update(gameSessions)
+      .set({ lastActivityAt: new Date() })
+      .where(and(eq(gameSessions.id, user.sessionId), ne(gameSessions.status, "archived")))
+      .returning();
+    if (!live) return null;
     return {
       sessionId: user.sessionId,
       role: "student",

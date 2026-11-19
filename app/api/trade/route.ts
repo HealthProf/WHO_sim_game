@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cancelTradeOffer } from "@/lib/cancel-requests";
 import { db } from "@/lib/db";
 import { regionTradeOffers, modelState, teams, teamNotifications, modelStateHistory } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -101,7 +102,10 @@ export async function PATCH(req: NextRequest) {
   if (offer.toTeamId !== actor!.teamId) return NextResponse.json({ error: "This offer isn't addressed to your region" }, { status: 403 });
 
   if (action === "reject") {
-    await db.update(regionTradeOffers).set({ status: "rejected", resolvedAt: new Date() }).where(eq(regionTradeOffers.id, offerId));
+    await db
+      .update(regionTradeOffers)
+      .set({ status: "rejected", resolvedAt: new Date() })
+      .where(and(eq(regionTradeOffers.sessionId, sessionId), eq(regionTradeOffers.id, offerId), eq(regionTradeOffers.status, "pending")));
     const buyerTeam = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, offer.fromTeamId)) });
     if (buyerTeam) await db.insert(teamNotifications).values({ sessionId, teamId: buyerTeam.id, kind: "trade", message: `Your trade offer was declined.` });
     await logAnalyticsEvent({
@@ -169,5 +173,18 @@ export async function PATCH(req: NextRequest) {
     metadata: { offerId, action: "accept", resourceType: offer.resourceType, amount: offer.amount, totalPrice: offer.totalPrice },
   });
 
+  return NextResponse.json({ ok: true });
+}
+
+// DELETE ?id=: the requesting region withdraws its own trade offer while it's
+// still pending (lib/cancel-requests.ts). 404 (not 403) when the id isn't
+// this session's, isn't this team's, or has already been acted on.
+export async function DELETE(req: NextRequest) {
+  const { actor, error } = await requireTeamActor();
+  if (error) return error;
+  const id = Number(req.nextUrl.searchParams.get("id"));
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "id is required" }, { status: 400 });
+  const ok = await cancelTradeOffer(actor!.sessionId, actor!.teamId!, id);
+  if (!ok) return NextResponse.json({ error: "Offer not found, or it has already been accepted or rejected" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

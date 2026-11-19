@@ -52,9 +52,9 @@ export const budgetCycleStatusEnum = pgEnum("budget_cycle_status", [
   "closed",
 ]);
 export const budgetChoiceEnum = pgEnum("budget_choice", ["accept", "request_more"]);
-export const marketRequestStatusEnum = pgEnum("market_request_status", ["pending", "approved", "rejected"]);
-export const tradeOfferStatusEnum = pgEnum("trade_offer_status", ["pending", "accepted", "rejected"]);
-export const emergencyRequestStatusEnum = pgEnum("emergency_request_status", ["open", "closed"]);
+export const marketRequestStatusEnum = pgEnum("market_request_status", ["pending", "approved", "rejected", "cancelled"]);
+export const tradeOfferStatusEnum = pgEnum("trade_offer_status", ["pending", "accepted", "rejected", "cancelled"]);
+export const emergencyRequestStatusEnum = pgEnum("emergency_request_status", ["open", "closed", "cancelled"]);
 export const marketResourceEnum = pgEnum("market_resource", ["PPE_DAYS", "ANTIVIRALS"]);
 export const sessionModeEnum = pgEnum("session_mode", ["instructor", "demo"]);
 export const sessionStatusEnum = pgEnum("session_status", [
@@ -279,6 +279,30 @@ export const sessionState = pgTable("session_state", {
   // day-level only.
   gameDaysPerRealMinute: real("game_days_per_real_minute").notNull().default(1.5),
   totalGameDays: integer("total_game_days").notNull().default(90),
+  // Facilitator-chosen total *play* time (Release 1). gameDaysPerRealMinute is
+  // derived from it (totalGameDays / targetDurationMinutes) rather than set
+  // directly, see lib/game-duration.ts. Briefing and debrief are not counted.
+  targetDurationMinutes: integer("target_duration_minutes").notNull().default(75),
+  // Clock anchor so the facilitator can change the duration mid-game without
+  // the in-game day jumping: the narrative clock is clockAnchorGameDays at
+  // clockAnchorElapsedMs of (pause-adjusted) real elapsed time, then advances
+  // at gameDaysPerRealMinute from there. Both are 0 until the first mid-game
+  // change, which makes the math identical to the original single-rate clock.
+  clockAnchorElapsedMs: integer("clock_anchor_elapsed_ms").notNull().default(0),
+  clockAnchorGameDays: real("clock_anchor_game_days").notNull().default(0),
+  // Decision-window controls (Release 1), independent of the Tempo dial.
+  // An event's response window in real minutes is
+  //   (decisionWindowBaseMinutes + deadlineWindowHours * fastModeMultiplier * 60) * decisionTimeMultiplier
+  // decisionWindowBaseMinutes gives every timed event a floor of reading and
+  // writing time (class sessions use 5, see lib/config.ts); demo sessions keep
+  // 0 so solo pacing is unchanged. decisionTimeMultiplier is the facilitator's
+  // live slider, and moving it also rescales the time left on open events.
+  decisionWindowBaseMinutes: real("decision_window_base_minutes").notNull().default(0),
+  decisionTimeMultiplier: real("decision_time_multiplier").notNull().default(1.0),
+  // Optional autopilot (Release 1, class sessions): when on, the tick fires
+  // the recommender's next required event on schedule. Off by default; the
+  // facilitator normally fires events by hand from the "Next up" card.
+  autopilotEnabled: boolean("autopilot_enabled").notNull().default(false),
   // Passive drift (see lib/model-engine.ts applyPassiveDrift): a small
   // continuous Rt creep applied while the sim is running and no fresh
   // containment decision has landed, so idle real time between dispatched
@@ -309,12 +333,11 @@ export const sessionState = pgTable("session_state", {
   // Item 9's "drama dial" — a single live-adjustable knob (0.5x-2x) the
   // instructor can nudge mid-session, independent of fastModeMultiplier
   // (which is a fixed session-setup pacing choice, not something meant to
-  // change live). Scales three things together: passive Rt drift rate
-  // (lib/model-engine.ts), WHO HQ marketplace price escalation
-  // (lib/economy.ts), and deadline window length (lib/deadline.ts, inverted
-  // — higher intensity means shorter windows). One control instead of three
-  // separate ones so a facilitator who senses the room coasting can turn up
-  // the pressure without hunting through multiple settings.
+  // change live). Scales passive Rt drift rate (lib/model-engine.ts) and
+  // WHO HQ marketplace price escalation (lib/economy.ts). Release 1 removed
+  // its effect on deadline windows: decision time now has its own
+  // facilitator slider (decisionTimeMultiplier below), so the two controls
+  // don't fight each other.
   intensityMultiplier: real("intensity_multiplier").notNull().default(1.0),
   // Update 3's Scenario Overview slide deck: a single server-set broadcast
   // timestamp, same shared-clock shape as the cheat monologue's

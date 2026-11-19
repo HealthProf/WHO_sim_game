@@ -126,3 +126,27 @@ export const MAX_CONCURRENT_ACTIVE_SESSIONS = 40;
 // session's polling traffic (and the work it would otherwise trigger) drops
 // without going so slack that a change feels laggy to notice.
 export const POLL_BACKOFF_MS = 30_000;
+
+// --- Game duration and decision windows (Release 1) ---
+// Total *play* time a class session is paced to (briefing and debrief are
+// extra). The facilitator can change it before or during the game; see
+// lib/game-duration.ts for how a mid-game change avoids jumping the clock.
+export const CLASS_DEFAULT_DURATION_MINUTES = 75;
+export const DURATION_MIN_MINUTES = 20;
+export const DURATION_MAX_MINUTES = 180;
+// A mid-game duration change always leaves at least this much play time, so
+// shrinking the duration below what has already elapsed can't make the
+// remaining narrative days race by in seconds.
+export const DURATION_MIN_REMAINING_MINUTES = 5;
+// Every timed event in a class session gets this many minutes of reading and
+// writing time on top of its stated deadline hours (1 real minute per stated
+// hour, the existing fastModeMultiplier). The seeded 2-6 hour windows become
+// 7-11 minutes, sized for reading the brief, discussing, and writing a
+// 2-5 sentence rationale. Demo sessions don't use this (solo pacing is
+// unchanged).
+export const CLASS_DECISION_WINDOW_BASE_MINUTES = 5;
+// Bounds for the facilitator's decision-time slider.
+export const DECISION_TIME_MIN_MULTIPLIER = 0.5;
+export const DECISION_TIME_MAX_MULTIPLIER = 2.0;
+// "Add time" button on the Command Center: extends every open event by this.
+export const EXTEND_OPEN_EVENTS_MINUTES = 2;
