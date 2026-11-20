@@ -5,7 +5,9 @@
 // afford throughout. See lib/config.ts AUTOPLAY_PROFILE_DISTRIBUTIONS for
 // the profile distributions this samples from.
 import { db } from "../db";
-import { regions } from "../db/schema";
+import { modelState as modelStateTable } from "../db/schema";
+import { eq } from "drizzle-orm";
+import { gradeDecision } from "../auto-grade";
 import { AUTOPLAY_PROFILE_DISTRIBUTIONS } from "../config";
 import { REGIONS } from "../regions";
 import type { AutoplayerBackend, CompetenceProfile } from "./index";
@@ -27,8 +29,34 @@ const AUTOPLAYER_PLACEHOLDER_COPY = {
     "[AUTOPLAYER PLACEHOLDER] Acknowledging the briefing; no structured decision required for this event. TODO(Tim): replace with authored autoplayer rationale for EVT-014/EVT-016.",
 } as const;
 
-function sampleTier(profile: CompetenceProfile): Tier {
-  const dist = AUTOPLAY_PROFILE_DISTRIBUTIONS[profile];
+// Release 3 "stress" modifier: a region whose public trust or morale has
+// fallen below 45 (the first warning-event threshold) makes somewhat worse
+// calls, and one doing well (trust 80+, the first reward milestone) makes
+// somewhat better ones, so computer regions react to how their game is going
+// instead of playing at a fixed level. Moves STRESS_SHIFT of probability one
+// tier worse (or better) at each step.
+const STRESS_SHIFT = 0.15;
+
+export function stressAdjustedDistribution(
+  profile: CompetenceProfile,
+  state?: { publicTrustIndex: number; populationHappinessIndex: number }
+): Record<Tier, number> {
+  const dist = { ...AUTOPLAY_PROFILE_DISTRIBUTIONS[profile] };
+  if (!state) return dist;
+  const stressed = state.publicTrustIndex < 45 || state.populationHappinessIndex < 45;
+  const thriving = state.publicTrustIndex >= 80;
+  if (!stressed && !thriving) return dist;
+  const order = stressed ? TIER_ORDER : [...TIER_ORDER].reverse();
+  for (let i = 0; i < order.length - 1; i++) {
+    const moved = Math.min(dist[order[i]], STRESS_SHIFT * dist[order[i]] + (i === 0 ? STRESS_SHIFT / 2 : 0));
+    dist[order[i]] -= moved;
+    dist[order[i + 1]] += moved;
+  }
+  return dist;
+}
+
+function sampleTier(profile: CompetenceProfile, state?: { publicTrustIndex: number; populationHappinessIndex: number }): Tier {
+  const dist = stressAdjustedDistribution(profile, state);
   const roll = Math.random();
   let cumulative = 0;
   for (const tier of TIER_ORDER) {
@@ -45,6 +73,45 @@ function canAfford(cost: OptionCost | undefined, state: { fundRemaining: number;
     (cost.ppeDays ?? 0) <= state.ppeDaysRemaining &&
     (cost.antivirals ?? 0) <= state.antiviralsRemaining
   );
+}
+
+// Population in billions (simulation-docs/04-regions.md), for allocations.
+const POPULATION_B: Record<string, number> = { AFRO: 1.1, AMRO: 1.0, EMRO: 0.679, EURO: 0.93, SEARO: 2.0, WPRO: 1.9 };
+// "Political/economic weight" used by the struggling style: richer, more
+// powerful regions pull more doses (the authored Inadequate pattern).
+const POWER_WEIGHT: Record<string, number> = { AFRO: 0.5, AMRO: 2.2, EMRO: 1.0, EURO: 2.0, SEARO: 0.8, WPRO: 1.5 };
+
+const ALLOCATION_RATIONALE: Record<CompetenceProfile, string> = {
+  strong:
+    "We weight doses by need: population times current case-fatality burden, which prioritizes AFRO and SEARO where low hospital capacity makes each dose prevent the most deaths. Every region receives some supply, and we will review the split against new data.",
+  mixed:
+    "We split doses roughly by population, a simple and defensible rule that every member state can accept, with small adjustments. It does not fully account for differences in fatality burden or health-system capacity.",
+  struggling:
+    "We allocate in line with funding contributions and existing commitments, which keeps major donor states on board. Lower-resource regions receive a smaller share for now.",
+};
+
+// Builds a 180,000-dose allocation in the given profile's style, with
+// +/-10% per-region jitter, summing exactly to the total.
+export function profileAllocation(profile: CompetenceProfile, cfr: Record<string, number>, rng: () => number = Math.random, total = 180_000): Record<string, number> {
+  const weight = (r: string) => {
+    if (profile === "strong") return POPULATION_B[r] * (cfr[r] && cfr[r] > 0 ? cfr[r] : 1) * (r === "AFRO" || r === "SEARO" ? 1.25 : 1);
+    if (profile === "mixed") return POPULATION_B[r];
+    return POPULATION_B[r] * POWER_WEIGHT[r];
+  };
+  const raw = REGIONS.map((r) => weight(r) * (0.9 + rng() * 0.2));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  const out: Record<string, number> = {};
+  let remaining = total;
+  REGIONS.forEach((r, i) => {
+    if (i === REGIONS.length - 1) {
+      out[r] = remaining;
+      return;
+    }
+    const share = Math.round((total * raw[i]) / sum);
+    out[r] = share;
+    remaining -= share;
+  });
+  return out;
 }
 
 // Rough fund-equivalent total, for ranking "cheapest option" when nothing
@@ -69,27 +136,25 @@ export const scriptedAutoplayer: AutoplayerBackend = {
     const confidenceLevel = sampleConfidence(profile);
 
     if (event.isAllocationEvent) {
-      const allRegions = await db.query.regions.findMany();
-      const totalWeight = allRegions.reduce((s, r) => s + r.populationWeight, 0);
-      const allocation: Record<string, number> = {};
-      let remaining = 180_000;
-      const ordered = REGIONS.map((id) => allRegions.find((r) => r.id === id)).filter((r): r is typeof regions.$inferSelect => !!r);
-      ordered.forEach((r, i) => {
-        if (i === ordered.length - 1) {
-          allocation[r.id] = remaining; // last region absorbs any rounding remainder, so the sum is always exact
-          return;
-        }
-        const share = Math.round(180_000 * (r.populationWeight / totalWeight));
-        allocation[r.id] = share;
-        remaining -= share;
+      // Release 3: each profile allocates in its own style (with a little
+      // jitter so two runs differ), and the tier comes from the same
+      // rule-based grader applied to human teams (lib/auto-grade.ts), so a
+      // computer region's grade matches what it actually allocated.
+      const states = await db.query.modelState.findMany({ where: eq(modelStateTable.sessionId, ctx.sessionId) });
+      const cfr = Object.fromEntries(states.map((s) => [s.regionId, s.cfrMultiplier]));
+      const allocation = profileAllocation(profile, cfr);
+      const grade = gradeDecision({
+        event: { id: event.id, minRationaleWords: 0, isAllocationEvent: true, requiresMandatoryReview: false, structuredOptionsJson: null },
+        decision: { structuredChoice: null, rationaleText: "", resourceAllocationJson: allocation },
+        cfrMultiplierByRegion: cfr,
       });
       return {
         optionLabel: null,
-        rationaleText: AUTOPLAYER_PLACEHOLDER_COPY.allocation,
+        rationaleText: ALLOCATION_RATIONALE[profile],
         resourceAllocationJson: allocation,
         confidenceLevel,
-        tier: sampleTier(profile),
-        rationale: "isAllocationEvent placeholder: population-weighted split",
+        tier: grade.tier,
+        rationale: `${profile} allocation style; graded ${grade.tier}: ${grade.reasons.join(" ")}`,
       };
     }
 
@@ -104,10 +169,11 @@ export const scriptedAutoplayer: AutoplayerBackend = {
       };
     }
 
-    const affordable = options.filter((o) => canAfford(o.cost, modelState));
-    const pool = affordable.length > 0 ? affordable : options;
+    const available = options.filter((o) => !(ctx.unavailableOptions ?? []).includes(o.label));
+    const affordable = available.filter((o) => canAfford(o.cost, modelState));
+    const pool = affordable.length > 0 ? affordable : available.length > 0 ? available : options;
 
-    const sampledTier = sampleTier(profile);
+    const sampledTier = sampleTier(profile, modelState);
     let candidates = pool.filter((o) => o.suggestedTier === sampledTier);
 
     if (candidates.length === 0) {

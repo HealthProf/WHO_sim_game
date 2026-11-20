@@ -14,8 +14,10 @@ import { processBudgetCycleTimers } from "./budget-cycle";
 import { checkSocialMilestones } from "./social-thresholds";
 import { applyFastPathScore } from "./fast-path-scoring";
 import { runAutoplayer } from "./autoplayer/run";
+import { runAutopilot } from "./autopilot";
+import { runAutoAccept } from "./auto-accept";
 import { TICK_THROTTLE_SECONDS, IDLE_TICK_CUTOFF_MINUTES } from "./config";
-import { computeDeadlineAt } from "./deadline-window";
+import { computeDeadlineAt, decisionWindowMinutes } from "./deadline-window";
 import { reapStale } from "./reaper";
 import { resolveCheatMonologue, resolveCheatRegionReverts } from "./cheat-engine";
 
@@ -81,6 +83,8 @@ export async function processDeadlines(sessionId: string) {
   await processBudgetCycleTimers(sessionId).catch((e) => console.error("[tick] processBudgetCycleTimers failed:", e));
   await checkSocialMilestones(sessionId).catch((e) => console.error("[tick] checkSocialMilestones failed:", e));
   await runAutoplayer(sessionId).catch((e) => console.error("[tick] runAutoplayer failed:", e));
+  await runAutopilot(sessionId).catch((e) => console.error("[tick] runAutopilot failed:", e));
+  await runAutoAccept(sessionId).catch((e) => console.error("[tick] runAutoAccept failed:", e));
   await resolveCheatRegionReverts(sessionId).catch((e) => console.error("[tick] resolveCheatRegionReverts failed:", e));
 
   const now = new Date();
@@ -93,13 +97,14 @@ export async function processDeadlines(sessionId: string) {
   const reminderEventIds = [...new Set(dueReminders.map((d) => d.eventId))];
   const reminderEvents =
     reminderEventIds.length > 0 ? await db.query.events.findMany({ where: (t, { inArray: ia }) => ia(t.id, reminderEventIds) }) : [];
-  const multiplier = gs.fastModeMultiplier ?? 1;
-  const intensity = gs.intensityMultiplier && gs.intensityMultiplier > 0 ? gs.intensityMultiplier : 1.0;
   const remindedDispatchIds: number[] = [];
   for (const d of dueReminders) {
     const event = reminderEvents.find((e) => e.id === d.eventId);
     if (!event || event.deadlineType !== "SOFT" || event.reminderAtHours == null) continue;
-    const reminderMinutes = (event.reminderAtHours * 60 * multiplier) / intensity;
+    // Reminder lands at the same fraction of the window as the seeded
+    // reminderAtHours/deadlineWindowHours ratio (lib/deadline-window.ts).
+    const fullWindow = event.deadlineWindowHours ? decisionWindowMinutes(event.deadlineWindowHours, gs) : 0;
+    const reminderMinutes = event.deadlineWindowHours ? (fullWindow * event.reminderAtHours) / event.deadlineWindowHours : 0;
     const reminderAt = new Date(d.dispatchedAt.getTime() + reminderMinutes * 60_000);
     if (reminderAt <= now) remindedDispatchIds.push(d.id);
   }

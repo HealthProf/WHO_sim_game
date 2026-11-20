@@ -10,6 +10,7 @@ import { SignOutButton } from "@/components/signout-button";
 import { RoleSwitcher } from "@/components/role-switcher";
 import { OpenDisplayButton } from "@/components/open-display-button";
 import { ResetSimulationButton } from "@/components/reset-simulation-button";
+import { EndSessionButton } from "@/components/end-session-button";
 
 interface RailDashboardData {
   globalState: GlobalClockFields;
@@ -237,9 +238,14 @@ function RailContents({
         {dash?.globalState && <ClockBlock state={dash.globalState} now={now} />}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {active?.mode === "instructor" && (
-            <Link href={`/sessions/${active.sessionId}/credentials`} className="text-sm text-neutral-400 hover:text-white">
-              Login details
-            </Link>
+            <>
+              <Link href={`/sessions/${active.sessionId}/credentials`} className="text-sm text-neutral-400 hover:text-white">
+                Login details
+              </Link>
+              <Link href={`/sessions/${active.sessionId}/setup`} className="text-sm text-neutral-400 hover:text-white">
+                Regions setup
+              </Link>
+            </>
           )}
           <Link href="/sessions" className="text-sm text-neutral-400 hover:text-white">
             Switch mode
@@ -249,6 +255,11 @@ function RailContents({
           {active && <OpenDisplayButton displayToken={active.displayToken} label="Projector" />}
           <ResetSimulationButton />
         </div>
+        {active && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <EndSessionButton sessionId={active.sessionId} mode={active.mode} />
+          </div>
+        )}
         <div className="mt-3">
           <SignOutButton />
         </div>

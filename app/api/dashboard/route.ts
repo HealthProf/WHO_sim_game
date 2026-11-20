@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { featureUnlocksFor } from "@/lib/feature-gate";
 import { db } from "@/lib/db";
 import { sessionState, modelState, teamNotifications } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
@@ -7,6 +8,7 @@ import { computeGlobalRt } from "@/lib/model-engine";
 import { processDeadlines } from "@/lib/deadline";
 import { getTeamAnnouncements, getActiveGlobalAnnouncement } from "@/lib/announcements";
 import { projectForward } from "@/lib/projection";
+import { applyPathogenText, pathogenFor } from "@/lib/pathogens";
 import { computeSimClock } from "@/lib/sim-clock";
 import { computeFinalResults } from "@/lib/final-results";
 import { POLL_BACKOFF_MS } from "@/lib/config";
@@ -87,10 +89,10 @@ export async function GET(req: NextRequest) {
         ...s,
         confirmedCases: override ? override.confirmedCases : s.confirmedCases,
         deaths: override ? override.deaths : s.deaths,
-        profileMarkdown: r.profileMarkdown,
+        profileMarkdown: applyPathogenText(r.profileMarkdown, gs?.pathogenId),
         roleTitle: r.roleTitle,
         hqLocation: r.hqLocation,
-        projection: projectForward(s),
+        projection: projectForward(s, pathogenFor(gs?.pathogenId)),
       };
     }
     if (actor!.teamId) {
@@ -134,7 +136,12 @@ export async function GET(req: NextRequest) {
   // the projector shows — see components/cheat-code-widget.tsx.
   const activeGlobalAnnouncement = await getActiveGlobalAnnouncement(sessionId);
 
+  // Release 2 phased feature unlock, so team pages and the rail can show
+  // what's open (lib/feature-unlock.ts).
+  const featureUnlocks = await featureUnlocksFor(sessionId);
+
   return NextResponse.json({
+    featureUnlocks,
     globalState: gs,
     stateVersion: gs?.stateVersion,
     globalRt,

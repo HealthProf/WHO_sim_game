@@ -1,5 +1,6 @@
 import { ownedActiveSession } from "@/lib/session-context";
 import { OpenDisplayButton } from "@/components/open-display-button";
+import { WorldPanel } from "@/components/world-panel";
 
 // The projector display, embedded in the console so a facilitator can watch
 // what the room is seeing without switching windows — and pop it out to the
@@ -48,6 +49,13 @@ export default async function GlobalViewPage() {
       <p className="break-all text-xs text-neutral-700">
         Direct link: <code className="text-neutral-700">{displayPath}</code>
       </p>
+
+      {/* Release 4: the facilitator's own world view, with every region's
+          trust and morale (private on the projector and to other teams). */}
+      <div>
+        <h2 className="mb-2 font-heading text-[21px] text-text">All regions over time (facilitator only)</h2>
+        <WorldPanel />
+      </div>
     </div>
   );
 }

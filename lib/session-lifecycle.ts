@@ -41,10 +41,18 @@ import {
   cheatRegionEffects,
   cheatCodeState,
 } from "./db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { regionSeed } from "./db/seed-data/regions";
 import { generateSessionId, generateSecret, generateUsernameSuffix, generateReadablePassword } from "./ids";
-import { DEMO_GAME_DAYS_PER_REAL_MINUTE, DEMO_FAST_MODE_MULTIPLIER, SCENARIO_OVERVIEW_PREROLL_SECONDS } from "./config";
+import {
+  DEMO_GAME_DAYS_PER_REAL_MINUTE,
+  DEMO_FAST_MODE_MULTIPLIER,
+  SCENARIO_OVERVIEW_PREROLL_SECONDS,
+  CLASS_DEFAULT_DURATION_MINUTES,
+  CLASS_DECISION_WINDOW_BASE_MINUTES,
+} from "./config";
+import { rateForDuration } from "./game-duration";
+import { pathogenFor, randomPathogenId, startingRtFor, type PathogenId } from "./pathogens";
 import { logSessionEvent } from "./session-events";
 import { logAnalyticsEvent } from "./analytics";
 
@@ -60,7 +68,10 @@ function shuffled<T>(arr: T[]): T[] {
   return out;
 }
 
-export async function createSession(ownerUserId: number, mode: "instructor" | "demo"): Promise<string> {
+export async function createSession(ownerUserId: number, mode: "instructor" | "demo", opts: { pathogenId?: PathogenId } = {}): Promise<string> {
+  // Release 5: each game is about one of four pathogens, drawn at random
+  // unless specified (lib/pathogens.ts).
+  const pathogen = pathogenFor(opts.pathogenId ?? randomPathogenId());
   const sessionId = generateSessionId();
 
   // 1. Identity row, not yet joinable.
@@ -90,10 +101,21 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
       ? {
           sessionId,
           gameDaysPerRealMinute: DEMO_GAME_DAYS_PER_REAL_MINUTE,
+          targetDurationMinutes: Math.round(90 / DEMO_GAME_DAYS_PER_REAL_MINUTE),
+          computerFacilitator: true,
+          pathogenId: pathogen.id,
           fastModeMultiplier: DEMO_FAST_MODE_MULTIPLIER,
           scenarioOverviewStartedAt: new Date(Date.now() + SCENARIO_OVERVIEW_PREROLL_SECONDS * 1000),
         }
-      : { sessionId }
+      : {
+          // Class sessions: paced to a 75-minute default play time, with a
+          // reading/writing floor on every decision window (lib/config.ts).
+          sessionId,
+          targetDurationMinutes: CLASS_DEFAULT_DURATION_MINUTES,
+          gameDaysPerRealMinute: rateForDuration(90, CLASS_DEFAULT_DURATION_MINUTES),
+          decisionWindowBaseMinutes: CLASS_DECISION_WINDOW_BASE_MINUTES,
+          pathogenId: pathogen.id,
+        }
   );
 
   // Demo mode: assign each region a shuffled competence profile up front —
@@ -110,7 +132,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
       sessionId,
       regionId: r.id,
       day: 1,
-      rt: r.startingRt,
+      rt: startingRtFor(r.startingRt, pathogen),
       cfrMultiplier: r.startingCfrMultiplier,
       confirmedCases: r.startingConfirmed,
       estimatedTrueCasesLow: r.startingEstTrueLow,
@@ -130,7 +152,7 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
     await db.insert(modelStateOptimal).values({
       sessionId,
       regionId: r.id,
-      rt: r.startingRt,
+      rt: startingRtFor(r.startingRt, pathogen),
       cfrMultiplier: r.startingCfrMultiplier,
       confirmedCases: r.startingConfirmed,
       estimatedTrueCasesLow: r.startingEstTrueLow,
@@ -189,6 +211,26 @@ export async function createSession(ownerUserId: number, mode: "instructor" | "d
 // transitively import next-auth can't be exercised directly under Vitest.
 export async function clearSessionCredentialSecrets(sessionId: string): Promise<void> {
   await db.update(sessionRegionCredentials).set({ plaintextHint: null }).where(eq(sessionRegionCredentials.sessionId, sessionId));
+}
+
+// Ends a session for good from the owner's side ("End session and start
+// new"): archives it so POST /api/sessions will allow a fresh session of the
+// same mode, and so its region logins stop working (lib/auth-verify.ts and
+// lib/session-context.ts both refuse archived sessions). Ownership is checked
+// in the same UPDATE that archives, so a foreign session id is a no-op and the
+// caller returns 404. Data is kept until the reaper's normal post-archive
+// deletion window (lib/config.ts REAP_DELETE_*), so a class session's debrief
+// data isn't destroyed the moment the facilitator moves on.
+export async function endSession(sessionId: string, ownerUserId: number): Promise<{ id: string; mode: "instructor" | "demo" } | null> {
+  const [ended] = await db
+    .update(gameSessions)
+    .set({ status: "archived", completedAt: new Date(), demoActiveRegionId: null })
+    .where(and(eq(gameSessions.id, sessionId), eq(gameSessions.ownerUserId, ownerUserId), ne(gameSessions.status, "archived")))
+    .returning();
+  if (!ended) return null;
+  await clearSessionCredentialSecrets(sessionId);
+  await logSessionEvent({ sessionId, kind: "archived", mode: ended.mode, detail: "ended by owner" });
+  return { id: ended.id, mode: ended.mode };
 }
 
 // Deletes every row belonging to a session, in FK-dependency order — mirrors

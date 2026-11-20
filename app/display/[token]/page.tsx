@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { regionColors } from "@/lib/who-region-map";
 import { SimClock } from "@/components/sim-clock";
 import type { GlobalClockFields } from "@/lib/sim-clock";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
@@ -12,6 +11,9 @@ import type { TeamChapter as FullTeamChapter } from "@/lib/team-chapter";
 import { useBarrelRollEffect } from "@/lib/use-barrel-roll";
 import { useMonologueMessage } from "@/lib/use-monologue";
 import { ScenarioOverviewWatcher } from "@/components/scenario-overview-watcher";
+import { ProjectorWorld, type ProjectorAlert } from "@/components/projector-world";
+import type { SessionHistory } from "@/lib/history";
+import { pathogenFor } from "@/lib/pathogens";
 
 interface DisplaySnapVote {
   question: string;
@@ -51,6 +53,8 @@ interface DisplayData extends GlobalClockFields {
   finalResults: FinalResults | null;
   teamChapters: TeamChapter[] | null;
   worldHealth: { index: number; label: string };
+  history: SessionHistory;
+  pathogenId?: string;
   cheat: {
     godModeActive: boolean;
     barrelRollAt: string | null;
@@ -80,6 +84,28 @@ export default function PublicDisplayPage() {
   // there, so a slow poll cycle can never cause it to be missed or cut
   // short (see lib/announcements.ts getActiveGlobalAnnouncement).
   const [announcementSeen, setAnnouncementSeen] = useState<{ id: number; seenAt: number } | null>(null);
+
+  // Release 4 frame alert (see .frame-alert in globals.css): shown for a few
+  // slow pulses when the spotlight reports a big swing, or when global
+  // escalation first reaches RED.
+  const [alert, setAlert] = useState<ProjectorAlert | null>(null);
+  const showAlert = useCallback((a: ProjectorAlert) => setAlert(a), []);
+  useEffect(() => {
+    if (!alert) return;
+    const t = setTimeout(() => setAlert(null), 8000);
+    return () => clearTimeout(t);
+  }, [alert]);
+  const prevEscalation = useRef<string | null>(null);
+  useEffect(() => {
+    const esc = data?.escalationState;
+    if (!esc) return;
+    const prev = prevEscalation.current;
+    prevEscalation.current = esc;
+    if (prev && prev !== "RED" && esc === "RED") {
+      const t = setTimeout(() => setAlert({ tone: "bad", text: "Global escalation has reached RED", key: `esc-${Date.now()}` }), 0);
+      return () => clearTimeout(t);
+    }
+  }, [data?.escalationState]);
 
   useBarrelRollEffect(data?.cheat?.barrelRollAt);
   // Ticks locally every second from the server's startedAt timestamp,
@@ -233,17 +259,21 @@ export default function PublicDisplayPage() {
     );
   }
 
-  const maxCases = Math.max(...data.regions.map((r) => r.confirmedCases), 1);
-  const maxDeaths = Math.max(...data.regions.map((r) => r.deaths), 1);
-  const maxRt = Math.max(...data.regions.map((r) => r.rt), 1);
-  const sortedRegionsByCases = [...data.regions].sort((a, b) => b.confirmedCases - a.confirmedCases);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-neutral-900 text-white">
       <ScenarioOverviewWatcher displayToken={token} />
+      {alert && (
+        <div key={alert.key} className={`frame-alert ${alert.tone === "bad" ? "frame-alert-bad" : "frame-alert-good"}`} role="alert">
+          <span className="sr-only">{alert.text}</span>
+        </div>
+      )}
       {staleBanner}
       <header className={`flex shrink-0 flex-wrap items-center justify-between gap-4 px-8 py-5 ${escalationBg[data.escalationState]}`}>
-        <h1 className="font-heading text-3xl tracking-wide xl:text-4xl">OPERATION VEILED HORIZON</h1>
+        <div>
+          <h1 className="font-heading text-3xl tracking-wide xl:text-4xl">OPERATION VEILED HORIZON</h1>
+          <p className="text-sm text-neutral-300">Outbreak: {pathogenFor(data.pathogenId).codeName} ({pathogenFor(data.pathogenId).name})</p>
+        </div>
         <SimClock state={data} size="lg" />
         <div className="flex items-center gap-8 text-xl font-semibold xl:text-2xl">
           <span>{data.escalationState}</span>
@@ -352,27 +382,9 @@ export default function PublicDisplayPage() {
             <StatTile label="Avg. Happiness" value={data.globalAvgHappiness} />
           </div>
 
-          <RegionBarPanel
-            title="Confirmed Cases by Region"
-            regions={sortedRegionsByCases}
-            valueOf={(r) => r.confirmedCases}
-            max={maxCases}
-            format={(v) => v.toLocaleString()}
-          />
-          <RegionBarPanel
-            title="Deaths by Region"
-            regions={[...data.regions].sort((a, b) => b.deaths - a.deaths)}
-            valueOf={(r) => r.deaths}
-            max={maxDeaths}
-            format={(v) => v.toLocaleString()}
-          />
-          <RegionBarPanel
-            title="Rt by Region"
-            regions={[...data.regions].sort((a, b) => b.rt - a.rt)}
-            valueOf={(r) => r.rt}
-            max={maxRt}
-            format={(v) => v.toFixed(2)}
-          />
+          {/* Release 4: a world map with region avatars and a trend chart,
+              replacing the per-region bar charts (see ProjectorWorld). */}
+          {data.history && <ProjectorWorld history={data.history} onAlert={showAlert} />}
         </div>
 
         {/* Right: live event feed, newest on top. Items never disappear on
@@ -417,41 +429,6 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
     <div className="rounded-lg bg-neutral-800 p-4">
       <p className="text-xs uppercase tracking-wide text-neutral-400">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums xl:text-3xl">{value}</p>
-    </div>
-  );
-}
-
-function RegionBarPanel({
-  title,
-  regions,
-  valueOf,
-  max,
-  format,
-}: {
-  title: string;
-  regions: { regionId: string; fullName: string; confirmedCases: number; deaths: number; rt: number }[];
-  valueOf: (r: { regionId: string; confirmedCases: number; deaths: number; rt: number }) => number;
-  max: number;
-  format: (v: number) => string;
-}) {
-  return (
-    <div className="rounded-lg bg-neutral-800 p-4">
-      <p className="mb-3 text-xs uppercase tracking-wide text-neutral-400">{title}</p>
-      <div className="space-y-2">
-        {regions.map((r) => {
-          const value = valueOf(r);
-          const pct = Math.max(2, Math.round((value / max) * 100));
-          return (
-            <div key={r.regionId} className="flex items-center gap-3">
-              <span className="w-14 shrink-0 text-xs font-semibold text-neutral-300">{r.regionId}</span>
-              <div className="h-5 flex-1 overflow-hidden rounded bg-neutral-700">
-                <div className="h-full rounded" style={{ width: `${pct}%`, background: regionColors[r.regionId] }} />
-              </div>
-              <span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums">{format(value)}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

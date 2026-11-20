@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
+import { countermeasureUnits } from "@/lib/pathogens";
 import { QueryError } from "@/components/query-error";
 import { REGIONS } from "@/lib/regions";
 import { Chip } from "@/components/ui/chip";
 import { PillButton } from "@/components/ui/pill-button";
+import { FeatureLockNotice } from "@/components/feature-lock-notice";
 
 interface MarketData {
   prices: { PPE_DAYS: number; ANTIVIRALS: number };
@@ -28,13 +30,14 @@ interface TradeOffer {
 
 interface DashboardData {
   ownRegion: { regionId: string } | null;
+  globalState?: { pathogenId?: string };
 }
-
-const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE (days)", ANTIVIRALS: "Antivirals (doses)" };
 
 export default function MarketplacePage() {
   const qc = useQueryClient();
   const { data: dash } = useQuery({ queryKey: ["dashboard"], queryFn: () => apiFetch<DashboardData>("/api/dashboard") });
+  const cm = countermeasureUnits(dash?.globalState?.pathogenId);
+  const RESOURCE_LABEL: Record<string, string> = { PPE_DAYS: "PPE (days)", ANTIVIRALS: cm.formLabel };
 
   const { data: market, error: marketError, refetch: refetchMarket } = useQuery({
     queryKey: ["market"],
@@ -88,20 +91,31 @@ export default function MarketplacePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["trade"] }),
   });
 
+  // Withdraw your own pending WHO HQ request or trade offer before anyone acts
+  // on it (lib/cancel-requests.ts). Nothing was charged yet, so no refund.
+  const cancelRequest = useMutation({
+    mutationFn: ({ kind, id }: { kind: "market" | "trade"; id: number }) => apiFetch(`/api/${kind}?id=${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["market"] });
+      qc.invalidateQueries({ queryKey: ["trade"] });
+    },
+  });
+
   if (marketError) return <QueryError error={marketError} onRetry={() => refetchMarket()} label="marketplace" />;
 
   const ownRegion = dash?.ownRegion?.regionId;
   const incomingOffers = (trades?.offers ?? []).filter((o) => o.toRegionId === ownRegion && o.status === "pending");
   const recentBatch = (market?.requests ?? []).filter((r) => r.status === "pending");
 
-  const tradeStatusTone = { accepted: "sage-soft", rejected: "neutral-outline", pending: "accent-soft" } as const;
+  const tradeStatusTone = { accepted: "sage-soft", rejected: "neutral-outline", pending: "accent-soft", cancelled: "neutral-outline" } as const;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-[26px]">
+    <FeatureLockNotice feature="market">
+      <div className="flex max-w-4xl flex-col gap-[26px]">
       <div>
         <h1 className="font-heading text-[32px] text-text">Marketplace</h1>
         <p className="mt-1 text-sm text-neutral-700">
-          Buy PPE or antivirals from WHO HQ at the current adaptive price (requires instructor approval — other
+          Buy PPE or {cm.label.toLowerCase()} from WHO HQ at the current adaptive price (requires instructor approval — other
           regions get a 30-second heads-up to submit their own request before it&apos;s processed), or trade directly
           with another region. Trades are accept/reject only, no counter-offers.
         </p>
@@ -116,7 +130,7 @@ export default function MarketplacePage() {
             <p className="mt-1 text-xs text-neutral-700">WHO HQ stock: {market?.whoHqPpeStock.toLocaleString()}</p>
           </div>
           <div className="rounded-md bg-bg p-3">
-            <p className="text-xs text-neutral-700">Antivirals (per dose)</p>
+            <p className="text-xs text-neutral-700">{cm.label} (per {cm.unit})</p>
             <p className="text-base font-bold text-text">${market?.prices.ANTIVIRALS.toLocaleString()}</p>
             <p className="mt-1 text-xs text-neutral-700">WHO HQ stock: {market?.whoHqAntiviralsStock.toLocaleString()}</p>
           </div>
@@ -134,7 +148,7 @@ export default function MarketplacePage() {
             Resource
             <select value={buyResource} onChange={(e) => setBuyResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="PPE_DAYS">PPE (days)</option>
-              <option value="ANTIVIRALS">Antivirals (doses)</option>
+              <option value="ANTIVIRALS">{cm.formLabel}</option>
             </select>
           </label>
           <label className="text-sm">
@@ -154,7 +168,21 @@ export default function MarketplacePage() {
           <div className="space-y-1 text-xs text-neutral-700">
             <p className="uppercase tracking-wide text-neutral-700">Pending this batch (awaiting instructor approval)</p>
             {recentBatch.map((r) => (
-              <p key={r.id}>{r.regionId}: {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()}</p>
+              <p key={r.id} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {r.regionId}: {r.amount.toLocaleString()} {RESOURCE_LABEL[r.resourceType]} — ${r.totalCost.toLocaleString()}
+                </span>
+                {r.regionId === ownRegion && (
+                  <button
+                    type="button"
+                    onClick={() => cancelRequest.mutate({ kind: "market", id: r.id })}
+                    disabled={cancelRequest.isPending}
+                    className="font-semibold text-accent-700 underline hover:text-accent-600 disabled:opacity-40"
+                  >
+                    Cancel my request
+                  </button>
+                )}
+              </p>
             ))}
           </div>
         )}
@@ -199,7 +227,7 @@ export default function MarketplacePage() {
             Resource
             <select value={tradeResource} onChange={(e) => setTradeResource(e.target.value as "PPE_DAYS" | "ANTIVIRALS")} className="mt-1 block w-full rounded-full border-2 border-divider bg-bg px-4 py-2">
               <option value="PPE_DAYS">PPE (days)</option>
-              <option value="ANTIVIRALS">Antivirals (doses)</option>
+              <option value="ANTIVIRALS">{cm.formLabel}</option>
             </select>
           </label>
           <label className="text-sm">
@@ -217,6 +245,8 @@ export default function MarketplacePage() {
         {tradeError && <p className="text-sm font-medium text-accent-800">{tradeError}</p>}
       </section>
 
+      {cancelRequest.error && <p className="text-sm font-medium text-accent-800">{(cancelRequest.error as Error).message}</p>}
+
       <section>
         <h2 className="mb-2 text-sm font-semibold text-text">Recent Trades</h2>
         <div className="space-y-2">
@@ -225,12 +255,25 @@ export default function MarketplacePage() {
               <span className="text-text">
                 {o.fromRegionId} → {o.toRegionId}: {o.amount.toLocaleString()} {RESOURCE_LABEL[o.resourceType]} for ${o.totalPrice.toLocaleString()}
               </span>
-              <Chip tone={tradeStatusTone[o.status as keyof typeof tradeStatusTone] ?? "neutral-soft"}>{o.status}</Chip>
+              <span className="flex shrink-0 items-center gap-2">
+                {o.status === "pending" && o.fromRegionId === ownRegion && (
+                  <button
+                    type="button"
+                    onClick={() => cancelRequest.mutate({ kind: "trade", id: o.id })}
+                    disabled={cancelRequest.isPending}
+                    className="text-xs font-semibold text-accent-700 underline hover:text-accent-600 disabled:opacity-40"
+                  >
+                    Cancel offer
+                  </button>
+                )}
+                <Chip tone={tradeStatusTone[o.status as keyof typeof tradeStatusTone] ?? "neutral-soft"}>{o.status}</Chip>
+              </span>
             </div>
           ))}
           {(!trades || trades.offers.length === 0) && <p className="text-sm text-neutral-700">No trades yet.</p>}
         </div>
       </section>
-    </div>
+      </div>
+    </FeatureLockNotice>
   );
 }

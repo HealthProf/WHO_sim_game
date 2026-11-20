@@ -52,9 +52,9 @@ export const budgetCycleStatusEnum = pgEnum("budget_cycle_status", [
   "closed",
 ]);
 export const budgetChoiceEnum = pgEnum("budget_choice", ["accept", "request_more"]);
-export const marketRequestStatusEnum = pgEnum("market_request_status", ["pending", "approved", "rejected"]);
-export const tradeOfferStatusEnum = pgEnum("trade_offer_status", ["pending", "accepted", "rejected"]);
-export const emergencyRequestStatusEnum = pgEnum("emergency_request_status", ["open", "closed"]);
+export const marketRequestStatusEnum = pgEnum("market_request_status", ["pending", "approved", "rejected", "cancelled"]);
+export const tradeOfferStatusEnum = pgEnum("trade_offer_status", ["pending", "accepted", "rejected", "cancelled"]);
+export const emergencyRequestStatusEnum = pgEnum("emergency_request_status", ["open", "closed", "cancelled"]);
 export const marketResourceEnum = pgEnum("market_resource", ["PPE_DAYS", "ANTIVIRALS"]);
 export const sessionModeEnum = pgEnum("session_mode", ["instructor", "demo"]);
 export const sessionStatusEnum = pgEnum("session_status", [
@@ -195,6 +195,12 @@ export const gameSessions = pgTable("game_sessions", {
   // requireActor() (Phase 4 wires the override; Phase 1 leaves this column in
   // place but unused by any read path other than the schema itself).
   demoActiveRegionId: text("demo_active_region_id").references(() => regions.id),
+  // Release 3, solo play only: the role the owner chose on the solo setup
+  // screen. "facilitator" = they run the facilitator console and can step
+  // into any region; "region" = they play one region (demoActiveRegionId)
+  // and the computer runs the facilitator and every other region. null =
+  // not chosen yet (behaves like the original demo: computer fires events).
+  soloRole: text("solo_role"),
 });
 
 // Per-session region logins (instructor mode). Generated at session creation
@@ -279,6 +285,60 @@ export const sessionState = pgTable("session_state", {
   // day-level only.
   gameDaysPerRealMinute: real("game_days_per_real_minute").notNull().default(1.5),
   totalGameDays: integer("total_game_days").notNull().default(90),
+  // Facilitator-chosen total *play* time (Release 1). gameDaysPerRealMinute is
+  // derived from it (totalGameDays / targetDurationMinutes) rather than set
+  // directly, see lib/game-duration.ts. Briefing and debrief are not counted.
+  targetDurationMinutes: integer("target_duration_minutes").notNull().default(75),
+  // Clock anchor so the facilitator can change the duration mid-game without
+  // the in-game day jumping: the narrative clock is clockAnchorGameDays at
+  // clockAnchorElapsedMs of (pause-adjusted) real elapsed time, then advances
+  // at gameDaysPerRealMinute from there. Both are 0 until the first mid-game
+  // change, which makes the math identical to the original single-rate clock.
+  clockAnchorElapsedMs: integer("clock_anchor_elapsed_ms").notNull().default(0),
+  clockAnchorGameDays: real("clock_anchor_game_days").notNull().default(0),
+  // Decision-window controls (Release 1), independent of the Tempo dial.
+  // An event's response window in real minutes is
+  //   (decisionWindowBaseMinutes + deadlineWindowHours * fastModeMultiplier * 60) * decisionTimeMultiplier
+  // decisionWindowBaseMinutes gives every timed event a floor of reading and
+  // writing time (class sessions use 5, see lib/config.ts); demo sessions keep
+  // 0 so solo pacing is unchanged. decisionTimeMultiplier is the facilitator's
+  // live slider, and moving it also rescales the time left on open events.
+  decisionWindowBaseMinutes: real("decision_window_base_minutes").notNull().default(0),
+  decisionTimeMultiplier: real("decision_time_multiplier").notNull().default(1.0),
+  // Optional autopilot (Release 1, class sessions): when on, the tick fires
+  // the recommender's next required event on schedule. Off by default; the
+  // facilitator normally fires events by hand from the "Next up" card.
+  autopilotEnabled: boolean("autopilot_enabled").notNull().default(false),
+  // Release 2 facilitator switches.
+  // autoAcceptScores: the tick applies each submission's rule-based
+  // provisional grade (lib/auto-grade.ts) after AUTO_ACCEPT_GRACE_SECONDS,
+  // except ones that need review. Off by default.
+  autoAcceptScores: boolean("auto_accept_scores").notNull().default(false),
+  // Release 3: the computer runs the facilitator side (fires events, scores
+  // the human player's decisions, approves market requests, handles funding
+  // requests, ends the game). Solo sessions start with it on (the original
+  // demo behavior); choosing to be the facilitator turns it off.
+  computerFacilitator: boolean("computer_facilitator").notNull().default(false),
+  // Release 5: which pathogen this game is about (lib/pathogens.ts). Drawn
+  // at random at creation; the facilitator can change it before the start.
+  pathogenId: text("pathogen_id").notNull().default("ncov"),
+  // Release 5 shared R&D fund (lib/research.ts): total pooled, per-region
+  // contributions ({ AFRO: 5000000, ... }), the highest milestone reached
+  // (0-3), and whether the "rushed vaccine" trust backlash has been rolled.
+  rdFund: integer("rd_fund").notNull().default(0),
+  rdContributions: jsonb("rd_contributions").notNull().default({}),
+  rdMilestone: integer("rd_milestone").notNull().default(0),
+  rdBacklashRolled: boolean("rd_backlash_rolled").notNull().default(false),
+  // resultsRevealForced: false (default) = each team has its own "show how
+  // this affected the world" toggle on a scored event, starting off; true =
+  // always shown to every team, no toggle.
+  resultsRevealForced: boolean("results_reveal_forced").notNull().default(false),
+  // showExpectedEffects: event pages show each option's expected effect on
+  // the team's region and the world (as a range, see lib/outcome-variance.ts).
+  showExpectedEffects: boolean("show_expected_effects").notNull().default(true),
+  // featuresUnlockedEarly: skip the phased unlock of pledges/funding and the
+  // marketplace (lib/feature-unlock.ts) and open everything now.
+  featuresUnlockedEarly: boolean("features_unlocked_early").notNull().default(false),
   // Passive drift (see lib/model-engine.ts applyPassiveDrift): a small
   // continuous Rt creep applied while the sim is running and no fresh
   // containment decision has landed, so idle real time between dispatched
@@ -309,12 +369,11 @@ export const sessionState = pgTable("session_state", {
   // Item 9's "drama dial" — a single live-adjustable knob (0.5x-2x) the
   // instructor can nudge mid-session, independent of fastModeMultiplier
   // (which is a fixed session-setup pacing choice, not something meant to
-  // change live). Scales three things together: passive Rt drift rate
-  // (lib/model-engine.ts), WHO HQ marketplace price escalation
-  // (lib/economy.ts), and deadline window length (lib/deadline.ts, inverted
-  // — higher intensity means shorter windows). One control instead of three
-  // separate ones so a facilitator who senses the room coasting can turn up
-  // the pressure without hunting through multiple settings.
+  // change live). Scales passive Rt drift rate (lib/model-engine.ts) and
+  // WHO HQ marketplace price escalation (lib/economy.ts). Release 1 removed
+  // its effect on deadline windows: decision time now has its own
+  // facilitator slider (decisionTimeMultiplier below), so the two controls
+  // don't fight each other.
   intensityMultiplier: real("intensity_multiplier").notNull().default(1.0),
   // Update 3's Scenario Overview slide deck: a single server-set broadcast
   // timestamp, same shared-clock shape as the cheat monologue's
@@ -498,6 +557,10 @@ export const eventDispatches = pgTable(
     status: dispatchStatusEnum("status").notNull().default("dispatched"),
     revealedToPublic: boolean("revealed_to_public").notNull().default(false),
     dispatchedByUserId: integer("dispatched_by_user_id").references(() => users.id),
+    // Release 5 mid-event disruptors (lib/disruptors.ts) planned for this
+    // dispatch at release time: [{ id, at }]. Each takes effect at its "at"
+    // time; null/empty = none drawn.
+    disruptionsJson: jsonb("disruptions_json"),
   },
   (t) => [index("event_dispatches_session_idx").on(t.sessionId)]
 );
@@ -545,6 +608,11 @@ export const scores = pgTable(
       .notNull()
       .unique()
       .references(() => decisions.id),
+    // Release 2: the deltas actually applied after outcome variance
+    // (lib/outcome-variance.ts), so a team can see exactly what its decision
+    // did; and the rule-based grader's reasons, for the facilitator's record.
+    appliedDeltasJson: jsonb("applied_deltas_json"),
+    gradeReasonsJson: jsonb("grade_reasons_json"),
     evidenceScore: integer("evidence_score").notNull(),
     politicalScore: integer("political_score").notNull(),
     equityScore: integer("equity_score").notNull(),
@@ -979,12 +1047,11 @@ export const socialMilestoneAwards = pgTable(
   ]
 );
 
-// Demo mode only: which competence profile the scripted autoplayer uses for
-// a region it's driving, and whether it's currently enabled at all (it's
-// disabled for whichever region the session owner is actively occupying —
-// see gameSessions.demoActiveRegionId and lib/autoplayer/scripted.ts).
-// Assigned with variety at session creation (lib/session-lifecycle.ts) so
-// no two demo runs feel identical.
+// Which regions a computer player drives, and with what competence profile.
+// Solo play: a row per region at creation, varied profiles; the region the
+// owner occupies (gameSessions.demoActiveRegionId) is skipped. Class
+// sessions (Release 3): rows only for regions the facilitator marked
+// "computer" on the setup page; enabled=false means a human team plays it.
 export const sessionRegionAutoplay = pgTable(
   "session_region_autoplay",
   {

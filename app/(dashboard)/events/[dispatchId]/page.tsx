@@ -8,13 +8,20 @@ import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
 import { KeyTerms } from "@/components/key-terms";
 import { AdvisoryBoard } from "@/components/advisory-board";
+import { EventStatusBadge } from "@/components/event-status-badge";
+import { GlossaryText } from "@/components/glossary-text";
+import { EventSummary } from "@/components/event-summary";
+import { EventResult } from "@/components/event-result";
+import { disruptorById } from "@/lib/disruptor-content";
+import type { ModelDelta } from "@/lib/db/seed-data/events";
+import { effectiveMinWords, wordCount } from "@/lib/auto-grade";
 import { affordabilityIssue, formatCost, type OwnRegionResources } from "@/lib/affordability";
 import type { StructuredOption as FullStructuredOption } from "@/lib/db/seed-data/events";
 import { REGIONS } from "@/lib/regions";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PillButton } from "@/components/ui/pill-button";
 
-type StructuredOption = Pick<FullStructuredOption, "label" | "text" | "cost" | "impactDesc">;
+type StructuredOption = Pick<FullStructuredOption, "label" | "text" | "cost" | "impactDesc" | "suggestedTier">;
 
 interface EventFull {
   id: string;
@@ -23,13 +30,14 @@ interface EventFull {
   decisionPromptMarkdown: string;
   minRationaleWords: number;
   structuredOptionsJson: StructuredOption[] | null;
+  modelDeltaJson: Record<string, ModelDelta[]> | null;
   isAllocationEvent: boolean;
   deadlineType: string;
 }
 
 interface EventsData {
   events: EventFull[];
-  dispatches: { id: number; eventId: string; status: string; deadlineAt: string | null }[];
+  dispatches: { id: number; eventId: string; status: string; deadlineAt: string | null; disruptionsJson?: { id: string; at: string }[] | null }[];
 }
 
 export default function EventDetailPage() {
@@ -41,11 +49,17 @@ export default function EventDetailPage() {
   const { data, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ["events"],
     queryFn: () => apiFetch<EventsData>("/api/events"),
+    // Release 5: poll so a mid-event development shows up while the team is
+    // on this page.
+    refetchInterval: 10000,
   });
   const { data: dash } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () =>
-      apiFetch<{ globalState: { gameDaysPerRealMinute: number }; ownRegion: OwnRegionResources | null }>("/api/dashboard"),
+      apiFetch<{
+        globalState: { gameDaysPerRealMinute: number; showExpectedEffects?: boolean; resultsRevealForced?: boolean; pathogenId?: string };
+        ownRegion: (OwnRegionResources & { regionId: string }) | null;
+      }>("/api/dashboard"),
     refetchInterval: 15000,
   });
 
@@ -86,6 +100,12 @@ export default function EventDetailPage() {
   if (!dispatch || !event) return <p className="text-neutral-700">Event not found.</p>;
 
   const allocationTotal = Object.values(allocation).reduce((a, b) => a + b, 0);
+  // Mid-event developments that have happened for this team (the API only
+  // sends ones whose time has come).
+  const disruptions = (dispatch.disruptionsJson ?? []).map((p) => disruptorById(p.id)).filter((d): d is NonNullable<typeof d> => !!d);
+  const minWords = effectiveMinWords(event.minRationaleWords);
+  const rationaleWords = wordCount(rationale);
+  const rationaleShort = minWords > 0 && rationaleWords < minWords;
   const alreadyResolved = dispatch.status === "scored" || dispatch.status === "closed";
 
   return (
@@ -93,25 +113,55 @@ export default function EventDetailPage() {
       <div>
         <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-accent-700">Event · {event.deadlineType.toLowerCase()} deadline</p>
         <h1 className="font-heading text-[30px] text-text">{event.title}</h1>
-        {dispatch.deadlineAt && (
+        <div className="mt-1.5">
+          <EventStatusBadge status={dispatch.status} />
+        </div>
+        {dispatch.deadlineAt && dispatch.status === "dispatched" && (
           <DeadlineCountdown deadlineAt={dispatch.deadlineAt} gameDaysPerRealMinute={dash?.globalState.gameDaysPerRealMinute ?? 1.5} />
         )}
       </div>
 
+      {disruptions.length > 0 && (
+        <section className="space-y-2" aria-live="polite">
+          {disruptions.map((d) => (
+            <div key={d.id} role="status" className="rounded-lg border-l-[6px] border-accent-600 bg-accent-100 p-4 text-sm text-accent-900">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-accent-700">Breaking development</p>
+              <p className="font-semibold">{d.headline}</p>
+              <p className="mt-0.5">{d.text}</p>
+              <p className="mt-1 text-xs font-semibold">
+                {d.kind === "remove" ? `Option ${d.options.join(", ")} is no longer available.` : d.warning}
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <EventSummary
+        eventId={event.id}
+        options={event.structuredOptionsJson}
+        modelDeltaJson={event.modelDeltaJson}
+        ownRegionId={dash?.ownRegion?.regionId}
+        showExpectedEffects={dash?.globalState.showExpectedEffects ?? true}
+        pathogenId={dash?.globalState.pathogenId}
+      />
+
       <section className="rounded-lg bg-surface p-4 text-[16px] leading-[1.6] text-neutral-800">
-        <p className="whitespace-pre-wrap">{event.narrativeMarkdown}</p>
+        <GlossaryText className="whitespace-pre-wrap" text={event.narrativeMarkdown} />
       </section>
 
       <section className="rounded-lg bg-surface p-4 text-sm text-neutral-800">
         <p className="mb-2 font-semibold text-text">Decision Prompt</p>
-        <p className="whitespace-pre-wrap">{event.decisionPromptMarkdown}</p>
+        <GlossaryText className="whitespace-pre-wrap" text={event.decisionPromptMarkdown} />
       </section>
 
       <KeyTerms texts={[event.narrativeMarkdown, event.decisionPromptMarkdown]} />
-      <AdvisoryBoard eventId={event.id} />
+      <AdvisoryBoard eventId={event.id} pathogenId={dash?.globalState.pathogenId} />
 
       {alreadyResolved ? (
-        <p className="text-sm font-medium text-accent-2-700">This event has been scored and closed.</p>
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-accent-2-700">This event has been scored and closed.</p>
+          <EventResult dispatchId={dispatchId} ownRegionId={dash?.ownRegion?.regionId} forced={!!dash?.globalState.resultsRevealForced} />
+        </div>
       ) : (
         <form
           onSubmit={(e) => {
@@ -125,7 +175,9 @@ export default function EventDetailPage() {
               <p className="mb-2 text-sm font-semibold text-text">Structured Choice</p>
               <div className="space-y-2">
                 {event.structuredOptionsJson.map((opt) => {
-                  const blockedReason = affordabilityIssue(opt.cost, dash?.ownRegion ?? undefined);
+                  const removedBy = disruptions.find((d) => d.kind === "remove" && d.options.includes(opt.label));
+                  const warnedBy = disruptions.find((d) => d.kind === "warn" && d.options.includes(opt.label));
+                  const blockedReason = removedBy ? `no longer available: ${removedBy.headline}` : affordabilityIssue(opt.cost, dash?.ownRegion ?? undefined);
                   const selected = structuredChoice === opt.label;
                   return (
                     <label
@@ -152,7 +204,12 @@ export default function EventDetailPage() {
                         <span className={selected ? "font-semibold text-accent-900" : "text-text"}>{opt.text}</span>
                         <span className="mt-1 block text-xs text-neutral-700">{formatCost(opt.cost)}</span>
                         <span className="mt-1 block text-xs text-neutral-700">{opt.impactDesc}</span>
-                        {blockedReason && <span className="mt-1 block text-xs font-medium text-accent-700">Can&apos;t afford this option — {blockedReason}</span>}
+                        {blockedReason && (
+                          <span className="mt-1 block text-xs font-medium text-accent-700">
+                            {removedBy ? `Option ${blockedReason}` : `Can't afford this option — ${blockedReason}`}
+                          </span>
+                        )}
+                        {warnedBy && !blockedReason && <span className="mt-1 block text-xs font-semibold text-accent-800">⚠ {warnedBy.warning}</span>}
                       </span>
                     </label>
                   );
@@ -227,18 +284,30 @@ export default function EventDetailPage() {
           </div>
 
           <div>
-            <p className="mb-2 text-sm font-semibold text-text">Rationale (optional, but strongly encouraged — this is what the instructor scores)</p>
+            <label htmlFor="rationale" className="mb-1 block text-sm font-semibold text-text">
+              Rationale{minWords > 0 ? ` (2-5 sentences, at least ${minWords} words)` : " (optional)"}
+            </label>
+            <p className="mb-2 text-xs text-neutral-700">
+              Say why, covering the evidence, what&apos;s politically and economically realistic, and who is most affected. Your
+              grade is built from these three.
+            </p>
             <textarea
+              id="rationale"
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
-              rows={8}
+              rows={5}
+              aria-describedby="rationale-count"
               className="w-full rounded-lg border-2 border-divider bg-bg px-[18px] py-[14px] text-[15px]"
             />
+            <p id="rationale-count" className={`mt-1 text-xs ${rationaleShort ? "text-accent-800" : "text-accent-2-700"}`} aria-live="polite">
+              {rationaleWords} word{rationaleWords === 1 ? "" : "s"}
+              {minWords > 0 && (rationaleShort ? ` · ${minWords - rationaleWords} more needed` : " · enough")}
+            </p>
           </div>
 
           {error && <p className="text-sm font-medium text-accent-800">{error}</p>}
 
-          <PillButton type="submit" disabled={submit.isPending} tone="accent" className="px-[30px] py-3">
+          <PillButton type="submit" disabled={submit.isPending || rationaleShort} tone="accent" className="px-[30px] py-3">
             {submit.isPending ? "Submitting..." : "Submit Decision"}
           </PillButton>
         </form>

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { decisions, eventDispatches } from "@/lib/db/schema";
+import { decisions, eventDispatches, events } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { submitDecision } from "@/lib/decisions";
+import { effectiveMinWords, wordCount } from "@/lib/auto-grade";
+import { computerRegionIds } from "@/lib/region-setup";
 import { logAnalyticsEvent } from "@/lib/analytics";
 
 // POST: a team submits a decision for a dispatch targeted at them. Thin
@@ -17,12 +19,39 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const confidenceLevel = ["LOW", "MEDIUM", "HIGH"].includes(body.confidenceLevel) ? body.confidenceLevel : null;
 
+  // Release 2: a short written rationale (2-5 sentences, ~40 words) is
+  // required wherever the event asks for one. Enforced here, on team
+  // submissions only; lib/decisions.ts is shared with the computer players.
+  // Release 3: in a class session, a region marked computer-run is played by
+  // the computer; a stray student login for it can't submit over it.
+  if (actor!.mode === "instructor" && !actor!.isOwner && (await computerRegionIds(actor!.sessionId)).includes(actor!.regionId!)) {
+    return NextResponse.json({ error: "This region is being played by the computer for this session. Ask your facilitator." }, { status: 403 });
+  }
+  const rationaleText = (body.rationaleText as string) ?? "";
+  const dispatch = await db.query.eventDispatches.findFirst({
+    where: and(eq(eventDispatches.sessionId, actor!.sessionId), eq(eventDispatches.id, Number(body.eventDispatchId))),
+  });
+  if (dispatch) {
+    const event = await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) });
+    const minWords = event ? effectiveMinWords(event.minRationaleWords) : 0;
+    const words = wordCount(rationaleText);
+    if (minWords > 0 && words < minWords) {
+      return NextResponse.json({ error: `Your rationale is ${words} words. Write at least ${minWords} (about 2-5 sentences).` }, { status: 400 });
+    }
+    // A structured choice must be one of this event's own options, so a
+    // stray value can't be graded as "no choice" (lib/auto-grade.ts).
+    const optionLabels = ((event?.structuredOptionsJson as { label: string }[] | null) ?? []).map((o) => o.label);
+    if (body.structuredChoice && !optionLabels.includes(body.structuredChoice)) {
+      return NextResponse.json({ error: "That choice isn't one of this event's options." }, { status: 400 });
+    }
+  }
+
   const result = await submitDecision({
     sessionId: actor!.sessionId,
     teamId: actor!.teamId!,
     eventDispatchId: body.eventDispatchId as number,
     structuredChoice: (body.structuredChoice as string) ?? null,
-    rationaleText: (body.rationaleText as string) ?? "",
+    rationaleText,
     resourceAllocationJson: body.resourceAllocationJson,
     coordinatedWithTeamsJson: body.coordinatedWithTeamsJson,
     confidenceLevel,

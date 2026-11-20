@@ -13,7 +13,8 @@
 // region for the other adaptive events so the Control page can show a
 // consistent "currently qualifies" hint across all of them.
 import { db } from "./db";
-import { eventDispatches, teams, decisions, scores, modelState } from "./db/schema";
+import { eventDispatches, teams, decisions, scores, modelState, sessionState } from "./db/schema";
+import { REGIONS } from "./regions";
 import { and, eq, inArray } from "drizzle-orm";
 
 // Events whose trigger names one fixed region outright in prose — no live
@@ -94,6 +95,23 @@ export async function computeEventTargetHints(sessionId: string): Promise<Record
   if (tensionWarn.length > 0) hints["EVT-023"] = tensionWarn;
   if (tensionEsc1.length > 0) hints["EVT-024"] = tensionEsc1;
   if (tensionEsc2.length > 0) hints["EVT-025"] = tensionEsc2;
+
+  // Release 5: the remaining adaptive triggers as rules (lib/pacing.ts uses
+  // these hints to rank optional events by what's true in the game now).
+  const gs = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  // EVT-010: "fires when Media Pressure Index > 65" (every region responds).
+  if (gs && gs.mediaPressureIndex > 65) hints["EVT-010"] = [...REGIONS];
+  // EVT-026: after the shared R&D fund completes its final phase.
+  if (gs && gs.rdMilestone >= 3) hints["EVT-026"] = [...REGIONS];
+  // EVT-027: regions that have used most of their countermeasure stockpile.
+  const lowStock = byThreshold((s) => s.antiviralsRemaining < 2000);
+  if (lowStock.length > 0) hints["EVT-027"] = lowStock;
+  // EVT-028: regions whose PPE is below 15 days.
+  const lowPpe = byThreshold((s) => s.ppeDaysRemaining < 15);
+  if (lowPpe.length > 0) hints["EVT-028"] = lowPpe;
+  // EVT-029: regions with Rt at or above 1.8.
+  const surging = byThreshold((s) => s.rt >= 1.8);
+  if (surging.length > 0) hints["EVT-029"] = surging;
 
   return hints;
 }

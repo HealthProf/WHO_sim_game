@@ -22,7 +22,8 @@ export type AnalyticsEventType =
   | "marketplace_purchase"
   | "coordination_message_sent"
   | "snap_vote_responded"
-  | "score_submitted";
+  | "score_submitted"
+  | "research_contributed";
 
 interface LogAnalyticsEventInput {
   sessionId: string;

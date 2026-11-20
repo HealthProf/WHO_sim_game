@@ -30,9 +30,10 @@ import {
   cheatRegionEffects,
   cheatCodeState,
 } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { requireInstructorActor } from "@/lib/session-context";
 import { SCENARIO_OVERVIEW_PREROLL_SECONDS } from "@/lib/config";
+import { pathogenFor, startingRtFor } from "@/lib/pathogens";
 
 // Resets *this session* to a fresh start: wipes every in-progress-game row
 // scoped to it (dispatches, decisions, scores, model history, coordination
@@ -79,13 +80,15 @@ export async function POST() {
   await db.delete(cheatRegionEffects).where(eq(cheatRegionEffects.sessionId, sessionId));
   await db.delete(cheatCodeState).where(eq(cheatCodeState.sessionId, sessionId));
 
+  const gsBefore = await db.query.sessionState.findFirst({ where: eq(sessionState.sessionId, sessionId) });
+  const pathogen = pathogenFor(gsBefore?.pathogenId);
   const allRegions = await db.query.regions.findMany();
   for (const r of allRegions) {
     await db
       .update(modelState)
       .set({
         day: 1,
-        rt: r.startingRt,
+        rt: startingRtFor(r.startingRt, pathogen),
         cfrMultiplier: r.startingCfrMultiplier,
         confirmedCases: r.startingConfirmed,
         estimatedTrueCasesLow: r.startingEstTrueLow,
@@ -107,7 +110,7 @@ export async function POST() {
     await db
       .update(modelStateOptimal)
       .set({
-        rt: r.startingRt,
+        rt: startingRtFor(r.startingRt, pathogen),
         cfrMultiplier: r.startingCfrMultiplier,
         confirmedCases: r.startingConfirmed,
         estimatedTrueCasesLow: r.startingEstTrueLow,
@@ -137,6 +140,16 @@ export async function POST() {
       whoHqAntiviralsStock: 200_000,
       lastBudgetCycleNarrativeDay: 0,
       intensityMultiplier: 1.0,
+      // Keep the facilitator's chosen duration, but restart its clock: drop
+      // any mid-game anchor and re-derive the single rate from the target.
+      clockAnchorElapsedMs: 0,
+      clockAnchorGameDays: 0,
+      gameDaysPerRealMinute: sql`${sessionState.totalGameDays}::real / ${sessionState.targetDurationMinutes}`,
+      autopilotEnabled: false,
+      rdFund: 0,
+      rdContributions: {},
+      rdMilestone: 0,
+      rdBacklashRolled: false,
       // Update 3: a reset re-plays the Scenario Overview deck for everyone,
       // identically to a brand-new session — "a reset does not skip or
       // shortcut any part of this flow" is explicit in the spec. Both modes

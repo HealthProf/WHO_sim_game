@@ -34,6 +34,8 @@ export interface AutoplayerBackend {
     event: typeof events.$inferSelect;
     modelState: typeof modelState.$inferSelect;
     profile: CompetenceProfile;
+    // Release 5: options removed by a mid-event disruptor.
+    unavailableOptions?: string[];
   }): Promise<AutoplayerDecision>;
 }
 

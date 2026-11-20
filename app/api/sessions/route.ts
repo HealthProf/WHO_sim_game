@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
   });
   if (existingActive) {
     return NextResponse.json(
-      { error: `You already have an active ${mode} session. Finish or archive it before starting another.`, sessionId: existingActive.id },
+      {
+        error: `You already have an active ${mode === "instructor" ? "class session" : "solo game"}. Use "End" on it first to start a fresh one.`,
+        sessionId: existingActive.id,
+      },
       { status: 409 }
     );
   }

@@ -19,6 +19,10 @@ export interface GlobalClockFields {
   pausedAt: string | Date | null;
   gameDaysPerRealMinute: number;
   totalGameDays: number;
+  // Optional so older callers and payloads still work; see the schema
+  // comment on sessionState.clockAnchorElapsedMs.
+  clockAnchorElapsedMs?: number | null;
+  clockAnchorGameDays?: number | null;
 }
 
 export interface SimClock {
@@ -37,13 +41,21 @@ export function computeRealElapsedMs(gs: GlobalClockFields, now: number = Date.n
   return Math.max(0, elapsed);
 }
 
+// Unclamped narrative days elapsed, honoring the duration-change anchor
+// (lib/game-duration.ts). Before any mid-game change both anchors are 0, so
+// this is just elapsedMinutes * rate.
+export function computeGameDaysElapsed(gs: GlobalClockFields, realElapsedMs: number): number {
+  const rate = gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
+  const anchorMs = gs.clockAnchorElapsedMs ?? 0;
+  const anchorDays = gs.clockAnchorGameDays ?? 0;
+  return Math.max(0, anchorDays + ((realElapsedMs - anchorMs) / 60000) * rate);
+}
+
 export function computeSimClock(gs: GlobalClockFields, now: number = Date.now()): SimClock {
   const realElapsedMs = computeRealElapsedMs(gs, now);
-  const realElapsedMinutes = realElapsedMs / 60000;
-  const rate = gs.gameDaysPerRealMinute > 0 ? gs.gameDaysPerRealMinute : 1.5;
   const totalGameDays = gs.totalGameDays > 0 ? gs.totalGameDays : 90;
 
-  const gameDaysElapsed = Math.min(realElapsedMinutes * rate, totalGameDays - 1 + 0.999999);
+  const gameDaysElapsed = Math.min(computeGameDaysElapsed(gs, realElapsedMs), totalGameDays - 1 + 0.999999);
   const gameDay = 1 + Math.floor(gameDaysElapsed);
   const gameDayFraction = gameDaysElapsed - Math.floor(gameDaysElapsed);
 

@@ -64,7 +64,7 @@ export async function seedStaticOnce() {
     }
   }
   const existingEvents = await db.query.events.findMany();
-  if (existingEvents.length === 0) {
+  if (existingEvents.length < eventSeed.length) {
     for (const e of eventSeed) {
       const { chainPrev, ...eventRow } = e;
       await db.insert(events).values(eventRow).onConflictDoUpdate({ target: events.id, set: eventRow });

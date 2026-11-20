@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/fetcher";
 import { mapNarrativeDayToGameDay } from "@/lib/game-day";
 import { realMsToGameDays, formatGameDays } from "@/lib/sim-clock";
 import { QueryError } from "@/components/query-error";
-import { Chip, type ChipTone } from "@/components/ui/chip";
+import { EventStatusBadge, STATUS_EDGE_CLASS, teamStatusOf } from "@/components/event-status-badge";
 import Link from "next/link";
 
 interface EventsData {
@@ -17,13 +17,6 @@ interface EventsData {
 interface DashboardData {
   globalState: { totalGameDays: number; gameDaysPerRealMinute: number };
 }
-
-const statusTone: Record<string, ChipTone> = {
-  dispatched: "accent-soft",
-  responded: "neutral-soft",
-  scored: "sage-soft",
-  closed: "neutral-outline",
-};
 
 export default function EventsPage() {
   const { data, isLoading, error, refetch } = useQuery({
@@ -43,13 +36,28 @@ export default function EventsPage() {
   const totalGameDays = dash?.globalState.totalGameDays ?? 90;
   const gameDaysPerRealMinute = dash?.globalState.gameDaysPerRealMinute ?? 1.5;
 
-  const dispatchesByEvent = data.dispatches
-    .slice()
-    .sort((a, b) => new Date(b.dispatchedAt).getTime() - new Date(a.dispatchedAt).getTime());
+  // To-do first (soonest deadline first), then submitted, then finished,
+  // newest first within each group.
+  const order = { todo: 0, submitted: 1, done: 2 } as const;
+  const dispatchesByEvent = data.dispatches.slice().sort((a, b) => {
+    const byStatus = order[teamStatusOf(a.status)] - order[teamStatusOf(b.status)];
+    if (byStatus !== 0) return byStatus;
+    if (a.status === "dispatched" && a.deadlineAt && b.deadlineAt) return new Date(a.deadlineAt).getTime() - new Date(b.deadlineAt).getTime();
+    return new Date(b.dispatchedAt).getTime() - new Date(a.dispatchedAt).getTime();
+  });
+  const counts = { todo: 0, submitted: 0, done: 0 };
+  for (const d of data.dispatches) counts[teamStatusOf(d.status)]++;
 
   return (
     <div className="flex flex-col gap-[26px]">
-      <h1 className="font-heading text-[32px] text-text">Events</h1>
+      <div>
+        <h1 className="font-heading text-[32px] text-text">Events</h1>
+        {data.dispatches.length > 0 && (
+          <p className="mt-1 text-sm text-neutral-800">
+            {counts.todo} to do · {counts.submitted} submitted · {counts.done} scored or closed
+          </p>
+        )}
+      </div>
       {dispatchesByEvent.length === 0 ? (
         <p className="text-neutral-700">No events have been dispatched to your team yet.</p>
       ) : (
@@ -61,7 +69,7 @@ export default function EventsPage() {
               <Link
                 key={d.id}
                 href={`/events/${d.id}`}
-                className="block rounded-lg bg-surface p-4 transition-colors duration-150 hover:bg-neutral-200"
+                className={`block rounded-lg bg-surface p-4 transition-colors duration-150 hover:bg-neutral-200 ${STATUS_EDGE_CLASS[teamStatusOf(d.status)]}`}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -70,9 +78,9 @@ export default function EventsPage() {
                       {d.eventId} · Game Day {gameDay}
                     </p>
                   </div>
-                  <Chip tone={statusTone[d.status] ?? "neutral-soft"}>{d.status}</Chip>
+                  <EventStatusBadge status={d.status} />
                 </div>
-                {d.deadlineAt && <Countdown deadlineAt={d.deadlineAt} gameDaysPerRealMinute={gameDaysPerRealMinute} />}
+                {d.deadlineAt && d.status === "dispatched" && <Countdown deadlineAt={d.deadlineAt} gameDaysPerRealMinute={gameDaysPerRealMinute} />}
               </Link>
             );
           })}

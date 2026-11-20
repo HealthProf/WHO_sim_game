@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lockedResponse } from "@/lib/feature-gate";
+import { cancelEmergencyRequest } from "@/lib/cancel-requests";
 import { db } from "@/lib/db";
 import { emergencyFundingRequests, emergencyFundingContributions, modelState, teams, teamNotifications } from "@/lib/db/schema";
 import { and, eq, inArray, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { POLITICAL_TENSION_LOCKOUT_THRESHOLD } from "@/lib/config";
-import { tryDeductRegionField, tryDeductWhoHqField } from "@/lib/db-atomic";
+import { tryDeductRegionField, tryDeductWhoHqField, creditRegionField, creditWhoHqField } from "@/lib/db-atomic";
 import { logAnalyticsEvent } from "@/lib/analytics";
 
 // GET: all emergency funding requests (open + recently closed) with their
@@ -52,6 +54,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { actor, error } = await requireTeamActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "pledges", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();
@@ -114,6 +118,8 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const { actor, error } = await requireActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "pledges", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();
@@ -167,6 +173,24 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // A requester may cancel (lib/cancel-requests.ts) only while there are no
+  // contributions. If the cancel landed in the instant between our status
+  // read above and our insert, nobody will ever close this request and pay
+  // the contribution out, so refund it ourselves and remove the row.
+  const stillOpen = await db.query.emergencyFundingRequests.findFirst({
+    where: and(eq(emergencyFundingRequests.sessionId, sessionId), eq(emergencyFundingRequests.id, requestId)),
+  });
+  if (stillOpen?.status === "cancelled") {
+    if (isWhoHq) {
+      await creditWhoHqField(sessionId, "whoHqFund", amount);
+    } else {
+      const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, sessionId), eq(teams.id, actor!.teamId!)) });
+      if (team) await creditRegionField(sessionId, team.regionId, "fundRemaining", amount);
+    }
+    await db.delete(emergencyFundingContributions).where(eq(emergencyFundingContributions.id, inserted.id));
+    return NextResponse.json({ error: "That request was just cancelled; your contribution was returned." }, { status: 409 });
+  }
+
   await logAnalyticsEvent({
     sessionId,
     mode: actor!.mode,
@@ -177,5 +201,18 @@ export async function PATCH(req: NextRequest) {
     metadata: { requestId, amount, isWhoHq },
   });
 
+  return NextResponse.json({ ok: true });
+}
+
+// DELETE ?id=: the requesting region withdraws its own emergency funding request while it's
+// still open with no contributions (lib/cancel-requests.ts). 404 (not 403) when the id isn't
+// this session's, isn't this team's, or has already been acted on.
+export async function DELETE(req: NextRequest) {
+  const { actor, error } = await requireTeamActor();
+  if (error) return error;
+  const id = Number(req.nextUrl.searchParams.get("id"));
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "id is required" }, { status: 400 });
+  const ok = await cancelEmergencyRequest(actor!.sessionId, actor!.teamId!, id);
+  if (!ok) return NextResponse.json({ error: "Request not found, already closed, or someone has already contributed" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

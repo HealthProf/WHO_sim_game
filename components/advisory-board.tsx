@@ -1,11 +1,12 @@
 import { advisoryOpinions } from "@/lib/db/seed-data/advisory-opinions";
+import { applyPathogenText } from "@/lib/pathogens";
 
 // Diverse, sometimes-contradictory stakeholder perspectives shown alongside
 // a decision — see lib/db/seed-data/advisory-opinions.ts for the design
 // intent: these are NOT a hint toward the "correct" answer, several openly
 // argue for options that would score poorly. Not every event has these
 // (informational/administrative events don't).
-export function AdvisoryBoard({ eventId }: { eventId: string }) {
+export function AdvisoryBoard({ eventId, pathogenId }: { eventId: string; pathogenId?: string | null }) {
   const opinions = advisoryOpinions[eventId];
   if (!opinions || opinions.length === 0) return null;
 
@@ -19,7 +20,7 @@ export function AdvisoryBoard({ eventId }: { eventId: string }) {
         {opinions.map((o, i) => (
           <div key={i} className="border-l-2 border-divider pl-3">
             <p className="text-xs font-semibold text-text">{o.role}</p>
-            <p className="mt-0.5 text-sm text-neutral-700">{o.opinion}</p>
+            <p className="mt-0.5 text-sm text-neutral-700">{applyPathogenText(o.opinion, pathogenId)}</p>
           </div>
         ))}
       </div>

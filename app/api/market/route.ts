@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lockedResponse } from "@/lib/feature-gate";
+import { cancelMarketRequest } from "@/lib/cancel-requests";
 import { db } from "@/lib/db";
 import { marketRequests, modelState, sessionState, teams, teamNotifications } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
@@ -47,6 +49,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { actor, error } = await requireTeamActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "market", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();
@@ -107,4 +111,17 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ request });
+}
+
+// DELETE ?id=: the requesting region withdraws its own WHO HQ purchase request while it's
+// still pending (lib/cancel-requests.ts). 404 (not 403) when the id isn't
+// this session's, isn't this team's, or has already been acted on.
+export async function DELETE(req: NextRequest) {
+  const { actor, error } = await requireTeamActor();
+  if (error) return error;
+  const id = Number(req.nextUrl.searchParams.get("id"));
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "id is required" }, { status: 400 });
+  const ok = await cancelMarketRequest(actor!.sessionId, actor!.teamId!, id);
+  if (!ok) return NextResponse.json({ error: "Request not found, or WHO HQ has already processed it" }, { status: 404 });
+  return NextResponse.json({ ok: true });
 }

@@ -8,6 +8,7 @@
 // forecast of its rivals' trajectories.
 
 import { computeEpidemicGrowth, confirmedCaseCeiling } from "./model-engine";
+import { PATHOGENS } from "./pathogens";
 
 export interface ProjectionPoint {
   narrativeDay: number; // days from now
@@ -31,7 +32,7 @@ export function projectForward(state: {
   estimatedTrueCasesLow: number;
   estimatedTrueCasesHigh: number;
   surveillanceIndex: number;
-}): Projection {
+}, pathogen: { serialIntervalDays: number; baseCfr: number } = PATHOGENS.ncov): Projection {
   const ceiling = confirmedCaseCeiling(state.regionId, state.surveillanceIndex);
 
   const points: ProjectionPoint[] = [{ narrativeDay: 0, confirmedCases: state.confirmedCases, deaths: 0 }];
@@ -44,7 +45,8 @@ export function projectForward(state: {
     const growth = computeEpidemicGrowth(
       { rt: state.rt, cfrMultiplier: state.cfrMultiplier, confirmedCases: runningConfirmed, estimatedTrueCasesLow: state.estimatedTrueCasesLow, estimatedTrueCasesHigh: state.estimatedTrueCasesHigh },
       stepDays,
-      ceiling
+      ceiling,
+      pathogen
     );
     runningConfirmed += growth.newConfirmed;
     runningDeaths += growth.newDeaths;

@@ -6,7 +6,7 @@
 // because it needs the request's IP, which this module has no reason to see.
 import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { users, sessionRegionCredentials, teams } from "./db/schema";
+import { users, sessionRegionCredentials, teams, gameSessions } from "./db/schema";
 import { and, eq } from "drizzle-orm";
 
 export interface VerifiedActor {
@@ -28,7 +28,11 @@ export type VerifyResult =
   // Credential and password check out, but the session/region has no teams
   // row (shouldn't happen outside a data-integrity problem) — not a guessed
   // credential, so the caller must not charge it against the rate limit.
-  | { outcome: "region-missing-team" };
+  | { outcome: "region-missing-team" }
+  // Correct region credential, but its session has been ended (archived) by
+  // the facilitator. Not a guessed credential either, so it must not charge
+  // the rate limit; the login is simply refused.
+  | { outcome: "session-ended" };
 
 export async function verifyCredentials(username: string, password: string): Promise<VerifyResult> {
   // 1. Public account (lib/db/schema.ts users).
@@ -52,6 +56,8 @@ export async function verifyCredentials(username: string, password: string): Pro
   if (!cred) return { outcome: "invalid" };
   const valid = await bcrypt.compare(password, cred.passwordHash);
   if (!valid) return { outcome: "invalid" };
+  const owningSession = await db.query.gameSessions.findFirst({ where: eq(gameSessions.id, cred.sessionId) });
+  if (!owningSession || owningSession.status === "archived") return { outcome: "session-ended" };
   const team = await db.query.teams.findFirst({ where: and(eq(teams.sessionId, cred.sessionId), eq(teams.regionId, cred.regionId)) });
   if (!team) return { outcome: "region-missing-team" };
 

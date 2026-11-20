@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { SummaryReportViewer } from "@/components/summary-report-viewer";
 import { QueryError } from "@/components/query-error";
-import { regionColors } from "@/lib/who-region-map";
+import { REGION_COLORS_LIGHT as regionColors } from "@/lib/region-colors";
 import { TierChip } from "@/components/ui/chip";
 import type { SummaryRound } from "@/lib/summary-report";
 import type { FinalResults } from "@/lib/final-results";

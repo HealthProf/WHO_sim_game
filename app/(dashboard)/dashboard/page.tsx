@@ -11,6 +11,13 @@ import { RecentDevelopments } from "@/components/recent-developments";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Chip } from "@/components/ui/chip";
 import { PillLink } from "@/components/ui/pill-button";
+import { IndexGauge } from "@/components/index-gauge";
+import { bandFor } from "@/lib/index-bands";
+import { WorldPanel } from "@/components/world-panel";
+import { PathogenCard } from "@/components/pathogen-card";
+import { pathogenFor } from "@/lib/pathogens";
+import { RegionAvatar } from "@/components/region-avatar";
+import { moodFor } from "@/lib/avatar-mood";
 
 interface DashboardData {
   globalState: { currentDay: number; escalationState: "GREEN" | "AMBER" | "RED"; mediaPressureIndex: number; simulationStatus: string };
@@ -66,6 +73,7 @@ const escalationTone: Record<string, string> = {
 
 const VIEWS = [
   { value: "overview", label: "Overview" },
+  { value: "world", label: "World" },
   { value: "regions", label: "All regions" },
   { value: "projection", label: "Projection" },
   { value: "recent", label: "Recent developments" },
@@ -109,7 +117,8 @@ export default function DashboardPage() {
             Global Rt <span className="font-bold text-text">{data.globalRt.toFixed(2)}</span>
           </span>
           <span className="text-[15px] text-neutral-700">
-            Media <span className="font-bold text-text">{data.globalState.mediaPressureIndex}</span>
+            Media <span className="font-bold text-text">{data.globalState.mediaPressureIndex}</span>{" "}
+            <span className="text-neutral-700">({bandFor("mediaPressure", data.globalState.mediaPressureIndex).label})</span>
           </span>
         </div>
       </div>
@@ -121,6 +130,7 @@ export default function DashboardPage() {
 
       {view === "overview" && (
         <>
+          <PathogenCard pathogenId={(data.globalState as { pathogenId?: string }).pathogenId} />
           {openDispatch && (
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-accent-100 p-[22px_24px]">
               <div>
@@ -141,18 +151,31 @@ export default function DashboardPage() {
 
           {data.ownRegion && (
             <section className="rounded-lg bg-surface p-5">
-              <h2 className="font-heading text-[21px] text-text">{data.ownRegion.roleTitle}</h2>
+              <div className="flex items-center gap-3">
+                <span data-tour="avatar">
+                  <RegionAvatar
+                    regionId={data.ownRegion.regionId}
+                    mood={moodFor({ rt: data.ownRegion.rt, publicTrustIndex: data.ownRegion.publicTrustIndex, populationHappinessIndex: data.ownRegion.populationHappinessIndex })}
+                    size={48}
+                  />
+                </span>
+                <h2 className="font-heading text-[21px] text-text">{data.ownRegion.roleTitle}</h2>
+              </div>
               <p className="mb-4 text-sm text-neutral-700">{data.ownRegion.hqLocation}</p>
               <div className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <Stat label="Fund" value={`$${(data.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
                 <Stat label="PPE days" value={data.ownRegion.ppeDaysRemaining} />
-                <Stat label="Antivirals" value={data.ownRegion.antiviralsRemaining.toLocaleString()} />
+                <Stat label={pathogenFor((data.globalState as { pathogenId?: string }).pathogenId).countermeasure.label} value={data.ownRegion.antiviralsRemaining.toLocaleString()} />
                 <Stat label="HCW surge" value={`${data.ownRegion.hcwSurgePct}%`} />
                 <Stat label="Rt" value={data.ownRegion.rt.toFixed(2)} />
                 <Stat label="CFR multiplier" value={data.ownRegion.cfrMultiplier.toFixed(2)} />
-                <Stat label="Political tension" value={data.ownRegion.politicalTensionIndex} />
-                <Stat label="Public trust" value={data.ownRegion.publicTrustIndex} />
-                <Stat label="Population happiness" value={data.ownRegion.populationHappinessIndex} />
+              </div>
+              {/* 0-100 social indices, with labeled bands tied to the
+                  thresholds where game consequences kick in. */}
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <IndexGauge metric="publicTrust" value={data.ownRegion.publicTrustIndex} />
+                <IndexGauge metric="happiness" value={data.ownRegion.populationHappinessIndex} />
+                <IndexGauge metric="politicalTension" value={data.ownRegion.politicalTensionIndex} />
               </div>
               <details className="text-sm text-neutral-800">
                 <summary className="cursor-pointer text-neutral-700">Full regional profile</summary>
@@ -164,6 +187,8 @@ export default function DashboardPage() {
           )}
         </>
       )}
+
+      {view === "world" && <WorldPanel ownRegionId={data.ownRegion?.regionId} />}
 
       {view === "regions" && <RegionsTable rows={data.sharedSummary} ownRegionId={data.ownRegion?.regionId} />}
 

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lockedResponse } from "@/lib/feature-gate";
 import { db } from "@/lib/db";
 import { resourcePledges, teams, eventDispatches, modelState, modelStateHistory, teamNotifications } from "@/lib/db/schema";
 import { and, eq, desc } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
-import { clamp } from "@/lib/model-engine";
+import { tryDeductRegionField, creditRegionField, creditRegionFieldCapped } from "@/lib/db-atomic";
 import { logAnalyticsEvent } from "@/lib/analytics";
 
 // Resource pledge ledger (see 07-open-questions.md's original discussion of
@@ -48,6 +49,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { actor, error } = await requireTeamActor();
   if (error) return error;
+  const locked = await lockedResponse(actor!.sessionId, "pledges", actor!.role);
+  if (locked) return locked;
   const sessionId = actor!.sessionId;
 
   const body = await req.json();
@@ -79,20 +82,22 @@ export async function POST(req: NextRequest) {
   }
 
   const field = FIELD_BY_RESOURCE[resourceType];
-  const fromState = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, fromTeam.regionId)) });
-  const toState = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, toTeam.regionId)) });
-  if (!fromState || !toState) return NextResponse.json({ error: "Model state not found" }, { status: 404 });
 
-  const currentAmount = fromState[field] as number;
-  if (currentAmount < amount) {
-    return NextResponse.json({ error: `${fromTeam.regionId} only has ${currentAmount}${LABEL_BY_RESOURCE[resourceType]} available` }, { status: 400 });
+  // Release 2 fix: the transfer used to read both balances and write new
+  // values in separate statements, so two quick pledges could overdraw a
+  // region. Now: one atomic conditional debit (fails if the balance is too
+  // low), then an atomic credit (lib/db-atomic.ts). Nothing can fail between
+  // the two except the credit itself, which has no balance condition.
+  const debited = await tryDeductRegionField(sessionId, fromTeam.regionId, field, amount);
+  if (!debited) {
+    const fromState = await db.query.modelState.findFirst({ where: and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, fromTeam.regionId)) });
+    return NextResponse.json(
+      { error: `${fromTeam.regionId} only has ${fromState ? (fromState[field] as number) : 0}${LABEL_BY_RESOURCE[resourceType]} available` },
+      { status: 400 }
+    );
   }
-
-  const nextFrom = currentAmount - amount;
-  const nextTo = resourceType === "HCW_SURGE_PCT" ? clamp((toState[field] as number) + amount, 0, 100) : (toState[field] as number) + amount;
-
-  await db.update(modelState).set({ [field]: nextFrom, updatedAt: new Date() }).where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, fromTeam.regionId)));
-  await db.update(modelState).set({ [field]: nextTo, updatedAt: new Date() }).where(and(eq(modelState.sessionId, sessionId), eq(modelState.regionId, toTeam.regionId)));
+  if (resourceType === "HCW_SURGE_PCT") await creditRegionFieldCapped(sessionId, toTeam.regionId, field, amount, 100);
+  else await creditRegionField(sessionId, toTeam.regionId, field, amount);
 
   const reason = `Pledge: ${amount}${LABEL_BY_RESOURCE[resourceType]} from ${fromTeam.regionId} to ${toTeam.regionId}`;
   const [updatedFrom, updatedTo] = await Promise.all([

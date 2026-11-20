@@ -1,3 +1,4 @@
+import { release5Events } from "./events-release5";
 // Seeded from simulation-docs/03-events.md. modelDeltaJson tiers apply to the
 // submitting team's own region ("SELF") unless a specific region code is given,
 // or "GLOBAL" for global_state fields (media_pressure_index, escalation only).
@@ -88,7 +89,7 @@ export interface EventSeed {
   suggestedTargetRegions: string[] | null;
 }
 
-export const eventSeed: EventSeed[] = [
+const baseEvents: EventSeed[] = [
   {
     id: "EVT-001",
     isCorePath: true,
@@ -1744,3 +1745,6 @@ export const eventSeed: EventSeed[] = [
     chainPrev: [],
   },
 ];
+
+// Release 5 optional events live in their own file (./events-release5.ts).
+export const eventSeed: EventSeed[] = [...baseEvents, ...release5Events];

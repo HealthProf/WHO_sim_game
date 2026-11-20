@@ -3,15 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetcher";
 import { computeSimClock, formatSimClock, formatRealElapsed, type GlobalClockFields } from "@/lib/sim-clock";
 import { SignOutButton } from "@/components/signout-button";
 import { RoleSwitcher } from "@/components/role-switcher";
+import { EndSessionButton } from "@/components/end-session-button";
 import { affordabilityIssue, type OwnRegionResources } from "@/lib/affordability";
-import type { StructuredOption, OptionCost } from "@/lib/db/seed-data/events";
+import { bandFor, type IndexMetric } from "@/lib/index-bands";
+import type { FeatureUnlockState, GatedFeature } from "@/lib/feature-unlock";
+import { LockIcon } from "@/components/feature-lock-notice";
+import { RegionAvatar } from "@/components/region-avatar";
+import { StartTourButton } from "@/components/guided-tour";
+import { moodFor } from "@/lib/avatar-mood";
+import { pathogenFor } from "@/lib/pathogens";
+import type { StructuredOption } from "@/lib/db/seed-data/events";
 
 interface RailDashboardData {
+  featureUnlocks?: Record<GatedFeature, FeatureUnlockState>;
   globalState: GlobalClockFields;
   ownRegion: {
     regionId: string;
@@ -22,6 +31,7 @@ interface RailDashboardData {
     hcwSurgePct: number;
     politicalTensionIndex: number;
     publicTrustIndex: number;
+    populationHappinessIndex?: number;
   } | null;
 }
 
@@ -30,19 +40,12 @@ interface RailEventsData {
   dispatches: { id: number; eventId: string; status: string; deadlineAt: string | null }[];
 }
 
-const COST_LABEL: Record<keyof OptionCost, string> = {
-  fund: "Fund",
-  ppeDays: "PPE days",
-  antivirals: "Antivirals",
-};
-
 const NAV_ITEMS = [
   { label: "Situation", href: "/dashboard" },
   { label: "Events", href: "/events" },
   { label: "Coordination", href: "/coordination" },
-  { label: "Pledges", href: "/pledges" },
-  { label: "Marketplace", href: "/marketplace" },
-  { label: "Funding", href: "/emergency-funding" },
+  { label: "Pledges & Funding", href: "/pledges", feature: "pledges" as const },
+  { label: "Marketplace", href: "/marketplace", feature: "market" as const },
   { label: "Briefing", href: "/briefing" },
   { label: "Summary", href: "/summary" },
 ];
@@ -55,7 +58,7 @@ export function TeamRail({
   isAccountHolder,
 }: {
   regionId: string | null | undefined;
-  demoSession: { sessionId: string; demoActiveRegionId: string | null } | null;
+  demoSession: { sessionId: string; demoActiveRegionId: string | null; soloRole?: string | null } | null;
   // Only a registered public account (kind "user") has a profile to manage —
   // a region login handed out for a class session has no users row of its
   // own (see app/api/account/route.ts), so the Account nav item only shows
@@ -106,8 +109,10 @@ export function TeamRail({
 
   return (
     <>
-      {/* Mobile top bar (<1024px) */}
-      <div className="flex items-center justify-between gap-3 bg-neutral-900 px-4 py-3 lg:hidden">
+      {/* Mobile top bar (<1024px): sticky, with a compact ledger strip so the
+          team's resources stay in view while reading an event on a phone. */}
+      <div className="sticky top-0 z-30 bg-neutral-900 lg:hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">Veiled Horizon</p>
           <p className="font-heading text-lg text-white">{regionId ?? "Region"}</p>
@@ -125,6 +130,17 @@ export function TeamRail({
         >
           <HamburgerIcon />
         </button>
+      </div>
+      {dash?.ownRegion && (
+        <div className="flex gap-4 overflow-x-auto border-t border-neutral-800 px-4 py-2 text-[12px] text-neutral-400" aria-label="Your ledger">
+          <CompactStat label="Fund" value={`$${(dash.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
+          <CompactStat label="PPE" value={`${dash.ownRegion.ppeDaysRemaining}d`} />
+          <CompactStat label={pathogenFor((dash.globalState as { pathogenId?: string }).pathogenId).countermeasure.label} value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
+          <CompactStat label="Rt" value={dash.ownRegion.rt.toFixed(2)} />
+          <CompactStat label="Trust" value={`${dash.ownRegion.publicTrustIndex} ${bandFor("publicTrust", dash.ownRegion.publicTrustIndex).label}`} />
+          <CompactStat label="Tension" value={`${dash.ownRegion.politicalTensionIndex} ${bandFor("politicalTension", dash.ownRegion.politicalTensionIndex).label}`} />
+        </div>
+      )}
       </div>
 
       {mobileOpen && (
@@ -184,7 +200,7 @@ function RailContents({
   onNavigate,
 }: {
   regionId: string | null | undefined;
-  demoSession: { sessionId: string; demoActiveRegionId: string | null } | null;
+  demoSession: { sessionId: string; demoActiveRegionId: string | null; soloRole?: string | null } | null;
   isAccountHolder: boolean;
   dash: RailDashboardData | undefined;
   openDispatch: RailEventsData["dispatches"][number] | undefined;
@@ -201,21 +217,41 @@ function RailContents({
       {/* Brand block */}
       <div>
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Veiled Horizon</p>
-        <p className="font-heading text-2xl leading-[1.15] text-white">
-          {regionId ?? "—"}
-          <br />
-          Regional Office
-        </p>
-        {demoSession && (
+        <div className="flex items-center gap-3">
+          {regionId && dash?.ownRegion && (
+            <RegionAvatar
+              regionId={regionId}
+              mood={moodFor({ rt: dash.ownRegion.rt, publicTrustIndex: dash.ownRegion.publicTrustIndex, populationHappinessIndex: dash.ownRegion.populationHappinessIndex })}
+              size={44}
+              theme="dark"
+            />
+          )}
+          <p className="font-heading text-2xl leading-[1.15] text-white">
+            {regionId ?? "—"}
+            <br />
+            Regional Office
+          </p>
+        </div>
+        {demoSession && demoSession.soloRole === "region" && (
+          <div className="mt-2 space-y-2">
+            <p className="text-[13px] text-neutral-400">Solo play: the computer runs the facilitator and the other regions.</p>
+            <SoloPauseButton sessionId={demoSession.sessionId} status={(dash?.globalState as { simulationStatus?: string } | undefined)?.simulationStatus} />
+            <EndSessionButton sessionId={demoSession.sessionId} mode="demo" />
+          </div>
+        )}
+        {demoSession && demoSession.soloRole !== "region" && (
           <div className="mt-2">
             <RoleSwitcher sessionId={demoSession.sessionId} currentRegionId={demoSession.demoActiveRegionId} />
+            <div className="mt-2">
+              <EndSessionButton sessionId={demoSession.sessionId} mode="demo" />
+            </div>
           </div>
         )}
       </div>
 
       {/* Deadline block */}
       {openDispatch && (
-        <div className="rounded-lg bg-accent-800 p-[16px_18px]">
+        <div className="rounded-lg bg-accent-800 p-[16px_18px]" data-tour="deadline">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent-300">Deadline</p>
           <p className="text-[34px] font-extrabold leading-none tracking-[-0.02em] text-white">
             <DeadlineValue deadlineAt={openDispatch.deadlineAt!} now={now} />
@@ -224,33 +260,32 @@ function RailContents({
         </div>
       )}
 
-      {/* Ledger, or — on an event's own page — the affordability block */}
-      {viewingEvent ? (
-        <AffordabilityBlock event={viewingEvent} resources={dash?.ownRegion ?? undefined} />
-      ) : (
-        dash?.ownRegion && (
-          <div>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Your ledger</p>
-            <div className="space-y-1.5">
-              <LedgerRow label="Fund" value={`$${(dash.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
-              <LedgerRow label="PPE days" value={dash.ownRegion.ppeDaysRemaining} />
-              <LedgerRow label="Antivirals" value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
-              <LedgerRow label="HCW surge" value={`${dash.ownRegion.hcwSurgePct}%`} />
-              <div className="my-1.5 h-px bg-neutral-700" />
-              <LedgerRow
-                label="Your Rt"
-                value={
-                  <span className={rtRose ? "text-accent-300" : undefined}>
-                    {dash.ownRegion.rt.toFixed(2)}
-                    {rtRose && " ↑"}
-                  </span>
-                }
-              />
-              <LedgerRow label="Trust" value={dash.ownRegion.publicTrustIndex} />
-              <LedgerRow label="Tension" value={dash.ownRegion.politicalTensionIndex} />
-            </div>
+      {/* Ledger: always visible, including on an event's own page, because
+          teams weigh their choices against it (playtest feedback). On an
+          event page the affordability warning sits directly under it. */}
+      {dash?.ownRegion && (
+        <div data-tour="ledger">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Your ledger</p>
+          <div className="space-y-1.5">
+            <LedgerRow label="Fund" value={`$${(dash.ownRegion.fundRemaining / 1_000_000).toFixed(1)}M`} />
+            <LedgerRow label="PPE days" value={dash.ownRegion.ppeDaysRemaining} />
+            <LedgerRow label={pathogenFor((dash.globalState as { pathogenId?: string }).pathogenId).countermeasure.label} value={dash.ownRegion.antiviralsRemaining.toLocaleString()} />
+            <LedgerRow label="HCW surge" value={`${dash.ownRegion.hcwSurgePct}%`} />
+            <div className="my-1.5 h-px bg-neutral-700" />
+            <LedgerRow
+              label="Your Rt"
+              value={
+                <span className={rtRose ? "text-accent-300" : undefined}>
+                  {dash.ownRegion.rt.toFixed(2)}
+                  {rtRose && " ↑"}
+                </span>
+              }
+            />
+            <LedgerRow label="Trust" value={<BandedValue metric="publicTrust" value={dash.ownRegion.publicTrustIndex} />} />
+            <LedgerRow label="Tension" value={<BandedValue metric="politicalTension" value={dash.ownRegion.politicalTensionIndex} />} />
           </div>
-        )
+          {viewingEvent && <AffordabilityWarning event={viewingEvent} resources={dash.ownRegion} />}
+        </div>
       )}
 
       {/* Nav */}
@@ -263,6 +298,7 @@ function RailContents({
               <Link
                 key={item.href}
                 href={item.href}
+                data-tour={`nav-${item.href.slice(1)}`}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={
@@ -272,6 +308,12 @@ function RailContents({
                 }
               >
                 {item.label}
+                {"feature" in item && item.feature && dash?.featureUnlocks?.[item.feature] && !dash.featureUnlocks[item.feature].open && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-[12px] text-neutral-500" title={dash.featureUnlocks[item.feature].message ?? ""}>
+                    <LockIcon />
+                    <span className="sr-only">locked</span>
+                  </span>
+                )}
                 {item.label === "Events" && awaitingCount > 0 && (
                   <span className="ml-2 rounded-full bg-accent-700 px-2 py-0.5 text-[12px] font-bold text-white">{awaitingCount}</span>
                 )}
@@ -284,7 +326,8 @@ function RailContents({
       {/* Clock, pushed to the bottom */}
       <div className="mt-auto border-t border-neutral-700 pt-[18px]">
         {dash?.globalState && <ClockBlock state={dash.globalState} now={now} />}
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <StartTourButton />
           <SignOutButton />
         </div>
       </div>
@@ -292,46 +335,24 @@ function RailContents({
   );
 }
 
-// The rail's event-scoped replacement for the ledger: the resources this
-// event's options actually cost, plus which option (if any) the team can't
-// currently afford — computed with the same affordabilityIssue() rule the
-// event page itself uses to gate option selection.
-function AffordabilityBlock({
+// Shown under the ledger on an event's own page: which option (if any) the
+// team can't currently afford, computed with the same affordabilityIssue()
+// rule the event page itself uses to gate option selection.
+function AffordabilityWarning({
   event,
   resources,
 }: {
   event: RailEventsData["events"][number];
-  resources: OwnRegionResources | undefined;
+  resources: OwnRegionResources;
 }) {
   const options = event.structuredOptionsJson ?? [];
-  const costKeys = Array.from(
-    new Set(options.flatMap((o) => (o.cost ? (Object.keys(o.cost) as (keyof OptionCost)[]) : [])))
-  );
-  if (costKeys.length === 0 || !resources) return null;
-
   const blocked = options.find((o) => affordabilityIssue(o.cost, resources));
-  const shortfall = blocked ? affordabilityIssue(blocked.cost, resources) : null;
-
-  const resourceValue: Record<keyof OptionCost, string> = {
-    fund: `$${(resources.fundRemaining / 1_000_000).toFixed(1)}M`,
-    ppeDays: `${resources.ppeDaysRemaining}`,
-    antivirals: resources.antiviralsRemaining.toLocaleString(),
-  };
-
+  if (!blocked) return null;
+  const shortfall = affordabilityIssue(blocked.cost, resources);
   return (
-    <div>
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Can you afford it?</p>
-      <div className="space-y-1.5">
-        {costKeys.map((key) => (
-          <LedgerRow key={key} label={COST_LABEL[key]} value={resourceValue[key]} />
-        ))}
-      </div>
-      {shortfall && (
-        <p className="mt-2 text-[13px] text-accent-300">
-          Option {blocked!.label} — {shortfall}
-        </p>
-      )}
-    </div>
+    <p className="mt-2 rounded-md bg-neutral-800 px-2.5 py-1.5 text-[13px] text-accent-300">
+      Can&apos;t afford option {blocked.label}: {shortfall}
+    </p>
   );
 }
 
@@ -345,6 +366,45 @@ function ClockBlock({ state, now }: { state: GlobalClockFields; now: number }) {
         <div className="h-full bg-accent-400" style={{ width: `${clock.gameDayFraction * 100}%` }} />
       </div>
     </div>
+  );
+}
+
+function BandedValue({ metric, value }: { metric: IndexMetric; value: number }) {
+  return (
+    <span>
+      {value} <span className="text-[12px] font-medium text-neutral-400">{bandFor(metric, value).label}</span>
+    </span>
+  );
+}
+
+// Pause/resume for a solo player playing one region (Release 3), who can't
+// reach the facilitator's controls (app/api/sessions/[id]/solo PATCH).
+function SoloPauseButton({ sessionId, status }: { sessionId: string; status?: string }) {
+  const qc = useQueryClient();
+  const toggle = useMutation({
+    mutationFn: (action: "pause" | "resume") =>
+      fetch(`/api/sessions/${sessionId}/solo`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard"] }),
+  });
+  if (status !== "running" && status !== "paused") return null;
+  const paused = status === "paused";
+  return (
+    <button
+      type="button"
+      onClick={() => toggle.mutate(paused ? "resume" : "pause")}
+      disabled={toggle.isPending}
+      className="rounded-full border-2 border-neutral-700 px-[18px] py-[6px] text-[13px] font-semibold text-neutral-300 hover:bg-neutral-800 disabled:opacity-40"
+    >
+      {paused ? "Resume game" : "Pause game"}
+    </button>
+  );
+}
+
+function CompactStat({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="shrink-0 whitespace-nowrap">
+      {label} <span className="font-bold text-white">{value}</span>
+    </span>
   );
 }
 

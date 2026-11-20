@@ -53,6 +53,17 @@
   --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
   --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
 
+  /* Event status colors (Release 1). Okabe-Ito blue and orange, which stay
+     distinguishable for the common forms of color-vision deficiency; every
+     use also carries an icon and a text label, so color is never the only
+     signal. "-ink" text on "-soft" fill is >= 7:1 contrast. */
+  --color-status-todo: #0072b2;
+  --color-status-todo-soft: #dceefa;
+  --color-status-todo-ink: #004a75;
+  --color-status-pending: #e69f00;
+  --color-status-pending-soft: #fcefcf;
+  --color-status-pending-ink: #5c3d00;
+
   --background: var(--color-bg);
   --foreground: var(--color-text);
 }
@@ -62,6 +73,12 @@
   --color-foreground: var(--foreground);
 
   --color-bg: var(--color-bg);
+  --color-status-todo: var(--color-status-todo);
+  --color-status-todo-soft: var(--color-status-todo-soft);
+  --color-status-todo-ink: var(--color-status-todo-ink);
+  --color-status-pending: var(--color-status-pending);
+  --color-status-pending-soft: var(--color-status-pending-soft);
+  --color-status-pending-ink: var(--color-status-pending-ink);
   --color-surface: var(--color-surface);
   --color-text: var(--color-text);
   --color-accent: var(--color-accent);
@@ -191,4 +208,31 @@ body {
 .animate-barrel-roll {
   animation: cheatBarrelRoll 1.4s ease-in-out;
   transform-origin: 50% 50%;
+}
+
+/* Release 4 projector frame alert: a slow glow around the whole screen when
+   something significant happens (a crisis or a big improvement). Seizure-
+   safe by design: about 0.4 pulses per second (WCAG 2.3.1 limits flashes to
+   3 per second), only a border band changes rather than the whole screen,
+   and viewers who ask for reduced motion get a steady border instead. */
+.frame-alert {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  animation: framePulse 2.4s ease-in-out 3;
+  opacity: 0.85;
+}
+.frame-alert-bad {
+  box-shadow: inset 0 0 0 10px var(--color-accent-600), inset 0 0 70px 24px color-mix(in srgb, var(--color-accent-600) 45%, transparent);
+}
+.frame-alert-good {
+  box-shadow: inset 0 0 0 10px var(--color-accent-2-500), inset 0 0 70px 24px color-mix(in srgb, var(--color-accent-2-500) 45%, transparent);
+}
+@keyframes framePulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frame-alert { animation: none; opacity: 1; }
 }
