@@ -29,6 +29,16 @@ describe("pathogens (pure)", () => {
     expect(plague).not.toContain("spike protein");
   });
 
+  it("adapts the briefing's opening line to every pathogen", () => {
+    const intro = "A novel betacoronavirus (NCoV-X1) has emerged.";
+    expect(applyPathogenText(intro, "ncov")).toBe(intro);
+    for (const id of ["flu", "plague", "nipah"] as const) {
+      const out = applyPathogenText(intro, id);
+      expect(out).toBe(`${PATHOGENS[id].intro} has emerged.`);
+      expect(out).not.toMatch(/coronavirus|NCoV/);
+    }
+  });
+
   it("names the stockpile for the pathogen in forms and ledgers", () => {
     expect(countermeasureUnits("ncov")).toMatchObject({ formLabel: "Antivirals (doses)", phrase: "antiviral doses" });
     expect(countermeasureUnits("plague")).toMatchObject({ formLabel: "Antibiotics (courses)", phrase: "antibiotic courses", unit: "course" });

@@ -106,6 +106,8 @@ export default function EventDetailPage() {
   const minWords = effectiveMinWords(event.minRationaleWords);
   const rationaleWords = wordCount(rationale);
   const rationaleShort = minWords > 0 && rationaleWords < minWords;
+  // A choice is required; the rationale is recommended but optional.
+  const needsChoice = !!event.structuredOptionsJson?.length && !structuredChoice;
   const alreadyResolved = dispatch.status === "scored" || dispatch.status === "closed";
 
   return (
@@ -285,11 +287,12 @@ export default function EventDetailPage() {
 
           <div>
             <label htmlFor="rationale" className="mb-1 block text-sm font-semibold text-text">
-              Rationale{minWords > 0 ? ` (2-5 sentences, at least ${minWords} words)` : " (optional)"}
+              Rationale{minWords > 0 ? ` (optional, about ${minWords} words recommended)` : " (optional)"}
             </label>
             <p className="mb-2 text-xs text-neutral-700">
               Say why, covering the evidence, what&apos;s politically and economically realistic, and who is most affected. Your
-              grade is built from these three.
+              grade is built from these three. Short on time? Submit your choice anyway; a short or missing rationale only
+              lowers your provisional grade.
             </p>
             <textarea
               id="rationale"
@@ -301,13 +304,14 @@ export default function EventDetailPage() {
             />
             <p id="rationale-count" className={`mt-1 text-xs ${rationaleShort ? "text-accent-800" : "text-accent-2-700"}`} aria-live="polite">
               {rationaleWords} word{rationaleWords === 1 ? "" : "s"}
-              {minWords > 0 && (rationaleShort ? ` · ${minWords - rationaleWords} more needed` : " · enough")}
+              {minWords > 0 && (rationaleShort ? ` · ${minWords - rationaleWords} more for full credit` : " · enough")}
             </p>
           </div>
 
           {error && <p className="text-sm font-medium text-accent-800">{error}</p>}
 
-          <PillButton type="submit" disabled={submit.isPending || rationaleShort} tone="accent" className="px-[30px] py-3">
+          {needsChoice && <p className="text-sm text-neutral-700">Pick an option to submit.</p>}
+          <PillButton type="submit" disabled={submit.isPending || needsChoice} tone="accent" className="px-[30px] py-3">
             {submit.isPending ? "Submitting..." : "Submit Decision"}
           </PillButton>
         </form>

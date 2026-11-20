@@ -152,10 +152,11 @@ export const DECISION_TIME_MAX_MULTIPLIER = 2.0;
 export const EXTEND_OPEN_EVENTS_MINUTES = 2;
 
 // --- Release 2: rationale, grading, outcomes, feature phase-in ---
-// Required rationale length, capped from the source design's 150-400 words
-// to roughly 2-5 sentences so teams can actually write it inside a 7-11
-// minute window (lib/auto-grade.ts effectiveMinWords). Enforced on team
-// submissions only (app/api/decisions); computer players are exempt.
+// Recommended rationale length, capped from the source design's 150-400
+// words to roughly 2-5 sentences so teams can write it inside a 7-11 minute
+// window (lib/auto-grade.ts effectiveMinWords). Not required to submit: a
+// shorter rationale only lowers the provisional grade's evidence score, so
+// rushed teams and fast test games can still get a choice in.
 export const RATIONALE_MIN_WORDS_CAP = 40;
 // Optional "auto-accept provisional scores" (facilitator toggle): a team's
 // submission is scored automatically this long after it arrives, unless it

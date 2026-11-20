@@ -10,6 +10,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { TierChip } from "@/components/ui/chip";
 import { PillLink } from "@/components/ui/pill-button";
 import { glossaryTerms } from "@/lib/db/seed-data/glossary";
+import { applyPathogenText, countermeasureUnits } from "@/lib/pathogens";
+import { PathogenCard } from "@/components/pathogen-card";
 
 const SCENARIO_PARAGRAPH_1 =
   "A novel betacoronavirus (NCoV-X1) has emerged. Day 14 since the first case, and the WHO Emergency Committee is meeting for the first time to consider a PHEIC declaration. Human-to-human transmission is confirmed in 3 countries across 2 regions. The pathogen's origin — natural spillover vs. lab-adjacent — is deliberately unresolved; you will never be told a \"correct answer\" on that question, in-game or otherwise.";
@@ -30,6 +32,7 @@ interface BriefingData {
     hcwSurgePct: number;
     surveillanceIndex: number;
   } | null;
+  globalState?: { pathogenId?: string };
 }
 
 const TABS = [
@@ -47,6 +50,10 @@ export default function BriefingPage() {
     queryFn: () => apiFetch<BriefingData>("/api/dashboard"),
   });
   const region = data?.ownRegion;
+  // The scenario text is written for the coronavirus; adapt it to this
+  // session's pathogen (Release 5) like the region profile and events are.
+  const pathogenId = data?.globalState?.pathogenId;
+  const scenarioParagraph1 = applyPathogenText(SCENARIO_PARAGRAPH_1, pathogenId);
 
   return (
     <div className="flex max-w-3xl flex-col gap-[26px]">
@@ -64,7 +71,7 @@ export default function BriefingPage() {
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <Stat label="Fund" value={`$${(region.fundRemaining / 1_000_000).toFixed(1)}M`} />
                 <Stat label="PPE days" value={region.ppeDaysRemaining} />
-                <Stat label="Antivirals" value={region.antiviralsRemaining.toLocaleString()} />
+                <Stat label={countermeasureUnits(pathogenId).label} value={region.antiviralsRemaining.toLocaleString()} />
                 <Stat label="HCW surge" value={`${region.hcwSurgePct}%`} />
                 <Stat label="Surveillance" value={`${region.surveillanceIndex}/10`} />
                 <Stat label="Starting Rt" value={region.rt.toFixed(2)} />
@@ -94,20 +101,21 @@ export default function BriefingPage() {
           </div>
 
           <section className="space-y-3 rounded-lg bg-surface p-5 text-sm text-neutral-800">
-            <p>{SCENARIO_PARAGRAPH_1}</p>
+            <p>{scenarioParagraph1}</p>
             <p>{SCENARIO_PARAGRAPH_2}</p>
           </section>
+          {data && <PathogenCard pathogenId={pathogenId} />}
 
-          <KeyTerms texts={[SCENARIO_PARAGRAPH_1, SCENARIO_PARAGRAPH_2]} />
+          <KeyTerms texts={[scenarioParagraph1, SCENARIO_PARAGRAPH_2]} />
 
           <section className="space-y-4 rounded-lg bg-surface p-5">
             <h2 className="font-heading text-[21px] text-text">Where to Find Things</h2>
             <div className="grid gap-4 text-sm sm:grid-cols-2">
               <FindThing title="Situation" body="The shared global dashboard everyone sees, plus your own team's private resource ledger — always visible in the rail. Check this often; it updates as decisions get scored." />
-              <FindThing title="Events" body="Anything dispatched to your team shows up here with a countdown to its deadline. Click into one to read the narrative and submit your structured choice + written rationale." />
+              <FindThing title="Events" body="Anything dispatched to your team shows up here with a countdown to its deadline. Click into one to read the narrative and submit your choice; a short written rationale earns full credit, but you can submit without one if time is short." />
               <FindThing title="Coordination" body="A shared message log visible to all teams and the instructor. Several events explicitly reward (or require) coordinating here before you submit — use it." />
               <FindThing title="Your region (this page)" body="Your region's full briefing — starting resources, geopolitical context, and strategic priorities — available any time you need to double check the details." />
-              <FindThing title="Pledges" body="Pledge PPE, funds, antivirals, or HCW surge capacity directly to another region — it actually moves resources between regions' live ledgers, not just a note in a rationale field." />
+              <FindThing title="Pledges" body={applyPathogenText("Pledge PPE, funds, antivirals, or HCW surge capacity directly to another region — it actually moves resources between regions' live ledgers, not just a note in a rationale field.", pathogenId)} />
             </div>
           </section>
 

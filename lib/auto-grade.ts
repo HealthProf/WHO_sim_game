@@ -206,7 +206,7 @@ export function gradeDecision(input: GradeInput): ProvisionalGrade {
     } else {
       if (words < minWords) {
         lower("evidenceScore");
-        reasons.push(`Rationale is ${words} words; at least ${minWords} expected (evidence lowered).`);
+        reasons.push(`Rationale is ${words} words; about ${minWords} recommended (evidence lowered).`);
       }
       for (const dim of Object.keys(DIMENSION_SIGNALS) as (keyof DimensionScores)[]) {
         if (!mentions(rationale, DIMENSION_SIGNALS[dim])) {

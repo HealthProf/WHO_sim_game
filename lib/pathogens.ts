@@ -37,6 +37,8 @@ export interface Pathogen {
   name: string;
   // Replaces "NCoV-X1" in scenario text.
   codeName: string;
+  // Replaces the briefing's opening "A novel betacoronavirus (NCoV-X1)".
+  intro: string;
   agent: string;
   transmission: string;
   // Shown to players as the key facts card.
@@ -65,6 +67,7 @@ export const PATHOGENS: Record<PathogenId, Pathogen> = {
     id: "ncov",
     name: "Novel coronavirus",
     codeName: "NCoV-X1",
+    intro: "A novel betacoronavirus (NCoV-X1)",
     agent: "Virus (betacoronavirus)",
     transmission: "Respiratory droplets and aerosols; spreads before symptoms",
     facts: [
@@ -87,6 +90,7 @@ export const PATHOGENS: Record<PathogenId, Pathogen> = {
     id: "flu",
     name: "Pandemic influenza",
     codeName: "Influenza A(HxN1)-X",
+    intro: "A novel pandemic influenza strain (Influenza A(HxN1)-X)",
     agent: "Virus (influenza A, avian-origin reassortant)",
     transmission: "Respiratory droplets; very short time between cases",
     facts: [
@@ -109,6 +113,7 @@ export const PATHOGENS: Record<PathogenId, Pathogen> = {
     id: "plague",
     name: "Pneumonic plague",
     codeName: "Y. pestis outbreak strain YP-X",
+    intro: "An outbreak of pneumonic plague (Y. pestis outbreak strain YP-X)",
     agent: "Bacterium (Yersinia pestis)",
     transmission: "Respiratory droplets from people with plague pneumonia; close contact",
     facts: [
@@ -131,6 +136,7 @@ export const PATHOGENS: Record<PathogenId, Pathogen> = {
     id: "nipah",
     name: "Nipah-like henipavirus",
     codeName: "NiV-X",
+    intro: "A Nipah-like henipavirus (NiV-X) with sustained person-to-person spread (a hypothetical scenario)",
     agent: "Virus (henipavirus, variant)",
     transmission: "Close contact with body fluids and respiratory secretions",
     facts: [
@@ -189,6 +195,7 @@ export function applyPathogenText(text: string, pathogenId: string | null | unde
   const p = pathogenFor(pathogenId);
   if (p.id === "ncov" || !text) return text;
   return text
+    .replaceAll("A novel betacoronavirus (NCoV-X1)", p.intro)
     .replaceAll("NCoV-X1", p.codeName)
     .replaceAll("spike protein RBD", p.genomeText)
     .replaceAll("71% efficacy vs. severe disease, Phase 2 data only", p.vaccineText)
