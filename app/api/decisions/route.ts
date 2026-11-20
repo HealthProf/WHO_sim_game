@@ -4,7 +4,6 @@ import { decisions, eventDispatches, events } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireActor, requireTeamActor } from "@/lib/session-context";
 import { submitDecision } from "@/lib/decisions";
-import { effectiveMinWords, wordCount } from "@/lib/auto-grade";
 import { computerRegionIds } from "@/lib/region-setup";
 import { logAnalyticsEvent } from "@/lib/analytics";
 
@@ -33,14 +32,16 @@ export async function POST(req: NextRequest) {
   });
   if (dispatch) {
     const event = await db.query.events.findFirst({ where: eq(events.id, dispatch.eventId) });
-    const minWords = event ? effectiveMinWords(event.minRationaleWords) : 0;
-    const words = wordCount(rationaleText);
-    if (minWords > 0 && words < minWords) {
-      return NextResponse.json({ error: `Your rationale is ${words} words. Write at least ${minWords} (about 2-5 sentences).` }, { status: 400 });
+    // The rationale is optional, so a team that's out of time (or a fast
+    // test game) can still submit; a short or missing rationale only lowers
+    // the provisional grade (lib/auto-grade.ts). A choice is what's
+    // required: an event with options can't be submitted without one.
+    const optionLabels = ((event?.structuredOptionsJson as { label: string }[] | null) ?? []).map((o) => o.label);
+    if (optionLabels.length > 0 && !body.structuredChoice) {
+      return NextResponse.json({ error: "Pick one of the options before submitting." }, { status: 400 });
     }
     // A structured choice must be one of this event's own options, so a
     // stray value can't be graded as "no choice" (lib/auto-grade.ts).
-    const optionLabels = ((event?.structuredOptionsJson as { label: string }[] | null) ?? []).map((o) => o.label);
     if (body.structuredChoice && !optionLabels.includes(body.structuredChoice)) {
       return NextResponse.json({ error: "That choice isn't one of this event's options." }, { status: 400 });
     }
